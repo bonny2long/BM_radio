@@ -1,0 +1,27 @@
+:root {
+  --bg-main: #0a0a0c;
+  --bg-card: #16161a;
+  --bg-nav: rgba(22, 22, 26, 0.8);
+  
+  --text-primary: #ffffff;
+  --text-secondary: #9494a3;
+  --text-muted: #62626e;
+  
+  --accent-primary: #3d5afe;
+  --accent-secondary: #ff4081;
+  
+  --gradient-radio: linear-gradient(135deg, #3d5afe 0%, #7c4dff 100%);
+  --gradient-books: linear-gradient(135deg, #ff9100 0%, #ff6d00 100%);
+  
+  --spacing-xs: 4px;
+  --spacing-s: 8px;
+  --spacing-m: 16px;
+  --spacing-l: 24px;
+  --spacing-xl: 32px;
+  
+  --radius-s: 8px;
+  --radius-m: 12px;
+  --radius-l: 20px;
+  
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
