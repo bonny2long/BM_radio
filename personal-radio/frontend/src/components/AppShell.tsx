@@ -14,20 +14,28 @@ const AppShell: React.FC<AppShellProps> = ({ children, currentPage, onPageChange
       display: 'flex', 
       flexDirection: 'column', 
       minHeight: '100vh',
-      paddingBottom: '160px'
+      paddingBottom: '152px',
+      maxWidth: '600px',
+      margin: '0 auto',
+      width: '100%',
     }}>
-      <main style={{ flex: 1, padding: '20px' }}>
+      <main style={{ 
+        flex: 1, 
+        padding: '24px 20px 0',
+      }}>
         {children}
       </main>
       
       <div style={{ 
         position: 'fixed', 
         bottom: 0, 
-        left: 0, 
-        right: 0, 
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: '100%',
+        maxWidth: '600px',
         zIndex: 100,
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
       }}>
         <MiniPlayer />
         <BottomNav currentPage={currentPage} onPageChange={onPageChange} />
