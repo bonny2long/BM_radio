@@ -1,0 +1,7 @@
+import { useEffect,useState } from 'react'
+import Artwork from '../components/Artwork'
+import { getAlbumTracks,mediaUrl,type AlbumSummary,type Track } from '../api'
+import { usePlayback } from '../state/PlaybackContext'
+import { trackToNowPlaying } from '../utils/mediaMappers'
+export default function AlbumDetailPage({album,onBack}:{album:AlbumSummary;onBack:()=>void}){const [tracks,setTracks]=useState<Track[]>([]);const {playQueue}=usePlayback();useEffect(()=>{void getAlbumTracks(album.artist,album.title).then(setTracks)},[album]);const queue=tracks.map(track=>trackToNowPlaying(track));return <div><button onClick={onBack} style={{marginBottom:20,color:'var(--text-secondary)'}}>Back to Library</button><div className="page-title-centered"><Artwork src={mediaUrl('/api/media/albums/cover?artist='+encodeURIComponent(album.artist)+'&album='+encodeURIComponent(album.title))} label={album.title} size={150}/><h1 style={{marginTop:16}}>{album.title}</h1><p>{album.artist} - {album.track_count} tracks</p><button onClick={()=>playQueue(queue)} style={{marginTop:16,padding:'11px 18px',borderRadius:'var(--radius-pill)',background:'var(--accent-primary)',color:'#fff'}}>Play Album</button></div><p className="section-label" style={{marginTop:28}}>Tracks</p>{tracks.map((track,i)=><button key={track.id} onClick={()=>playQueue(queue,i)} className="card-premium" style={{width:'100%',padding:12,marginBottom:7,textAlign:'left'}}><strong>{i+1}. {track.title}</strong><span style={{display:'block',fontSize:12,color:'var(--text-muted)'}}>{track.artist}</span></button>)}</div>}
+

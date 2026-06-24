@@ -5,8 +5,11 @@ import RadioPage from './pages/RadioPage'
 import BookshelfPage from './pages/BookshelfPage'
 import LibraryPage from './pages/LibraryPage'
 import NowPlayingPage from './pages/NowPlayingPage'
+import QueuePage from './pages/QueuePage'
+import AlbumDetailPage from './pages/AlbumDetailPage'
 import { PlaybackProvider } from './state/PlaybackContext'
+import type { AlbumSummary } from './api'
 import './styles/tokens.css'
 import './styles/base.css'
-function App(){const [currentPage,setCurrentPage]=useState('home');const page=()=>{switch(currentPage){case'radio':return <RadioPage/>;case'bookshelf':return <BookshelfPage/>;case'library':return <LibraryPage/>;case'nowPlaying':return <NowPlayingPage onBack={()=>setCurrentPage('home')}/>;default:return <HomePage/>}};return <PlaybackProvider><AppShell currentPage={currentPage} onPageChange={setCurrentPage} onOpenNowPlaying={()=>setCurrentPage('nowPlaying')}>{page()}</AppShell></PlaybackProvider>}
+function App(){const [currentPage,setCurrentPage]=useState('home');const [album,setAlbum]=useState<AlbumSummary|null>(null);const page=()=>{switch(currentPage){case'radio':return <RadioPage/>;case'bookshelf':return <BookshelfPage/>;case'library':return <LibraryPage onOpenAlbum={a=>{setAlbum(a);setCurrentPage('albumDetail')}} onOpenArtist={()=>{}}/>;case'albumDetail':return album?<AlbumDetailPage album={album} onBack={()=>setCurrentPage('library')}/>:null;case'nowPlaying':return <NowPlayingPage onBack={()=>setCurrentPage('home')} onOpenQueue={()=>setCurrentPage('queue')}/>;case'queue':return <QueuePage onBack={()=>setCurrentPage('nowPlaying')}/>;default:return <HomePage/>}};return <PlaybackProvider><AppShell currentPage={currentPage} onPageChange={setCurrentPage} onOpenNowPlaying={()=>setCurrentPage('nowPlaying')}>{page()}</AppShell></PlaybackProvider>}
 export default App
