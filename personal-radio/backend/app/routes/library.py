@@ -41,3 +41,8 @@ async def search(q: str, db: Session = Depends(get_db)):
 @router.post("/scan/music")
 async def scan_music_route(db: Session = Depends(get_db)):
     return scan_music(db)
+
+from .serializers import track_item
+@router.get('/album-tracks')
+def playback_album_tracks(artist: str, album: str, db: Session = Depends(get_db)):
+    return [track_item(track) for track in db.query(models.Track).filter_by(artist=artist, album=album).order_by(models.Track.title).limit(500)]

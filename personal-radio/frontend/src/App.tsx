@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage'
 import RadioPage from './pages/RadioPage'
 import BookshelfPage from './pages/BookshelfPage'
 import LibraryPage from './pages/LibraryPage'
+import { PlaybackProvider } from './state/PlaybackContext'
 import './styles/tokens.css'
 import './styles/base.css'
 
@@ -26,10 +27,11 @@ function App() {
   }
 
   return (
-    <AppShell currentPage={currentPage} onPageChange={setCurrentPage}>
+    <PlaybackProvider><AppShell currentPage={currentPage} onPageChange={setCurrentPage}>
       {renderPage()}
-    </AppShell>
+    </AppShell></PlaybackProvider>
   )
 }
 
 export default App
+
