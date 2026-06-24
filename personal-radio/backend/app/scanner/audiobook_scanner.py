@@ -1,46 +1,40 @@
 from datetime import datetime, timezone
 from pathlib import Path
-import re
+import json,re
 from sqlalchemy.orm import Session
 from .. import models
 from ..config import settings
 from .music_scanner import read_metadata
 from .path_safety import safe_media_files
-
-AUDIOBOOK_EXTENSIONS = {".mp3", ".m4b", ".m4a", ".flac", ".aac", ".ogg", ".opus"}
-
-
-def _natural_key(path: Path):
-    return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", path.name)]
-
-
-def scan_audiobooks(db: Session) -> dict:
-    root = Path(settings.AUDIOBOOKS_ROOT)
-    result = {"status": "ok", "audiobooks_scanned": 0, "audiobooks_added": 0, "audiobooks_updated": 0, "chapters_scanned": 0, "roots_scanned": [], "skipped_roots": [], "errors": []}
-    if not root.is_dir():
-        result["skipped_roots"].append(str(root)); return result
-    result["roots_scanned"].append(str(root))
-    groups: dict[Path, list[Path]] = {}
-    for path in safe_media_files(root, AUDIOBOOK_EXTENSIONS, [root]):
-        parts = path.relative_to(root).parts; groups.setdefault(root / parts[0] / parts[1] if len(parts) > 1 else root / parts[0], []).append(path)
-    for book_path, chapters in groups.items():
-        try:
-            chapters.sort(key=_natural_key); first_meta = read_metadata(chapters[0])
-            data = {"relative_path": str(book_path.relative_to(root)), "title": book_path.name, "author": book_path.parent.name if book_path.parent != root else "Unknown Author", "narrator": None, "series": None, "year": first_meta.get("year"), "duration_seconds": 0.0, "last_indexed_at": datetime.now(timezone.utc)}
-            chapter_data = []
-            for order, chapter_path in enumerate(chapters, 1):
-                metadata = read_metadata(chapter_path); duration = metadata.get("duration_seconds") or 0.0
-                data["duration_seconds"] += duration; chapter_data.append((chapter_path, metadata, duration, order))
-            book = db.query(models.Audiobook).filter(models.Audiobook.path == str(book_path)).one_or_none()
-            if book:
-                for key, value in data.items(): setattr(book, key, value)
-                db.query(models.AudiobookChapter).filter(models.AudiobookChapter.audiobook_id == book.id).delete(); result["audiobooks_updated"] += 1
-            else:
-                book = models.Audiobook(path=str(book_path), status="available", favorite=False, **data); db.add(book); db.flush(); result["audiobooks_added"] += 1
-            for chapter_path, metadata, duration, order in chapter_data:
-                db.add(models.AudiobookChapter(audiobook_id=book.id, path=str(chapter_path), relative_path=str(chapter_path.relative_to(root)), title=metadata.get("title") or chapter_path.stem, chapter_number=order, duration_seconds=duration, sort_order=order))
-            result["audiobooks_scanned"] += 1; result["chapters_scanned"] += len(chapters)
-        except Exception as exc:
-            result["errors"].append(f"{book_path}: {exc}")
-    db.commit(); return result
-
+AUDIOBOOK_EXTENSIONS={'.mp3','.m4b','.m4a','.flac','.aac','.ogg','.opus'}
+def key(path):return [int(x) if x.isdigit() else x.lower() for x in re.split(r'(\d+)',path.name)]
+def load_sidecar(book):
+ try:return json.loads((book/'metadata'/'audiobook.json').read_text(encoding='utf-8'))
+ except Exception:return {}
+def chapter_title(path,order,contained):
+ for item in contained:
+  number=str(item.get('series_index',''))
+  if number and re.search(r'(book\s*'+re.escape(number)+r'|\('+re.escape(number)+r'\))',path.stem,re.I):return 'Book '+number+' - '+item.get('title','')
+ title=re.sub(r'^\d+[-_.\s]+','',path.stem).strip()
+ if re.fullmatch(r'(track\s*)?\d+',title,re.I):return f'Chapter {order}'
+ return title or f'Chapter {order}'
+def scan_audiobooks(db:Session):
+ root=Path(settings.AUDIOBOOKS_ROOT);result={'status':'ok','audiobooks_scanned':0,'audiobooks_added':0,'audiobooks_updated':0,'chapters_scanned':0,'roots_scanned':[],'skipped_roots':[],'errors':[]}
+ if not root.is_dir():result['skipped_roots'].append(str(root));return result
+ groups={}
+ for path in safe_media_files(root,AUDIOBOOK_EXTENSIONS,[root]):
+  parts=path.relative_to(root).parts;book=root/parts[0]/parts[1] if len(parts)>1 else root/parts[0];groups.setdefault(book,[]).append(path)
+ for book,chapters in groups.items():
+  try:
+   chapters.sort(key=key);side=load_sidecar(book);meta=side.get('suggested_metadata',side);title=meta.get('title') or re.sub(r'^\d{4}\s*-\s*','',book.name);author=meta.get('author') or book.parent.name;contained=meta.get('contained_books',[]);data={'relative_path':str(book.relative_to(root)),'title':title,'author':author,'narrator':meta.get('narrator'),'series':meta.get('series'),'year':meta.get('year'),'duration_seconds':0.0,'last_indexed_at':datetime.now(timezone.utc)};rows=[]
+   for order,path in enumerate(chapters,1):
+    duration=read_metadata(path).get('duration_seconds') or 0;data['duration_seconds']+=duration;rows.append((path,duration,order))
+   found=db.query(models.Audiobook).filter_by(path=str(book)).one_or_none()
+   if found:
+    for k,v in data.items():setattr(found,k,v)
+    db.query(models.AudiobookChapter).filter_by(audiobook_id=found.id).delete();result['audiobooks_updated']+=1
+   else:found=models.Audiobook(path=str(book),status='available',favorite=False,**data);db.add(found);db.flush();result['audiobooks_added']+=1
+   for path,duration,order in rows:db.add(models.AudiobookChapter(audiobook_id=found.id,path=str(path),relative_path=str(path.relative_to(root)),title=chapter_title(path,order,contained),chapter_number=order,duration_seconds=duration,sort_order=order))
+   result['audiobooks_scanned']+=1;result['chapters_scanned']+=len(rows)
+  except Exception as exc:result['errors'].append(f'{book}: {exc}')
+ db.commit();return result

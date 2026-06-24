@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -36,7 +36,7 @@ async def get_albums(db: Session = Depends(get_db)):
 @router.get("/search")
 async def search(q: str, db: Session = Depends(get_db)):
     term = f"%{q.strip()}%"
-    return db.query(models.Track).filter((models.Track.title.ilike(term)) | (models.Track.artist.ilike(term)) | (models.Track.album.ilike(term))).limit(100).all()
+    return [track_item(track) for track in db.query(models.Track).filter((models.Track.title.ilike(term)) | (models.Track.artist.ilike(term)) | (models.Track.album.ilike(term)) | (models.Track.album_artist.ilike(term)) | (models.Track.genre.ilike(term)) | (models.Track.relative_path.ilike(term)) | (models.Track.library_area.ilike(term))).limit(300).all()]
 
 @router.post("/scan/music")
 async def scan_music_route(db: Session = Depends(get_db)):
@@ -46,3 +46,4 @@ from .serializers import track_item
 @router.get('/album-tracks')
 def playback_album_tracks(artist: str, album: str, db: Session = Depends(get_db)):
     return [track_item(track) for track in db.query(models.Track).filter_by(artist=artist, album=album).order_by(models.Track.title).limit(500)]
+
