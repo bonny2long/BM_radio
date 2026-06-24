@@ -1,0 +1,3 @@
+export const formatTime=(seconds:number)=>{if(!Number.isFinite(seconds))return '0:00';const total=Math.floor(seconds);return `${Math.floor(total/60)}:${String(total%60).padStart(2,'0')}`}
+export default function ProgressBar({current,duration,onSeek}:{current:number;duration:number;onSeek:(seconds:number)=>void}){return <div><input aria-label="Playback position" type="range" min="0" max={duration||0} value={Math.min(current,duration||0)} onChange={e=>onSeek(Number(e.target.value))} style={{width:'100%',accentColor:'var(--accent-primary)'}}/><div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:'var(--text-muted)'}}><span>{formatTime(current)}</span><span>{formatTime(duration)}</span></div></div>}
+

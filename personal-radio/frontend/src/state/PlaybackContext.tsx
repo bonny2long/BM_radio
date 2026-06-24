@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { updateAudiobookProgress } from '../api'
-export type NowPlaying={mode:'music'|'audiobook';id:number;title:string;subtitle:string;streamUrl:string;durationSeconds?:number;audiobookId?:number;chapterId?:number}
+export type NowPlaying={mode:'music'|'audiobook';id:number;title:string;subtitle:string;streamUrl:string;coverUrl?:string|null;artist?:string|null;album?:string|null;stationName?:string|null;durationSeconds?:number;audiobookId?:number;chapterId?:number}
 type Playback={nowPlaying:NowPlaying|null;queue:NowPlaying[];queueIndex:number;isPlaying:boolean;currentTime:number;duration:number;error:string|null;playItem:(item:NowPlaying,queue?:NowPlaying[])=>void;playQueue:(items:NowPlaying[],index?:number)=>void;togglePlayPause:()=>void;next:()=>void;previous:()=>void;seek:(seconds:number)=>void}
 const Context=createContext<Playback|null>(null)
 export function PlaybackProvider({children}:{children:ReactNode}){const audioRef=useRef<HTMLAudioElement|null>(null),queueRef=useRef<NowPlaying[]>([]),indexRef=useRef(-1),itemRef=useRef<NowPlaying|null>(null),lastSaved=useRef(0);const [nowPlaying,setNowPlaying]=useState<NowPlaying|null>(null),[queue,setQueue]=useState<NowPlaying[]>([]),[queueIndex,setQueueIndex]=useState(-1),[isPlaying,setIsPlaying]=useState(false),[currentTime,setCurrentTime]=useState(0),[duration,setDuration]=useState(0),[error,setError]=useState<string|null>(null)
@@ -12,3 +12,4 @@ export function PlaybackProvider({children}:{children:ReactNode}){const audioRef
  const playQueue=(items:NowPlaying[],index=0)=>{if(!items.length)return;queueRef.current=items;indexRef.current=index;setQueue(items);setQueueIndex(index);load(items[index])};const playItem=(item:NowPlaying,items?:NowPlaying[])=>{const list=items?.length?items:[item];playQueue(list,Math.max(0,list.findIndex(x=>x.id===item.id)))};const togglePlayPause=()=>{const el=audioRef.current;if(!el||!itemRef.current)return;if(el.paused)void el.play();else el.pause()}
  return <Context.Provider value={{nowPlaying,queue,queueIndex,isPlaying,currentTime,duration,error,playItem,playQueue,togglePlayPause,next:()=>advance(1),previous:()=>advance(-1),seek:(seconds)=>{if(audioRef.current)audioRef.current.currentTime=seconds}}}>{children}</Context.Provider>}
 export const usePlayback=()=>{const context=useContext(Context);if(!context)throw new Error('PlaybackProvider missing');return context}
+

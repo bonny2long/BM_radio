@@ -1,0 +1,3 @@
+import { useState } from 'react'
+type Props={src?:string|null;label:string;size?:number;kind?:'music'|'book'}
+export default function Artwork({src,label,size=48,kind='music'}:Props){const [failed,setFailed]=useState(false);const initials=label.split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();return <div style={{width:size,height:size,flexShrink:0,borderRadius:size>100?20:12,overflow:'hidden',background:'linear-gradient(135deg,#7667ff,#dc4bb6)',display:'grid',placeItems:'center',boxShadow:'0 8px 22px rgba(104,82,240,.28)'}}>{src&&!failed?<img src={src} alt="" onError={()=>setFailed(true)} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:size*.32,fontWeight:800,color:'#fff'}}>{initials|| (kind==='book'?'B':'?')}</span>}</div>}
