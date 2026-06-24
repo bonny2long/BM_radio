@@ -22,7 +22,7 @@ def scan_audiobooks(db: Session) -> dict:
     result["roots_scanned"].append(str(root))
     groups: dict[Path, list[Path]] = {}
     for path in safe_media_files(root, AUDIOBOOK_EXTENSIONS, [root]):
-        groups.setdefault(root / path.relative_to(root).parts[0], []).append(path)
+        parts = path.relative_to(root).parts; groups.setdefault(root / parts[0] / parts[1] if len(parts) > 1 else root / parts[0], []).append(path)
     for book_path, chapters in groups.items():
         try:
             chapters.sort(key=_natural_key); first_meta = read_metadata(chapters[0])
@@ -43,3 +43,4 @@ def scan_audiobooks(db: Session) -> dict:
         except Exception as exc:
             result["errors"].append(f"{book_path}: {exc}")
     db.commit(); return result
+
