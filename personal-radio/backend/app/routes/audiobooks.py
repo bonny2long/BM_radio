@@ -5,15 +5,15 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..db import get_db
 from ..scanner.audiobook_scanner import scan_audiobooks as run_audiobook_scan
-from .serializers import chapter_item
+from .serializers import chapter_item, audiobook_item
 router = APIRouter()
 def as_detail(book):
     progress = sorted(book.progress, key=lambda p: p.updated_at or 0, reverse=True)
     latest = progress[0] if progress else None
-    return {'id':book.id,'title':book.title,'author':book.author,'narrator':book.narrator,'status':book.status,'favorite':book.favorite,'duration_seconds':book.duration_seconds,'latest_progress':None if not latest else {'chapter_id':latest.chapter_id,'position_seconds':latest.position_seconds,'progress_percent':latest.progress_percent},'chapters':[chapter_item(c) for c in sorted(book.chapters,key=lambda c:c.sort_order)]}
+    return {**audiobook_item(book),'latest_progress':None if not latest else {'chapter_id':latest.chapter_id,'position_seconds':latest.position_seconds,'progress_percent':latest.progress_percent},'chapters':[chapter_item(c) for c in sorted(book.chapters,key=lambda c:c.sort_order)]}
 @router.get('/')
 def get_audiobooks(db: Session=Depends(get_db)):
-    return [{'id':b.id,'title':b.title,'author':b.author,'status':b.status,'favorite':b.favorite,'duration_seconds':b.duration_seconds} for b in db.query(models.Audiobook).order_by(models.Audiobook.title)]
+    return [audiobook_item(b) for b in db.query(models.Audiobook).order_by(models.Audiobook.title)]
 @router.get('/summary')
 def get_summary(db: Session=Depends(get_db)):
     books=db.query(models.Audiobook).all(); return {'available':sum(b.status=='available' for b in books),'not_started':sum(b.status=='available' for b in books),'in_progress':sum(b.status=='in_progress' for b in books),'finished':sum(b.status=='finished' for b in books),'favorites':sum(b.favorite for b in books),'total_listening_seconds':db.query(func.coalesce(func.sum(models.AudiobookProgress.position_seconds),0)).scalar()}
@@ -49,4 +49,5 @@ def reset_audiobook(audiobook_id:int,db:Session=Depends(get_db)):
     book=db.get(models.Audiobook,audiobook_id)
     if not book: raise HTTPException(404,'Audiobook not found')
     book.status='available';db.commit();return {'book_status':book.status}
+
 
