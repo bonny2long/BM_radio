@@ -24,9 +24,12 @@ def find_cover(start:Path,roots:list[Path])->Path|None:
    if candidate.is_file() and is_approved_path(candidate,roots):return candidate
   for folder in ('Artwork','artwork','Covers','covers','metadata'):
    art_dir=directory/folder
+   if not art_dir.is_dir():continue
    for name in COVER_NAMES:
     candidate=art_dir/name
     if candidate.is_file() and is_approved_path(candidate,roots):return candidate
+   for candidate in art_dir.iterdir():
+    if candidate.is_file() and candidate.suffix.lower() in IMAGE_TYPES and candidate.stem.lower().startswith(('cover','folder','front','artwork')) and is_approved_path(candidate,roots):return candidate
  return None
 @router.get('/tracks/{track_id}/stream')
 def stream_track(track_id:int,db:Session=Depends(get_db)):
@@ -37,14 +40,22 @@ def stream_track(track_id:int,db:Session=Depends(get_db)):
 def track_cover(track_id:int,db:Session=Depends(get_db)):
  track=db.get(models.Track,track_id)
  if not track:raise HTTPException(404,'Track not found')
- roots=[Path(settings.MUSIC_LIBRARY_ROOT),Path(settings.MUSIC_DISCOGRAPHIES_ROOT)];cover=find_cover(Path(track.path).parent,roots)
+ roots=[Path(settings.MUSIC_LIBRARY_ROOT),Path(settings.MUSIC_DISCOGRAPHIES_ROOT)]
+ if track.cover_path:
+  try:return safe_file(track.cover_path,roots,IMAGE_TYPES)
+  except HTTPException:pass
+ cover=find_cover(Path(track.path).parent,roots)
  if not cover:raise HTTPException(404,'Cover not found')
  return safe_file(str(cover),roots,IMAGE_TYPES)
 @router.get('/albums/cover')
 def album_cover(artist:str,album:str,db:Session=Depends(get_db)):
  track=db.query(models.Track).filter_by(artist=artist,album=album).first()
  if not track:raise HTTPException(404,'Album not found')
- roots=[Path(settings.MUSIC_LIBRARY_ROOT),Path(settings.MUSIC_DISCOGRAPHIES_ROOT)];cover=find_cover(Path(track.path).parent,roots)
+ roots=[Path(settings.MUSIC_LIBRARY_ROOT),Path(settings.MUSIC_DISCOGRAPHIES_ROOT)]
+ if track.cover_path:
+  try:return safe_file(track.cover_path,roots,IMAGE_TYPES)
+  except HTTPException:pass
+ cover=find_cover(Path(track.path).parent,roots)
  if not cover:raise HTTPException(404,'Cover not found')
  return safe_file(str(cover),roots,IMAGE_TYPES)
 @router.get('/audiobooks/{audiobook_id}/chapters/{chapter_id}/stream')
