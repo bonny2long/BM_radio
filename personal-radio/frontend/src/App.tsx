@@ -1,16 +1,18 @@
-import { useRef, useState } from 'react'
+import { useRef,useState } from 'react'
+import { PlaybackProvider } from './state/PlaybackContext'
 import AppShell from './components/AppShell'
 import HomePage from './pages/HomePage'
 import RadioPage from './pages/RadioPage'
-import BookshelfPage from './pages/BookshelfPage'
 import LibraryPage from './pages/LibraryPage'
+import BookshelfPage from './pages/BookshelfPage'
 import NowPlayingPage from './pages/NowPlayingPage'
 import QueuePage from './pages/QueuePage'
 import AlbumDetailPage from './pages/AlbumDetailPage'
 import ArtistDetailPage from './pages/ArtistDetailPage'
-import { PlaybackProvider } from './state/PlaybackContext'
 import type { AlbumSummary, ArtistSummary } from './api'
 import './styles/tokens.css'
 import './styles/base.css'
-function App(){const [currentPage,setCurrentPage]=useState('home'),[album,setAlbum]=useState<AlbumSummary|null>(null),[artist,setArtist]=useState<string|null>(null),[bookId,setBookId]=useState<number|null>(null),[albumBack,setAlbumBack]=useState('library');const previousPage=useRef('home');const navigate=(page:string)=>setCurrentPage(page);const openAlbum=(a:AlbumSummary,back='library')=>{setAlbum(a);setAlbumBack(back);navigate('albumDetail')};const openArtist=(a:ArtistSummary|string)=>{setArtist(typeof a==='string'?a:a.name);navigate('artistDetail')};const openBook=(id:number)=>{setBookId(id);navigate('bookshelf')};const openNowPlaying=()=>{if(currentPage!=='nowPlaying'&&currentPage!=='queue')previousPage.current=currentPage;setCurrentPage('nowPlaying')};const backFromNowPlaying=()=>setCurrentPage(previousPage.current);const page=()=>{switch(currentPage){case'radio':return <RadioPage/>;case'bookshelf':return <BookshelfPage initialBookId={bookId}/>;case'library':return <LibraryPage onOpenAlbum={a=>openAlbum(a,'library')} onOpenArtist={openArtist} onOpenBook={openBook}/>;case'artistDetail':return artist?<ArtistDetailPage artist={artist} onBack={()=>navigate('library')} onOpenAlbum={a=>openAlbum(a,'artistDetail')}/>:null;case'albumDetail':return album?<AlbumDetailPage album={album} onBack={()=>navigate(albumBack)}/>:null;case'nowPlaying':return <NowPlayingPage onBack={backFromNowPlaying} onOpenQueue={()=>navigate('queue')}/>;case'queue':return <QueuePage onBack={()=>navigate('nowPlaying')}/>;default:return <HomePage onOpenAlbum={a=>openAlbum(a,'home')} onOpenBookshelf={()=>navigate('bookshelf')}/>}};return <PlaybackProvider><AppShell currentPage={currentPage} onPageChange={navigate} onOpenNowPlaying={openNowPlaying} onOpenQueue={()=>navigate('queue')}>{page()}</AppShell></PlaybackProvider>}
+import './App.css'
+function App(){const [currentPage,setCurrentPage]=useState('home'),[album,setAlbum]=useState<AlbumSummary|null>(null),[artist,setArtist]=useState<string|null>(null),[bookId,setBookId]=useState<number|null>(null),[albumBack,setAlbumBack]=useState('library');const previousPage=useRef('home');const navigate=(page:string)=>setCurrentPage(page);const openAlbum=(a:AlbumSummary,back='library')=>{setAlbum(a);setAlbumBack(back);navigate('albumDetail')};const openArtist=(a:ArtistSummary|string)=>{setArtist(typeof a==='string'?a:a.name);navigate('artistDetail')};const openBook=(id:number)=>{setBookId(id);navigate('bookshelf')};const openNowPlaying=()=>{if(currentPage!=='nowPlaying'&&currentPage!=='queue')previousPage.current=currentPage;setCurrentPage('nowPlaying')};const backFromNowPlaying=()=>setCurrentPage(previousPage.current);const page=()=>{switch(currentPage){case'radio':return <RadioPage/>;case'bookshelf':return <BookshelfPage initialBookId={bookId}/>;case'library':return <LibraryPage onOpenAlbum={a=>openAlbum(a,'library')} onOpenArtist={openArtist} onOpenBook={openBook}/>;case'artistDetail':return artist?<ArtistDetailPage artist={artist} onBack={()=>navigate('library')} onOpenAlbum={a=>openAlbum(a,'artistDetail')}/>:null;case'albumDetail':return album?<AlbumDetailPage album={album} onBack={()=>navigate(albumBack)}/>:null;case'nowPlaying':return <NowPlayingPage onBack={backFromNowPlaying} onOpenQueue={()=>navigate('queue')}/>;case'queue':return <QueuePage onBack={()=>navigate('nowPlaying')}/>;default:return <HomePage onOpenAlbum={a=>openAlbum(a,'home')} onOpenBookshelf={()=>navigate('bookshelf')} onOpenNowPlaying={openNowPlaying}/>}};return <PlaybackProvider><AppShell currentPage={currentPage} onPageChange={navigate} onOpenNowPlaying={openNowPlaying} onOpenQueue={()=>navigate('queue')}>{page()}</AppShell></PlaybackProvider>}
 export default App
+

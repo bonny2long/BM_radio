@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from .. import models
 from ..db import get_db
+from .serializers import track_item, audiobook_item
 router = APIRouter()
 class PlaybackEventCreate(BaseModel):
     event_type: str
@@ -37,14 +38,38 @@ def register_event(payload: PlaybackEventCreate, db: Session = Depends(get_db)):
     db.add(event); db.commit(); db.refresh(event); return {'id': event.id, 'event_type': event.event_type}
 @router.post('/events')
 def register_event_alias(payload: PlaybackEventCreate, db: Session = Depends(get_db)): return register_event(payload,db)
+@router.get('/recent')
+def recent_playback(limit:int=5,db:Session=Depends(get_db)):
+    rows=db.query(models.PlaybackEvent).filter(models.PlaybackEvent.event_type.in_(['start','pause','progress','seek'])).order_by(models.PlaybackEvent.created_at.desc()).limit(max(1,min(limit*4,40))).all()
+    out=[];seen=set()
+    for e in rows:
+        key=('track',e.track_id) if e.track_id else ('book',e.audiobook_id)
+        if key in seen: continue
+        seen.add(key)
+        if e.track_id:
+            track=db.get(models.Track,e.track_id)
+            if track:
+                item=track_item(track);out.append({'mode':'music','track_id':track.id,'title':track.title,'subtitle':' - '.join([x for x in [track.artist,track.album] if x]),'cover_url':item['cover_url'],'stream_url':item['stream_url'],'last_event_at':str(e.created_at)})
+        elif e.audiobook_id:
+            book=db.get(models.Audiobook,e.audiobook_id)
+            if book:
+                item=audiobook_item(book);out.append({'mode':'audiobook','audiobook_id':book.id,'title':book.title,'subtitle':book.author,'cover_url':item['cover_url'],'stream_url':None,'last_event_at':str(e.created_at)})
+        if len(out)>=limit:break
+    return {'items':out}
 @router.post('/tracks/{track_id}/thumb')
 def track_thumb(track_id: int, payload: TrackThumbCreate, db: Session = Depends(get_db)):
     if not db.get(models.Track, track_id): raise HTTPException(404, 'Track not found')
     value=norm_thumb(payload.value)
+    favorite = db.query(models.TrackFavorite).filter_by(track_id=track_id).first()
     if value=='neutral':
-        db.query(models.TrackThumb).filter_by(track_id=track_id).delete(); db.commit(); return {'track_id': track_id, 'value': 'neutral'}
+        db.query(models.TrackThumb).filter_by(track_id=track_id).delete()
+        if favorite: db.delete(favorite)
+        db.commit(); return {'track_id': track_id, 'value': 'neutral', 'favorite': False}
     if value not in {'up','down'}: raise HTTPException(422, 'Thumb must be up/down/neutral')
-    thumb = models.TrackThumb(track_id=track_id, station_id=payload.station_id, value=models.ThumbValue(value)); db.add(thumb); db.commit(); return {'track_id': track_id, 'value': value}
+    thumb = models.TrackThumb(track_id=track_id, station_id=payload.station_id, value=models.ThumbValue(value)); db.add(thumb)
+    if value=='up' and not favorite: db.add(models.TrackFavorite(track_id=track_id))
+    if value=='down' and favorite: db.delete(favorite)
+    db.commit(); return {'track_id': track_id, 'value': value, 'favorite': value=='up'}
 @router.post('/tracks/{track_id}/feedback')
 def track_feedback(track_id:int,payload:TrackThumbCreate,db:Session=Depends(get_db)): return track_thumb(track_id,payload,db)
 @router.get('/tracks/{track_id}/feedback')
