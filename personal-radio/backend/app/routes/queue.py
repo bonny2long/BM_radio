@@ -21,6 +21,9 @@ class ArtistQueueRequest(BaseModel):
  artist:str
  limit:int=50
  shuffle:bool=False
+class PlaylistQueueRequest(BaseModel):
+ playlist_id:int
+ shuffle:bool=False
 ARTIST_GENRE_FALLBACKS={
  'Kanye West':'Hip-Hop',
  'Kendrick Lamar':'Hip-Hop',
@@ -122,5 +125,10 @@ def artist_queue(req:ArtistQueueRequest,db:Session=Depends(get_db)):
  tracks=db.query(models.Track).filter(or_(models.Track.artist==req.artist,models.Track.album_artist==req.artist)).limit(min(req.limit*8,500)).all();random.shuffle(tracks)
  if not req.shuffle:tracks=score_tracks(db,tracks,'artist')
  return payload(no_repeats(tracks,min(req.limit,100),artist_loose=True))
+@router.post('/playlist')
+def playlist_queue(req:PlaylistQueueRequest,db:Session=Depends(get_db)):
+ rows=db.query(models.PlaylistTrack).filter_by(playlist_id=req.playlist_id).order_by(models.PlaylistTrack.position,models.PlaylistTrack.id).all();tracks=[r.track for r in rows if r.track]
+ if req.shuffle:random.shuffle(tracks)
+ return payload(tracks)
 @router.get('/current')
 def get_current_queue():return {'queue':[]}

@@ -15,6 +15,8 @@ export type ArtistDetail={name:string;track_count:number;album_count:number;albu
 export type SearchResults={artists:ArtistSummary[];albums:AlbumSummary[];tracks:Track[];stations:Station[];audiobooks:Audiobook[]}
 export type TrackPage={items:Track[];total:number;limit:number;offset:number;has_more:boolean}
 export type RecentPlaybackItem={mode:'music'|'audiobook';track_id?:number;audiobook_id?:number;chapter_id?:number;position_seconds?:number;title:string;subtitle:string;cover_url?:string|null;stream_url?:string|null;last_event_at:string}
+export type PlaylistSummary={id:number;name:string;description?:string|null;kind:string;track_count:number}
+export type PlaylistDetail=PlaylistSummary&{tracks:Track[]}
 export const mediaUrl=(path?:string|null):string|null=>{if(!path)return null;if(/^https?:\/\//.test(path))return path;return path.startsWith('/')?`${API_ORIGIN}${path}`:`${API_ORIGIN}/${path}`}
 export const getLibrarySummary=()=>request<LibrarySummary>('/library/summary')
 export const scanMusic=()=>request('/library/scan/music',{method:'POST'})
@@ -45,3 +47,10 @@ export const getRecentPlayback=(limit=5)=>request<{items:RecentPlaybackItem[]}>(
 export const logPlaybackEvent=(event:{event_type:string;track_id?:number;audiobook_id?:number;audiobook_chapter_id?:number;position_seconds?:number;completed_percent?:number;mode?:string;station_name?:string})=>request('/playback/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(event)})
 export const getTracksPage=(limit=100,offset=0)=>request<TrackPage>(`/library/tracks-page?limit=${limit}&offset=${offset}`)
 export const getArtistTracks=(artist:string,limit=50,offset=0)=>request<TrackPage>(`/library/artists/${encodeURIComponent(artist)}/tracks?limit=${limit}&offset=${offset}`)
+
+export const getPlaylists=()=>request<PlaylistSummary[]>('/playlists')
+export const createPlaylist=(name:string,description?:string)=>request<PlaylistSummary>('/playlists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,description})})
+export const getPlaylist=(id:number)=>request<PlaylistDetail>(`/playlists/${id}`)
+export const addTrackToPlaylist=(playlistId:number,trackId:number)=>request<PlaylistDetail>(`/playlists/${playlistId}/tracks`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({track_id:trackId})})
+export const removeTrackFromPlaylist=(playlistId:number,trackId:number)=>request<PlaylistDetail>(`/playlists/${playlistId}/tracks/${trackId}`,{method:'DELETE'})
+export const getPlaylistQueue=(playlistId:number,shuffle=false)=>request<{queue:Track[]}>('/queue/playlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({playlist_id:playlistId,shuffle})})

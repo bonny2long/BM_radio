@@ -125,3 +125,26 @@ class AudiobookProgress(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     audiobook = relationship("Audiobook", back_populates="progress")
+class Playlist(Base):
+    __tablename__ = "playlists"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    description = Column(String, nullable=True)
+    kind = Column(String, default="manual")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    tracks = relationship("PlaylistTrack", back_populates="playlist", cascade="all, delete-orphan")
+
+class PlaylistTrack(Base):
+    __tablename__ = "playlist_tracks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    playlist_id = Column(Integer, ForeignKey("playlists.id"), index=True)
+    track_id = Column(Integer, ForeignKey("tracks.id"), index=True)
+    position = Column(Integer)
+    added_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    playlist = relationship("Playlist", back_populates="tracks")
+    track = relationship("Track")

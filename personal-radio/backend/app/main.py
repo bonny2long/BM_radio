@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from . import models, db
 from .config import settings
-from .routes import health, library, stations, audiobooks, queue, playback, media, search
+from .routes import health, library, stations, audiobooks, queue, playback, media, search, playlists
 
 # Create database tables
 models.Base.metadata.create_all(bind=db.engine)
@@ -28,6 +28,7 @@ app.include_router(queue.router, prefix="/api/queue", tags=["Queue"])
 app.include_router(playback.router, prefix="/api/playback", tags=["Playback"])
 app.include_router(media.router, prefix="/api/media", tags=["Media"])
 app.include_router(search.router, prefix="/api", tags=["Search"])
+app.include_router(playlists.router, prefix="/api/playlists", tags=["Playlists"])
 
 @app.get("/")
 async def root():
