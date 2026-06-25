@@ -60,7 +60,7 @@ a {
   color: inherit;
 }
 
-/* Section label style — used across pages */
+/* Section label style â€” used across pages */
 .section-label {
   font-size: 11px;
   font-weight: 700;
@@ -70,7 +70,7 @@ a {
   margin-bottom: var(--spacing-m);
 }
 
-/* Glass card — layered frosted surface */
+/* Glass card â€” layered frosted surface */
 .glass {
   background: var(--bg-surface);
   backdrop-filter: blur(20px) saturate(1.4);
@@ -110,3 +110,5 @@ html,body,#root{width:100%;min-width:0;max-width:100%;overflow-x:hidden}body{ove
 .page-hero-centered{text-align:center;max-width:360px;margin-left:auto;margin-right:auto}.page-title-centered{text-align:center;margin-left:auto;margin-right:auto}.page-title-centered h1,.page-title-centered h2{text-align:center}.page-title-centered p,.page-title-centered .section-label{text-align:center}.now-playing-meta{text-align:center;max-width:340px;margin-left:auto;margin-right:auto}.now-playing-meta h1,.now-playing-meta p{text-align:center}.centered-section-label{text-align:center;display:block;width:100%}.centered-hero-card{text-align:center}.centered-hero-card button,.centered-hero-card a{margin-left:auto;margin-right:auto}
 
 .library-tabs{display:flex;justify-content:center;gap:8px;margin:0 auto 20px;width:100%;overflow-x:auto;scrollbar-width:none}.library-tabs::-webkit-scrollbar{display:none}
+
+.marquee-viewport{overflow:hidden;white-space:nowrap;min-width:0;display:block}.marquee-inner{display:inline-block;white-space:nowrap}.marquee-inner.is-overflowing.is-running{animation:bm-marquee-once var(--marquee-duration,7s) ease-in-out 1}@keyframes bm-marquee-once{0%,12%{transform:translateX(0)}58%,75%{transform:translateX(var(--marquee-distance,-40px))}100%{transform:translateX(0)}}
