@@ -1,23 +1,29 @@
 from pathlib import Path
-import json
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from .. import models
 from ..db import get_db
-from ..scanner.audiobook_scanner import scan_audiobooks as run_audiobook_scan
+from ..scanner.audiobook_scanner import load_audiobook_sidecar, scan_audiobooks as run_audiobook_scan
 from .serializers import chapter_item, audiobook_item
 router = APIRouter()
 def contained_books(book):
-    try:
-        data=json.loads((Path(book.path)/'metadata'/'audiobook.json').read_text(encoding='utf-8'))
-        meta=data.get('suggested_metadata',data)
-        return meta.get('contained_books') or []
+    try:return load_audiobook_sidecar(Path(book.path)).get('contained_books') or []
     except Exception:return []
+def progress_payload(book,progress):
+    if not progress:return None
+    chapters=sorted(book.chapters,key=lambda c:c.sort_order);total=sum((c.duration_seconds or 0) for c in chapters);before=0;current=None
+    for c in chapters:
+        if c.id==progress.chapter_id:current=c;break
+        before+=c.duration_seconds or 0
+    position=max(0,float(progress.position_seconds or 0));chapter_duration=float(current.duration_seconds or 0) if current else 0
+    chapter_pct=(position/chapter_duration*100) if chapter_duration else float(progress.progress_percent or 0)
+    overall=((before+position)/total*100) if total else chapter_pct
+    return {'chapter_id':progress.chapter_id,'position_seconds':position,'chapter_progress_percent':min(100,max(0,chapter_pct)),'overall_progress_percent':min(100,max(0,overall)),'progress_percent':min(100,max(0,overall)),'updated_at':str(progress.updated_at)}
 def as_detail(book):
     progress = sorted(book.progress, key=lambda p: p.updated_at or 0, reverse=True);latest = progress[0] if progress else None
-    return {**audiobook_item(book),'contained_books':contained_books(book),'latest_progress':None if not latest else {'chapter_id':latest.chapter_id,'position_seconds':latest.position_seconds,'progress_percent':latest.progress_percent},'chapters':[chapter_item(c) for c in sorted(book.chapters,key=lambda c:c.sort_order)]}
+    return {**audiobook_item(book),'contained_books':contained_books(book),'latest_progress':progress_payload(book,latest),'chapters':[chapter_item(c) for c in sorted(book.chapters,key=lambda c:c.sort_order)]}
 @router.get('/')
 def get_audiobooks(db: Session=Depends(get_db)): return [audiobook_item(b) for b in db.query(models.Audiobook).order_by(models.Audiobook.title)]
 @router.get('/summary')
@@ -36,8 +42,17 @@ class ProgressUpdate(BaseModel):
 def update_progress(audiobook_id:int,payload:ProgressUpdate,db:Session=Depends(get_db)):
     book=db.get(models.Audiobook,audiobook_id)
     if not book: raise HTTPException(404,'Audiobook not found')
-    if payload.chapter_id and not db.query(models.AudiobookChapter).filter_by(id=payload.chapter_id,audiobook_id=audiobook_id).first(): raise HTTPException(422,'Chapter does not belong to audiobook')
-    status='finished' if payload.progress_percent>=99 else 'in_progress'; book.status=status; db.add(models.AudiobookProgress(audiobook_id=audiobook_id,chapter_id=payload.chapter_id,position_seconds=payload.position_seconds,progress_percent=payload.progress_percent,status=status));db.commit();return {'status':'ok','book_status':status}
+    chapter=None
+    if payload.chapter_id:
+        chapter=db.query(models.AudiobookChapter).filter_by(id=payload.chapter_id,audiobook_id=audiobook_id).first()
+        if not chapter: raise HTTPException(422,'Chapter does not belong to audiobook')
+    chapters=sorted(book.chapters,key=lambda c:c.sort_order);total=sum((c.duration_seconds or 0) for c in chapters);before=0
+    for c in chapters:
+        if c.id==payload.chapter_id:break
+        before+=c.duration_seconds or 0
+    overall=((before+max(0,payload.position_seconds))/total*100) if total else max(0,payload.progress_percent)
+    status='available' if overall<=0 else 'finished' if overall>=99 else 'in_progress'; book.status=status
+    db.add(models.AudiobookProgress(audiobook_id=audiobook_id,chapter_id=payload.chapter_id,position_seconds=payload.position_seconds,progress_percent=overall,status=status));db.commit();return {'status':'ok','book_status':status,'overall_progress_percent':overall}
 @router.post('/{audiobook_id}/favorite')
 def favorite_audiobook(audiobook_id:int,db:Session=Depends(get_db)):
     book=db.get(models.Audiobook,audiobook_id)

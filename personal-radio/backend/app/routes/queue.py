@@ -1,4 +1,4 @@
-import random
+import random,re
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import func, or_
@@ -25,6 +25,7 @@ ARTIST_GENRE_FALLBACKS={
  'Kanye West':'Hip-Hop',
  'Kendrick Lamar':'Hip-Hop',
  'Lil Wayne':'Hip-Hop',
+ 'The Weeknd':'R&B',
 }
 GENRE_ALIASES={
  'hip hop':'hip-hop','hip-hop':'hip-hop','hiphop':'hip-hop','rap':'hip-hop',
@@ -47,17 +48,33 @@ def recent_ids(db:Session,limit:int=80)->set[int]:
  rows=db.query(models.PlaybackEvent.track_id).filter(models.PlaybackEvent.track_id.isnot(None)).order_by(models.PlaybackEvent.created_at.desc()).limit(limit).all();return {r[0] for r in rows if r[0]}
 def favorite_ids(db:Session)->set[int]:
  return {r[0] for r in db.query(models.TrackFavorite.track_id).all()}
-def score_tracks(db:Session,tracks:list[models.Track],station_type:str)->list[models.Track]:
- fb=latest_feedback(db);counts=play_counts(db);recent=recent_ids(db);favs=favorite_ids(db);scored=[]
+def album_counts(tracks:list[models.Track])->dict[tuple[str,str],int]:
+ counts={}
  for t in tracks:
-  rating=fb.get(t.id);score=random.random()
-  score-=min(counts.get(t.id,0),20)*0.08
+  key=(t.artist or '',t.album or '');counts[key]=counts.get(key,0)+1
+ return counts
+def track_number_guess(track:models.Track)->int|None:
+ text=' '.join([track.relative_path or '',track.title or ''])
+ m=re.search(r'(?:^|[\\/\s._-])(?:disc\s*\d+[\\/\s._-]*)?(\d{1,2})(?:[\s._-]+|$)',text,re.I)
+ if m:
+  n=int(m.group(1))
+  if 1<=n<=40:return n
+ return None
+def score_tracks(db:Session,tracks:list[models.Track],station_type:str)->list[models.Track]:
+ fb=latest_feedback(db);counts=play_counts(db);recent=recent_ids(db);favs=favorite_ids(db);albums=album_counts(tracks);scored=[]
+ for t in tracks:
+  rating=fb.get(t.id);plays=counts.get(t.id,0);num=track_number_guess(t);album_total=albums.get((t.artist or '',t.album or ''),0);score=random.random()
+  score-=min(plays,20)*0.08
   if rating=='up':score+=0.35
   if rating=='down':score-=5.0
-  if t.id in recent:score-=0.35
+  if t.id in recent:score-=0.45
   if station_type=='deep_cuts':
-   score-=counts.get(t.id,0)*0.3
-   if t.id in favs:score-=0.25
+   if plays==0:score+=1.0
+   else:score+=max(0,.5-(plays*.12))
+   if num and num>=4:score+=0.45
+   if album_total>=6:score+=0.25
+   if num in (1,2):score-=0.45
+   if t.id in favs:score-=0.35
   if station_type=='favorites' and rating=='up':score+=0.25
   scored.append((score,t))
  scored.sort(key=lambda x:x[0],reverse=True);return [t for _,t in scored]
@@ -65,10 +82,8 @@ def no_repeats(tracks:list[models.Track],limit:int,artist_loose:bool=False)->lis
  out=[];used=set();last_album=None;artist_run={}
  for t in tracks:
   if t.id in used:continue
-  if last_album and t.album==last_album and len(out)+1<limit:
-   continue
-  if not artist_loose and artist_run.get(t.artist,0)>=2 and len(out)+1<limit:
-   continue
+  if last_album and t.album==last_album and len(out)+1<limit:continue
+  if not artist_loose and artist_run.get(t.artist,0)>=2 and len(out)+1<limit:continue
   out.append(t);used.add(t.id);last_album=t.album;artist_run={t.artist:artist_run.get(t.artist,0)+1}
   if len(out)>=limit:break
  if len(out)<limit:
@@ -89,7 +104,7 @@ def station_queue(req:StationQueueRequest,db:Session=Depends(get_db)):
  elif req.type=='recently_added':
   tracks=q.order_by(models.Track.created_at.desc(),models.Track.last_indexed_at.desc()).limit(limit*5).all();random.shuffle(tracks);tracks=[t for t in tracks if t.id not in down]
  elif req.type=='deep_cuts':
-  tracks=q.outerjoin(models.PlaybackEvent,models.PlaybackEvent.track_id==models.Track.id).group_by(models.Track.id).order_by(func.count(models.PlaybackEvent.id),func.random()).limit(limit*8).all();tracks=[t for t in tracks if t.id not in down]
+  tracks=q.outerjoin(models.PlaybackEvent,models.PlaybackEvent.track_id==models.Track.id).group_by(models.Track.id).order_by(func.count(models.PlaybackEvent.id),func.random()).limit(limit*10).all();tracks=[t for t in tracks if t.id not in down]
  elif req.type=='genre':
   target=norm_genre(req.seed_value);tracks=[t for t in q.limit(5000).all() if t.id not in down and track_genre(t)==target];random.shuffle(tracks)
  elif req.type=='artist':

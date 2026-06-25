@@ -7,14 +7,14 @@ export type Track={id:number;title:string;artist:string;album:string;year?:numbe
 export type Audiobook={id:number;title:string;author:string;narrator?:string|null;status:string;favorite:boolean;duration_seconds?:number;cover_url?:string|null}
 export type ContainedBook={series_index?:string|number;title:string;display_title?:string;chapter_id?:number}
 export type Chapter={id:number;title:string;sort_order:number;duration_seconds?:number;stream_url:string}
-export type AudiobookDetail=Audiobook&{contained_books?:ContainedBook[];latest_progress?:{chapter_id?:number;position_seconds:number;progress_percent:number}|null;chapters:Chapter[]}
+export type AudiobookDetail=Audiobook&{contained_books?:ContainedBook[];latest_progress?:{chapter_id?:number;position_seconds:number;progress_percent:number;chapter_progress_percent?:number;overall_progress_percent?:number;updated_at?:string}|null;chapters:Chapter[]}
 export type Station={name:string;type:string;seed_value?:string|null;track_count:number}
 export type AlbumSummary={title:string;artist:string;year?:number|null;track_count:number;cover_url?:string|null}
 export type ArtistSummary={name:string;track_count:number;album_count?:number}
 export type ArtistDetail={name:string;track_count:number;album_count:number;albums:AlbumSummary[];tracks:Track[]}
 export type SearchResults={artists:ArtistSummary[];albums:AlbumSummary[];tracks:Track[];stations:Station[];audiobooks:Audiobook[]}
 export type TrackPage={items:Track[];total:number;limit:number;offset:number;has_more:boolean}
-export type RecentPlaybackItem={mode:'music'|'audiobook';track_id?:number;audiobook_id?:number;title:string;subtitle:string;cover_url?:string|null;stream_url?:string|null;last_event_at:string}
+export type RecentPlaybackItem={mode:'music'|'audiobook';track_id?:number;audiobook_id?:number;chapter_id?:number;position_seconds?:number;title:string;subtitle:string;cover_url?:string|null;stream_url?:string|null;last_event_at:string}
 export const mediaUrl=(path?:string|null):string|null=>{if(!path)return null;if(/^https?:\/\//.test(path))return path;return path.startsWith('/')?`${API_ORIGIN}${path}`:`${API_ORIGIN}/${path}`}
 export const getLibrarySummary=()=>request<LibrarySummary>('/library/summary')
 export const scanMusic=()=>request('/library/scan/music',{method:'POST'})
@@ -37,8 +37,8 @@ export const getArtistQueue=(artist:string,limit=50,shuffle=false)=>request<{que
 export const getAlbumQueue=(artist:string,album:string,limit=500,shuffle=false)=>request<{queue:Track[]}>('/queue/album',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({artist,album,limit,shuffle})})
 export const finishAudiobook=(id:number)=>request<{book_status:string}>(`/audiobooks/${id}/finished`,{method:'POST'})
 export const resetAudiobook=(id:number)=>request<{book_status:string}>(`/audiobooks/${id}/not-started`,{method:'POST'})
-export const setTrackFeedback=(trackId:number,value:'thumbs_up'|'thumbs_down'|'neutral')=>request<{value:string;favorite?:boolean}>(`/playback/tracks/${trackId}/feedback`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value})})
-export const getTrackFeedback=(trackId:number)=>request<{value:string;favorite?:boolean}>(`/playback/tracks/${trackId}/feedback`)
+export const setTrackFeedback=(trackId:number,value:'thumbs_up'|'thumbs_down'|'neutral')=>request<{value:string}>(`/playback/tracks/${trackId}/feedback`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value})})
+export const getTrackFeedback=(trackId:number)=>request<{value:string}>(`/playback/tracks/${trackId}/feedback`)
 export const setTrackFavorite=(trackId:number,favorite?:boolean)=>request<{favorite:boolean}>(`/playback/tracks/${trackId}/favorite`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({favorite})})
 export const getTrackFavorite=(trackId:number)=>request<{favorite:boolean}>(`/playback/tracks/${trackId}/favorite`)
 export const getRecentPlayback=(limit=5)=>request<{items:RecentPlaybackItem[]}>(`/playback/recent?limit=${limit}`)
