@@ -24,6 +24,10 @@ class ArtistQueueRequest(BaseModel):
 class PlaylistQueueRequest(BaseModel):
  playlist_id:int
  shuffle:bool=False
+class SmartPlaylistQueueRequest(BaseModel):
+ key:str
+ shuffle:bool=False
+ limit:int=100
 ARTIST_GENRE_FALLBACKS={
  'Kanye West':'Hip-Hop',
  'Kendrick Lamar':'Hip-Hop',
@@ -95,6 +99,26 @@ def no_repeats(tracks:list[models.Track],limit:int,artist_loose:bool=False)->lis
     out.append(t);used.add(t.id)
     if len(out)>=limit:break
  return out
+def smart_track_ids(db:Session,key:str,limit:int=100)->list[int]:
+ limit=max(1,min(limit,1000))
+ if key=='favorites':
+  return [r[0] for r in db.query(models.TrackFavorite.track_id).order_by(models.TrackFavorite.created_at.desc()).limit(limit).all()]
+ if key=='thumbs_up':
+  latest=latest_feedback(db);return [tid for tid,value in latest.items() if value=='up'][:limit]
+ if key=='most_played':
+  rows=db.query(models.PlaybackEvent.track_id,func.count(models.PlaybackEvent.id)).filter(models.PlaybackEvent.track_id.isnot(None)).group_by(models.PlaybackEvent.track_id).order_by(func.count(models.PlaybackEvent.id).desc()).limit(limit).all();return [r[0] for r in rows]
+ if key=='recently_played':
+  rows=db.query(models.PlaybackEvent.track_id).filter(models.PlaybackEvent.track_id.isnot(None)).order_by(models.PlaybackEvent.created_at.desc()).limit(limit*4).all();out=[];seen=set()
+  for (tid,) in rows:
+   if tid and tid not in seen:
+    seen.add(tid);out.append(tid)
+   if len(out)>=limit:break
+  return out
+ if key=='recently_added':
+  return [r[0] for r in db.query(models.Track.id).order_by(models.Track.created_at.desc(),models.Track.last_indexed_at.desc()).limit(limit).all()]
+ if key=='never_played':
+  rows=db.query(models.Track.id).outerjoin(models.PlaybackEvent,models.PlaybackEvent.track_id==models.Track.id).group_by(models.Track.id).having(func.count(models.PlaybackEvent.id)==0).order_by(models.Track.created_at.desc()).limit(limit).all();return [r[0] for r in rows]
+ return []
 def payload(tracks):return {'queue':[track_item(t) for t in tracks]}
 @router.post('/station')
 def station_queue(req:StationQueueRequest,db:Session=Depends(get_db)):
@@ -128,6 +152,14 @@ def artist_queue(req:ArtistQueueRequest,db:Session=Depends(get_db)):
 @router.post('/playlist')
 def playlist_queue(req:PlaylistQueueRequest,db:Session=Depends(get_db)):
  rows=db.query(models.PlaylistTrack).filter_by(playlist_id=req.playlist_id).order_by(models.PlaylistTrack.position,models.PlaylistTrack.id).all();tracks=[r.track for r in rows if r.track]
+ if req.shuffle:random.shuffle(tracks)
+ return payload(tracks)
+@router.post('/smart-playlist')
+def smart_playlist_queue(req:SmartPlaylistQueueRequest,db:Session=Depends(get_db)):
+ ids=smart_track_ids(db,req.key,req.limit)
+ if not ids:return {'queue':[]}
+ tracks=[db.get(models.Track,tid) for tid in ids]
+ tracks=[t for t in tracks if t]
  if req.shuffle:random.shuffle(tracks)
  return payload(tracks)
 @router.get('/current')

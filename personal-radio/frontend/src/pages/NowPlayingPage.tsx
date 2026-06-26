@@ -5,17 +5,14 @@ import IconButton from '../components/IconButton'
 import MarqueeText from '../components/MarqueeText'
 import ProgressBar from '../components/ProgressBar'
 import {
-  addTrackToPlaylist,
-  createPlaylist,
   favoriteAudiobook,
   getAudiobook,
-  getPlaylists,
   getTrackFavorite,
   getTrackFeedback,
   setTrackFavorite,
   setTrackFeedback,
-  type PlaylistSummary,
 } from '../api'
+import PlaylistPickerSheet from '../components/PlaylistPickerSheet'
 import {
   HeartIcon,
   NextIcon,
@@ -78,9 +75,6 @@ export default function NowPlayingPage({
   const [feedback, setFeedback] = useState('neutral')
   const [favorite, setFavorite] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
-  const [playlists, setPlaylists] = useState<PlaylistSummary[]>([])
-  const [newPlaylist, setNewPlaylist] = useState('')
-  const [addStatus, setAddStatus] = useState('')
   const artworkZoneRef = useRef<HTMLDivElement>(null)
   const [artworkSize, setArtworkSize] = useState(240)
 
@@ -104,7 +98,6 @@ export default function NowPlayingPage({
     setFeedback('neutral')
     setFavorite(false)
     setShowAdd(false)
-    setAddStatus('')
     if (!nowPlaying) return
 
     if (nowPlaying.mode === 'music') {
@@ -123,9 +116,6 @@ export default function NowPlayingPage({
     return () => { alive = false }
   }, [nowPlaying?.id, nowPlaying?.mode, nowPlaying?.audiobookId])
 
-  useEffect(() => {
-    if (showAdd) void getPlaylists().then(setPlaylists).catch(() => {})
-  }, [showAdd])
 
   if (!nowPlaying) {
     return (
@@ -170,21 +160,6 @@ export default function NowPlayingPage({
     }
   }
 
-  const addTo = async (id: number) => {
-    if (!music) return
-    await addTrackToPlaylist(id, nowPlaying.id)
-    setAddStatus('Added to playlist')
-  }
-
-  const createAndAdd = async () => {
-    const name = newPlaylist.trim()
-    if (!name || !music) return
-    const p = await createPlaylist(name)
-    await addTrackToPlaylist(p.id, nowPlaying.id)
-    setNewPlaylist('')
-    setAddStatus('Created and added')
-    setPlaylists(await getPlaylists())
-  }
 
   return (
     <div className="np-layout">
@@ -209,44 +184,6 @@ export default function NowPlayingPage({
       </div>
 
       <div className="np-bottom-sheet">
-        {music && showAdd && (
-          <div className="np-playlist-panel">
-            <p className="section-label" style={{ marginBottom: 10 }}>Add to Playlist</p>
-            <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
-              {playlists.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => void addTo(p.id)}
-                  style={{ display: 'flex', justifyContent: 'space-between', gap: 10, textAlign: 'left', padding: '10px 12px', borderRadius: 'var(--radius-m)', background: 'var(--bg-surface)', color: 'var(--text-primary)' }}
-                >
-                  <strong style={{ fontSize: 14 }}>{p.name}</strong>
-                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{p.track_count}</span>
-                </button>
-              ))}
-              {playlists.length === 0 && (
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '4px 0' }}>No playlists yet - create one below.</p>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                value={newPlaylist}
-                onChange={e => setNewPlaylist(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && void createAndAdd()}
-                placeholder="New playlist name"
-                style={{ flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', color: 'var(--text-primary)', fontSize: 13 }}
-              />
-              <button
-                onClick={() => void createAndAdd()}
-                disabled={!newPlaylist.trim()}
-                style={{ padding: '10px 14px', borderRadius: 'var(--radius-pill)', background: 'var(--accent-primary)', color: '#fff', fontWeight: 800, fontSize: 13, opacity: newPlaylist.trim() ? 1 : 0.45 }}
-              >
-                Create
-              </button>
-            </div>
-            {addStatus && <p style={{ fontSize: 12, color: 'var(--accent-primary)', marginTop: 10 }}>✓ {addStatus}</p>}
-          </div>
-        )}
-
         <div className="np-meta">
           <div className="np-meta-text">
             <MarqueeText
@@ -331,6 +268,7 @@ export default function NowPlayingPage({
           </IconButton>
         </div>
       </div>
+      <PlaylistPickerSheet open={music && showAdd} trackId={music ? nowPlaying.id : null} trackTitle={nowPlaying.title} onClose={() => setShowAdd(false)} />
     </div>
   )
 }

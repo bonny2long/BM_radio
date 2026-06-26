@@ -16,6 +16,7 @@ export type SearchResults={artists:ArtistSummary[];albums:AlbumSummary[];tracks:
 export type TrackPage={items:Track[];total:number;limit:number;offset:number;has_more:boolean}
 export type RecentPlaybackItem={mode:'music'|'audiobook';track_id?:number;audiobook_id?:number;chapter_id?:number;position_seconds?:number;title:string;subtitle:string;cover_url?:string|null;stream_url?:string|null;last_event_at:string}
 export type PlaylistSummary={id:number;name:string;description?:string|null;kind:string;track_count:number}
+export type SmartPlaylistSummary={id:string;name:string;description?:string|null;kind:string;track_count:number}
 export type PlaylistDetail=PlaylistSummary&{tracks:Track[]}
 export const mediaUrl=(path?:string|null):string|null=>{if(!path)return null;if(/^https?:\/\//.test(path))return path;return path.startsWith('/')?`${API_ORIGIN}${path}`:`${API_ORIGIN}/${path}`}
 export const getLibrarySummary=()=>request<LibrarySummary>('/library/summary')
@@ -54,3 +55,6 @@ export const getPlaylist=(id:number)=>request<PlaylistDetail>(`/playlists/${id}`
 export const addTrackToPlaylist=(playlistId:number,trackId:number)=>request<PlaylistDetail>(`/playlists/${playlistId}/tracks`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({track_id:trackId})})
 export const removeTrackFromPlaylist=(playlistId:number,trackId:number)=>request<PlaylistDetail>(`/playlists/${playlistId}/tracks/${trackId}`,{method:'DELETE'})
 export const getPlaylistQueue=(playlistId:number,shuffle=false)=>request<{queue:Track[]}>('/queue/playlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({playlist_id:playlistId,shuffle})})
+export const getSmartPlaylists=()=>request<SmartPlaylistSummary[]>('/playlists/smart')
+export const getSmartPlaylistQueue=(key:string,shuffle=false,limit=100)=>request<{queue:Track[]}>('/queue/smart-playlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,shuffle,limit})})
+export const createPlaylistFromTrackList=(name:string,trackIds:number[],description?:string)=>request<PlaylistDetail>('/playlists/from-track-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,description,track_ids:trackIds})})
