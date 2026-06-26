@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..db import get_db
-from ..radio_profiles import apply_artist_profile, apply_track_profile, artist_profile_payload, seed_default_radio_profiles, track_profile_payload
+from ..radio_profiles import apply_artist_profile, apply_track_profile, artist_profile_payload, get_artist_profile_row, seed_default_radio_profiles, track_profile_payload
 
 router = APIRouter()
 
@@ -41,7 +41,7 @@ def artist_profiles(db: Session = Depends(get_db)):
 @router.get('/artists/{artist}')
 def artist_profile(artist: str, db: Session = Depends(get_db)):
     seed_default_radio_profiles(db)
-    row = db.query(models.ArtistRadioProfile).filter_by(artist=artist).one_or_none()
+    row = get_artist_profile_row(db, artist)
     if not row:
         raise HTTPException(404, 'Artist radio profile not found')
     return artist_profile_payload(row)
@@ -49,7 +49,8 @@ def artist_profile(artist: str, db: Session = Depends(get_db)):
 
 @router.patch('/artists/{artist}')
 def update_artist_profile(artist: str, payload: ArtistProfilePatch, db: Session = Depends(get_db)):
-    row = db.query(models.ArtistRadioProfile).filter_by(artist=artist).one_or_none()
+    seed_default_radio_profiles(db)
+    row = get_artist_profile_row(db, artist)
     if not row:
         row = models.ArtistRadioProfile(artist=artist, source='manual')
         db.add(row)

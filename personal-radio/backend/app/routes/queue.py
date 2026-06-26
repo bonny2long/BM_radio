@@ -62,6 +62,17 @@ RELATED_ARTISTS: dict[str, list[str]] = {
     'Drake': ['The Weeknd', 'Lil Wayne', 'Kanye West', 'Future'],
 }
 
+
+def lookup_by_normalized(mapping: dict, key: str | None, default=None):
+    target = normalize_token(key)
+    if not target:
+        return default
+    for name, value in mapping.items():
+        if normalize_token(name) == target:
+            return value
+    return default
+
+
 GENRE_ALIASES = {
     'hip hop': 'hip-hop',
     'hip-hop': 'hip-hop',
@@ -87,8 +98,8 @@ def display_genre(value: str | None) -> str:
 def track_genre(track: models.Track) -> str:
     return norm_genre(
         track.genre
-        or ARTIST_GENRE_FALLBACKS.get(track.artist)
-        or ARTIST_GENRE_FALLBACKS.get(track.album_artist)
+        or lookup_by_normalized(ARTIST_GENRE_FALLBACKS, track.artist)
+        or lookup_by_normalized(ARTIST_GENRE_FALLBACKS, track.album_artist)
     )
 
 
@@ -451,17 +462,18 @@ def station_queue(req: StationQueueRequest, db: Session = Depends(get_db)):
         primary_tracks = [t for t in primary_tracks if t.id not in down]
 
         seed_profile = profile_for_track(db, primary_tracks[0]) if primary_tracks else {
-            'primary_genre': ARTIST_GENRE_FALLBACKS.get(seed_artist, ''),
+            'primary_genre': lookup_by_normalized(ARTIST_GENRE_FALLBACKS, seed_artist, ''),
             'subgenres': [],
             'moods': [],
             'energy': None,
-            'related_artists': RELATED_ARTISTS.get(seed_artist, []),
+            'related_artists': lookup_by_normalized(RELATED_ARTISTS, seed_artist, []),
         }
-        related_names = set(RELATED_ARTISTS.get(seed_artist, [])) | set(seed_profile.get('related_artists', []))
-        target_genre = profile_genre(seed_profile) or norm_genre(ARTIST_GENRE_FALLBACKS.get(seed_artist, ''))
+        related_names = set(lookup_by_normalized(RELATED_ARTISTS, seed_artist, [])) | set(seed_profile.get('related_artists', []))
+        related_tokens = {token for token in (normalize_token(name) for name in related_names) if token}
+        target_genre = profile_genre(seed_profile) or norm_genre(lookup_by_normalized(ARTIST_GENRE_FALLBACKS, seed_artist, ''))
 
         related_tracks: list[models.Track] = []
-        if related_names or target_genre or seed_profile.get('subgenres') or seed_profile.get('moods'):
+        if related_tokens or target_genre or seed_profile.get('subgenres') or seed_profile.get('moods'):
             all_tracks = q.limit(5000).all()
             primary_ids = {t.id for t in primary_tracks}
             related_tracks = []
@@ -470,8 +482,11 @@ def station_queue(req: StationQueueRequest, db: Session = Depends(get_db)):
                     continue
                 candidate_profile = profile_for_track(db, t)
                 candidate_genre = profile_genre(candidate_profile) or track_genre(t)
+                artist_token = normalize_token(t.artist)
+                album_artist_token = normalize_token(t.album_artist)
+                related_match = bool(related_tokens) and (artist_token in related_tokens or album_artist_token in related_tokens)
                 if (
-                    (related_names and (t.artist in related_names or t.album_artist in related_names))
+                    related_match
                     or (target_genre and candidate_genre == target_genre)
                     or overlap_score(seed_profile.get('subgenres', []), candidate_profile.get('subgenres', []), 1.0) > 0
                     or overlap_score(seed_profile.get('moods', []), candidate_profile.get('moods', []), 1.0) > 0

@@ -98,11 +98,29 @@ def empty_profile(track: models.Track | None = None) -> dict[str, Any]:
     return {'primary_genre': fallback_genre(track) if track else None, 'subgenres': [], 'moods': [], 'energy': None, 'tempo_bucket': None, 'era': None, 'related_artists': [], 'radio_tags': [], 'source': None}
 
 
+def get_artist_profile_row(db: Session, artist: str | None) -> models.ArtistRadioProfile | None:
+    if not artist:
+        return None
+    exact = db.query(models.ArtistRadioProfile).filter_by(artist=artist).one_or_none()
+    if exact:
+        return exact
+
+    target = normalize_token(artist)
+    if not target:
+        return None
+
+    rows = db.query(models.ArtistRadioProfile).all()
+    for row in rows:
+        if normalize_token(row.artist) == target:
+            return row
+    return None
+
+
 def profile_for_track(db: Session, track: models.Track) -> dict[str, Any]:
     profile = empty_profile(track)
-    artist_row = db.query(models.ArtistRadioProfile).filter_by(artist=track.artist).one_or_none() if track.artist else None
-    if not artist_row and track.album_artist:
-        artist_row = db.query(models.ArtistRadioProfile).filter_by(artist=track.album_artist).one_or_none()
+    artist_row = get_artist_profile_row(db, track.artist)
+    if not artist_row:
+        artist_row = get_artist_profile_row(db, track.album_artist)
     if artist_row:
         profile = merge_profile(profile, row_profile(artist_row))
     if track.artist and track.album:
