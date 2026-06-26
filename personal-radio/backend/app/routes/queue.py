@@ -298,9 +298,20 @@ def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Tr
 
     return ranked
 
-def no_repeats(tracks: list[models.Track], limit: int, artist_loose: bool = False) -> list[models.Track]:
+def normalized_title_key(track: models.Track | None) -> str:
+    if not track or not track.title:
+        return ''
+    title = track.title.lower()
+    title = re.sub(r'\(.*?\)', '', title)
+    title = re.sub(r'\[.*?\]', '', title)
+    title = re.sub(r'[^a-z0-9]', '', title)
+    return title
+
+
+def no_repeats(tracks: list[models.Track], limit: int, artist_loose: bool = False, avoid_title_dups: bool = False) -> list[models.Track]:
     out = []
     used = set()
+    used_titles = set()
     last_album = None
     artist_run = {}
 
@@ -311,8 +322,15 @@ def no_repeats(tracks: list[models.Track], limit: int, artist_loose: bool = Fals
             continue
         if not artist_loose and artist_run.get(t.artist, 0) >= 2 and len(out) + 1 < limit:
             continue
+            
+        t_key = normalized_title_key(t)
+        if avoid_title_dups and t_key and t_key in used_titles and len(out) + 1 < limit:
+            continue
+
         out.append(t)
         used.add(t.id)
+        if avoid_title_dups and t_key:
+            used_titles.add(t_key)
         last_album = t.album
         artist_run = {t.artist: artist_run.get(t.artist, 0) + 1}
         if len(out) >= limit:
@@ -503,6 +521,70 @@ def score_song_candidate_debug(
     return debug_track_row(candidate, score, parts, candidate_profile)
 
 
+def artist_radio_score_parts(seed_profile: dict, candidate_profile: dict, seed_artist: str, track: models.Track, related_tokens: set[str], fb: dict[int, str], recent: set[int], favs: set[int]) -> tuple[float, list[dict], str]:
+    parts = []
+    
+    seed_artist_token = normalize_token(seed_artist)
+    track_artist_token = normalize_token(track.artist)
+    track_album_artist_token = normalize_token(track.album_artist)
+    
+    is_seed = (track_artist_token == seed_artist_token or track_album_artist_token == seed_artist_token)
+    is_related = bool(related_tokens) and (track_artist_token in related_tokens or track_album_artist_token in related_tokens)
+    
+    candidate_genre = profile_genre(candidate_profile) or track_genre(track)
+    seed_genre = profile_genre(seed_profile) or norm_genre(lookup_by_normalized(ARTIST_GENRE_FALLBACKS, seed_artist, ''))
+    primary_genre_match = bool(seed_genre and candidate_genre == seed_genre)
+    
+    sub_ov = overlap_score(seed_profile.get('subgenres', []), candidate_profile.get('subgenres', []), 1.0)
+    mood_ov = overlap_score(seed_profile.get('moods', []), candidate_profile.get('moods', []), 1.0)
+    subgenre_overlap = bool(sub_ov > 0)
+    mood_overlap = bool(mood_ov > 0)
+    energy_match = bool(seed_profile.get('energy') and seed_profile.get('energy') == candidate_profile.get('energy'))
+    
+    tier = 'excluded'
+    if is_seed:
+        tier = 'seed_artist'
+        parts.append(explain_score_part('seed_artist_track', 10.0, track.artist))
+    elif is_related and (primary_genre_match or subgenre_overlap or mood_overlap or energy_match) or (primary_genre_match and subgenre_overlap):
+        tier = 'strong_related'
+        if is_related:
+            parts.append(explain_score_part('related_artist_match', 4.0, track.artist or track.album_artist))
+    elif primary_genre_match or subgenre_overlap or mood_overlap:
+        tier = 'soft_similar'
+    elif is_related:
+        tier = 'weak_related'
+        parts.append(explain_score_part('related_artist_match', 1.0, track.artist or track.album_artist))
+    else:
+        return -999.0, parts, 'excluded'
+        
+    if tier in ('seed_artist', 'strong_related', 'soft_similar'):
+        if primary_genre_match:
+            parts.append(explain_score_part('primary_genre_match', 2.0, display_genre(seed_genre)))
+        if subgenre_overlap:
+            matches = sorted(set(seed_profile.get('subgenres', [])) & set(candidate_profile.get('subgenres', [])))
+            parts.append(explain_score_part('subgenre_overlap', 2.0, ', '.join(matches[:4])))
+        if mood_overlap:
+            matches = sorted(set(seed_profile.get('moods', [])) & set(candidate_profile.get('moods', [])))
+            parts.append(explain_score_part('mood_overlap', 3.0, ', '.join(matches[:4])))
+        if energy_match:
+            parts.append(explain_score_part('energy_match', 1.0, str(seed_profile.get('energy'))))
+            
+    rating = fb.get(track.id)
+    if rating == 'up':
+        parts.append(explain_score_part('thumbs_up', 0.75))
+    elif rating == 'down':
+        return -999.0, parts, 'excluded'
+        
+    if track.id in favs:
+        parts.append(explain_score_part('favorite', 0.40))
+        
+    if track.id in recent:
+        parts.append(explain_score_part('recent', -1.00))
+
+    score = sum(p['value'] for p in parts)
+    return score, parts, tier
+
+
 def sort_debug_rows(rows: list[dict]) -> list[dict]:
     return sorted(rows, key=lambda row: row.get('score', 0), reverse=True)
 
@@ -637,47 +719,112 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
     primary = [t for t in all_tracks if normalize_token(t.artist) == seed_token or normalize_token(t.album_artist) == seed_token]
     primary = [t for t in primary if t.id not in down and t.id not in exclude_set]
     seed_profile = profile_for_track(db, primary[0]) if primary else {'primary_genre': lookup_by_normalized(ARTIST_GENRE_FALLBACKS, seed_artist, ''), 'subgenres': [], 'moods': [], 'energy': None, 'related_artists': lookup_by_normalized(RELATED_ARTISTS, seed_artist, []), 'source': None}
+    
     related_names = set(lookup_by_normalized(RELATED_ARTISTS, seed_artist, [])) | set(seed_profile.get('related_artists', []))
     related_tokens = {token for token in (normalize_token(name) for name in related_names) if token}
-    target_genre = profile_genre(seed_profile) or norm_genre(lookup_by_normalized(ARTIST_GENRE_FALLBACKS, seed_artist, ''))
+    
     fb = latest_feedback(db)
     recent = recent_ids(db)
+    favs = favorite_ids(db)
 
-    rows: list[dict] = []
+    seed_rows = []
+    strong_related = []
+    soft_similar = []
+    weak_related = []
+    
     for t in all_tracks:
         if t.id in down or t.id in exclude_set:
             continue
-        profile = profile_for_track(db, t)
-        parts: list[dict] = []
-        if normalize_token(t.artist) == seed_token or normalize_token(t.album_artist) == seed_token:
-            parts.append(explain_score_part('seed_artist_track', 8.0, seed_artist))
-        if related_tokens and (normalize_token(t.artist) in related_tokens or normalize_token(t.album_artist) in related_tokens):
-            parts.append(explain_score_part('related_artist_match', 3.0, t.artist or t.album_artist))
-        if target_genre and (profile_genre(profile) or track_genre(t)) == target_genre:
-            parts.append(explain_score_part('primary_genre_match', 2.0, display_genre(target_genre)))
-        part = overlap_part('subgenre_overlap', seed_profile.get('subgenres', []), profile.get('subgenres', []), 1.0)
-        if part:
-            parts.append(part)
-        part = overlap_part('mood_overlap', seed_profile.get('moods', []), profile.get('moods', []), 1.0)
-        if part:
-            parts.append(part)
-        if parts:
-            rows.append(generic_station_candidate_row(db, t, parts, fb, recent))
+        candidate_profile = profile_for_track(db, t)
+        score, parts, tier = artist_radio_score_parts(seed_profile, candidate_profile, seed_artist, t, related_tokens, fb, recent, favs)
+        
+        if tier == 'excluded':
+            continue
+            
+        row = debug_track_row(t, score, parts, candidate_profile)
+        row['tier'] = tier
+        
+        if tier == 'seed_artist':
+            seed_rows.append(row)
+        elif tier == 'strong_related':
+            strong_related.append(row)
+        elif tier == 'soft_similar':
+            soft_similar.append(row)
+        elif tier == 'weak_related':
+            weak_related.append(row)
 
-    rows = sort_debug_rows(rows)
-    selected_tracks = no_repeats([db.get(models.Track, row['track_id']) for row in rows if row.get('track_id')], limit, artist_loose=True)
+    seed_rows = sort_debug_rows(seed_rows)
+    strong_related = sort_debug_rows(strong_related)
+    soft_similar = sort_debug_rows(soft_similar)
+    weak_related = sort_debug_rows(weak_related)
+    
+    selected_rows = []
+    seed_target = min(len(seed_rows), max(int(limit * 0.80), limit - int(limit * 0.20)))
+    selected_rows += seed_rows[:seed_target]
+    
+    remaining = limit - len(selected_rows)
+    selected_rows += strong_related[:remaining]
+    
+    remaining = limit - len(selected_rows)
+    selected_rows += soft_similar[:remaining]
+    
+    remaining = limit - len(selected_rows)
+    weak_cap = max(1, int(limit * 0.10))
+    selected_rows += weak_related[:min(remaining, weak_cap)]
+    
+    remaining = limit - len(selected_rows)
+    if remaining > 0:
+        selected_rows += seed_rows[seed_target:seed_target + remaining]
+        
+    pool_tracks = [db.get(models.Track, r['track_id']) for r in selected_rows if r.get('track_id')]
+    pool_tracks = [t for t in pool_tracks if t]
+    
+    selected_tracks = no_repeats(pool_tracks, limit, artist_loose=True, avoid_title_dups=True)
     selected_ids = {t.id for t in selected_tracks if t}
-    selected = [row for row in rows if row['track_id'] in selected_ids][:limit]
+    
+    all_rows = seed_rows + strong_related + soft_similar + weak_related
+    selected = [r for r in all_rows if r['track_id'] in selected_ids][:limit]
+    
+    top_rejected = [r | {'reason': 'not_selected_after_ranking'} for r in all_rows if r['track_id'] not in selected_ids][:20]
+    
+    seed_artist_count = sum(1 for r in selected if r.get('tier') == 'seed_artist')
+    strong_count = sum(1 for r in selected if r.get('tier') == 'strong_related')
+    soft_count = sum(1 for r in selected if r.get('tier') == 'soft_similar')
+    weak_count = sum(1 for r in selected if r.get('tier') == 'weak_related')
+    
+    pool_titles = [normalized_title_key(t) for t in pool_tracks[:len(selected)]]
+    duplicate_title_skipped = len(pool_titles) - len(set(pool_titles))
+    
+    warnings = []
+    if weak_count > 0:
+        warnings.append('weak_related_fill_used')
+    if strong_count + soft_count == 0 and len(selected) - seed_artist_count > 0:
+        warnings.append('low_compatible_related_coverage')
+    if weak_count > weak_cap:
+        warnings.append('too_many_weak_related_tracks')
+    if len(selected) - seed_artist_count > int(limit * 0.30):
+        warnings.append('too_many_other_artist_tracks')
+    if duplicate_title_skipped > 0:
+        warnings.append('duplicate_titles_detected')
+
     seed = {'artist': seed_artist, 'profile': profile_debug(seed_profile), 'profile_raw': seed_profile}
+    
     response = station_debug_response(req, seed, {
-        'candidate_count': len(rows),
+        'candidate_count': len(all_rows),
         'selected_count': len(selected),
         'excluded_thumbs_down': len([t for t in all_tracks if t.id in down]),
         'excluded_current_queue': len([t for t in all_tracks if t.id in exclude_set]),
         'profile_matched_count': sum(1 for row in selected if row['profile'].get('subgenres') or row['profile'].get('moods')),
-        'same_artist_count': sum(1 for row in selected if normalize_token(row.get('artist')) == seed_token),
-        'other_artist_count': sum(1 for row in selected if normalize_token(row.get('artist')) != seed_token),
-    }, selected, [row | {'reason': 'not_selected_after_ranking'} for row in rows if row['track_id'] not in selected_ids][:20])
+        'same_artist_count': seed_artist_count,
+        'other_artist_count': len(selected) - seed_artist_count,
+        'seed_artist_count': seed_artist_count,
+        'strong_related_count': strong_count,
+        'soft_similar_count': soft_count,
+        'weak_related_count': weak_count,
+        'duplicate_title_skipped': duplicate_title_skipped,
+    }, selected, top_rejected)
+    
+    response['warnings'] = list(set(response['warnings'] + warnings))
     response['seed'] = strip_internal_seed(seed)
     return response
 
@@ -811,58 +958,69 @@ def station_queue(req: StationQueueRequest, db: Session = Depends(get_db)):
         return payload(no_repeats(ranked, limit, artist_loose=False))
     elif req.type == 'artist':
         seed_artist = req.seed_value or ''
-
-        primary_tracks = q.filter(
-            or_(models.Track.artist == seed_artist, models.Track.album_artist == seed_artist)
-        ).limit(limit * 8).all()
-        primary_tracks = [t for t in primary_tracks if t.id not in down]
-
-        seed_profile = profile_for_track(db, primary_tracks[0]) if primary_tracks else {
-            'primary_genre': lookup_by_normalized(ARTIST_GENRE_FALLBACKS, seed_artist, ''),
-            'subgenres': [],
-            'moods': [],
-            'energy': None,
-            'related_artists': lookup_by_normalized(RELATED_ARTISTS, seed_artist, []),
-        }
+        seed_token = normalize_token(seed_artist)
+        all_tracks = q.limit(5000).all()
+        primary = [t for t in all_tracks if normalize_token(t.artist) == seed_token or normalize_token(t.album_artist) == seed_token]
+        primary = [t for t in primary if t.id not in down and t.id not in exclude_set]
+        seed_profile = profile_for_track(db, primary[0]) if primary else {'primary_genre': lookup_by_normalized(ARTIST_GENRE_FALLBACKS, seed_artist, ''), 'subgenres': [], 'moods': [], 'energy': None, 'related_artists': lookup_by_normalized(RELATED_ARTISTS, seed_artist, []), 'source': None}
+        
         related_names = set(lookup_by_normalized(RELATED_ARTISTS, seed_artist, [])) | set(seed_profile.get('related_artists', []))
         related_tokens = {token for token in (normalize_token(name) for name in related_names) if token}
-        target_genre = profile_genre(seed_profile) or norm_genre(lookup_by_normalized(ARTIST_GENRE_FALLBACKS, seed_artist, ''))
-
-        related_tracks: list[models.Track] = []
-        if related_tokens or target_genre or seed_profile.get('subgenres') or seed_profile.get('moods'):
-            all_tracks = q.limit(5000).all()
-            primary_ids = {t.id for t in primary_tracks}
-            related_tracks = []
-            for t in all_tracks:
-                if t.id in primary_ids or t.id in down:
-                    continue
-                candidate_profile = profile_for_track(db, t)
-                candidate_genre = profile_genre(candidate_profile) or track_genre(t)
-                artist_token = normalize_token(t.artist)
-                album_artist_token = normalize_token(t.album_artist)
-                related_match = bool(related_tokens) and (artist_token in related_tokens or album_artist_token in related_tokens)
-                if (
-                    related_match
-                    or (target_genre and candidate_genre == target_genre)
-                    or overlap_score(seed_profile.get('subgenres', []), candidate_profile.get('subgenres', []), 1.0) > 0
-                    or overlap_score(seed_profile.get('moods', []), candidate_profile.get('moods', []), 1.0) > 0
-                ):
-                    related_tracks.append(t)
-
-        if exclude_set:
-            filtered_primary = [t for t in primary_tracks if t.id not in exclude_set]
-            filtered_related = [t for t in related_tracks if t.id not in exclude_set]
-            primary_tracks = filtered_primary or primary_tracks
-            related_tracks = filtered_related
-
-        filler_limit = int(limit * 0.35)
-        seed_target = max(int(limit * 0.65), limit - len(related_tracks[:filler_limit]))
-        filler_target = limit - min(seed_target, len(primary_tracks))
-
-        random.shuffle(primary_tracks)
-        random.shuffle(related_tracks)
-        tracks = primary_tracks[:seed_target] + related_tracks[:filler_target]
-        random.shuffle(tracks)
+        
+        recent = recent_ids(db)
+        favs = favorite_ids(db)
+        
+        seed_tracks = []
+        strong_related = []
+        soft_similar = []
+        weak_related = []
+        
+        for t in all_tracks:
+            if t.id in down or t.id in exclude_set:
+                continue
+            
+            candidate_profile = profile_for_track(db, t)
+            score, _, tier = artist_radio_score_parts(seed_profile, candidate_profile, seed_artist, t, related_tokens, fb, recent, favs)
+            
+            if tier == 'excluded':
+                continue
+                
+            entry = (score, t)
+            if tier == 'seed_artist':
+                seed_tracks.append(entry)
+            elif tier == 'strong_related':
+                strong_related.append(entry)
+            elif tier == 'soft_similar':
+                soft_similar.append(entry)
+            elif tier == 'weak_related':
+                weak_related.append(entry)
+                
+        seed_tracks.sort(key=lambda x: x[0], reverse=True)
+        strong_related.sort(key=lambda x: x[0], reverse=True)
+        soft_similar.sort(key=lambda x: x[0], reverse=True)
+        weak_related.sort(key=lambda x: x[0], reverse=True)
+        
+        selected_entries = []
+        seed_target = min(len(seed_tracks), max(int(limit * 0.80), limit - int(limit * 0.20)))
+        selected_entries += seed_tracks[:seed_target]
+        
+        remaining = limit - len(selected_entries)
+        selected_entries += strong_related[:remaining]
+        
+        remaining = limit - len(selected_entries)
+        selected_entries += soft_similar[:remaining]
+        
+        remaining = limit - len(selected_entries)
+        weak_cap = max(1, int(limit * 0.10))
+        selected_entries += weak_related[:min(remaining, weak_cap)]
+        
+        remaining = limit - len(selected_entries)
+        if remaining > 0:
+            selected_entries += seed_tracks[seed_target:seed_target + remaining]
+            
+        pool_tracks = [t for _, t in selected_entries]
+        selected_tracks = no_repeats(pool_tracks, limit, artist_loose=True, avoid_title_dups=True)
+        return payload(selected_tracks)
     else:
         return {'queue': []}
 
