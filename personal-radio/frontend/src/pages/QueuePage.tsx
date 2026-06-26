@@ -3,6 +3,7 @@ import Artwork from '../components/Artwork'
 import BottomSheet from '../components/BottomSheet'
 import TrackActionSheet from '../components/TrackActionSheet'
 import { createPlaylistFromTrackList, type Track } from '../api'
+import { useRadioActions } from '../hooks/useRadioActions'
 import { usePlayback, type NowPlaying } from '../state/PlaybackContext'
 
 const asTrack = (item: NowPlaying): Track => ({
@@ -17,6 +18,7 @@ const asTrack = (item: NowPlaying): Track => ({
 
 export default function QueuePage({ onBack }: { onBack: () => void }) {
   const { queue, queueIndex, playQueue, nowPlaying } = usePlayback()
+  const { startSongRadio, saveSongStation } = useRadioActions()
   const [actionTrack, setActionTrack] = useState<Track | null>(null)
   const [saveOpen, setSaveOpen] = useState(false)
   const [name, setName] = useState('Queue Mix')
@@ -85,14 +87,14 @@ export default function QueuePage({ onBack }: { onBack: () => void }) {
                   <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.subtitle}</span>
                 </span>
               </button>
-              {track && <button className="track-overflow-button" aria-label="Track actions" onClick={() => setActionTrack(track)}>⋯</button>}
+              {track && <button className="track-overflow-button" aria-label="Track actions" onClick={() => setActionTrack(track)}>&#8943;</button>}
             </div>
           )
         })}
         {!upcoming.length && queue.length > 0 && <div className="card-premium" style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>End of queue.</div>}
       </div>
 
-      <TrackActionSheet open={!!actionTrack} track={actionTrack} onClose={() => setActionTrack(null)} />
+      <TrackActionSheet open={!!actionTrack} track={actionTrack} onClose={() => setActionTrack(null)} onStartRadio={startSongRadio} onSaveStation={saveSongStation} />
       <BottomSheet open={saveOpen} title="Save Queue" onClose={() => setSaveOpen(false)}>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>Save the current music queue as a manual playlist.</p>
         <input value={name} onChange={event => setName(event.target.value)} placeholder="Playlist name" style={{ width: '100%', boxSizing: 'border-box', padding: '11px 12px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', color: 'var(--text-primary)', marginBottom: 10 }} />

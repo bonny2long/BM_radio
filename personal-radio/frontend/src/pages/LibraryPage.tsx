@@ -4,7 +4,8 @@ import LoadingSkeleton from '../components/LoadingSkeleton'
 import PageError from '../components/PageError'
 import TrackActionSheet from '../components/TrackActionSheet'
 import useLongPress from '../hooks/useLongPress'
-import { createPlaylist, createStation, deletePlaylist, getAlbumTracks, getAlbums, getArtistQueue, getArtists, getLibrarySummary, getPlaylistQueue, getPlaylists, getSmartPlaylistQueue, getSmartPlaylists, getStationQueue, getTracksPage, mediaUrl, searchAll, type AlbumSummary, type ArtistSummary, type LibrarySummary, type PlaylistSummary, type SmartPlaylistSummary, type SearchResults, type Track } from '../api'
+import { createPlaylist, deletePlaylist, getAlbumTracks, getAlbums, getArtists, getLibrarySummary, getPlaylistQueue, getPlaylists, getSmartPlaylistQueue, getSmartPlaylists, getStationQueue, getTracksPage, mediaUrl, searchAll, type AlbumSummary, type ArtistSummary, type LibrarySummary, type PlaylistSummary, type SmartPlaylistSummary, type SearchResults, type Track } from '../api'
+import { useRadioActions } from '../hooks/useRadioActions'
 import { usePlayback, type QueueSource } from '../state/PlaybackContext'
 import { trackToNowPlaying } from '../utils/mediaMappers'
 import { cleanTrackTitle } from '../utils/displayText'
@@ -29,6 +30,7 @@ export default function LibraryPage({ onOpenAlbum, onOpenArtist, onOpenBook, onO
   const [pageError, setPageError] = useState<string | null>(null)
   const [actionTrack, setActionTrack] = useState<Track | null>(null)
   const { playQueue } = usePlayback()
+  const { startSongRadio, saveSongStation, startArtistRadio } = useRadioActions()
 
   const play = (list: Track[], index = 0) => playQueue(list.map(track => trackToNowPlaying(track)), index)
   const loadAll = () => {
@@ -44,21 +46,11 @@ export default function LibraryPage({ onOpenAlbum, onOpenArtist, onOpenBook, onO
   if (loading) return <LoadingSkeleton rows={7} />
   if (pageError) return <PageError message={pageError} onRetry={loadAll} />
 
-  const playArtist = (artist: string) => void getArtistQueue(artist).then(r => {
-    const stationName = `${artist} Radio`
-    playQueue(r.queue.map(t => trackToNowPlaying(t, { stationName })), 0, { kind: 'station', stationType: 'artist', seedValue: artist, stationName } satisfies QueueSource)
-  })
+  const playArtist = (artist: string) => startArtistRadio(artist)
   const playStation = (type: string, seed?: string | null, stationName?: string) => void getStationQueue(type, seed).then(r => {
     const name = stationName ?? seed ?? type
     playQueue(r.queue.map(t => trackToNowPlaying(t, { stationName: name })), 0, { kind: 'station', stationType: type, seedValue: seed, stationName: name } satisfies QueueSource)
   })
-  const handleStartRadio = (track: Track) => {
-    const stationName = `${track.title} Radio`
-    void getStationQueue('song', String(track.id)).then(r => playQueue(r.queue.map(t => trackToNowPlaying(t, { stationName })), 0, { kind: 'station', stationType: 'song', seedValue: String(track.id), stationName } satisfies QueueSource))
-  }
-  const handleSaveStation = (track: Track) => {
-    void createStation(`${track.title} Radio`, 'song', String(track.id), track.id).catch(() => {})
-  }
   const loadMoreSongs = () => void getTracksPage(100, songsOffset).then(p => { setTracks([...tracks, ...p.items]); setSongsOffset(songsOffset + p.items.length); setSongsMore(p.has_more) })
   const results = async () => { if (query.trim()) setSearch(await searchAll(query.trim())); else setSearch(emptySearch) }
   const refreshPlaylists = () => void Promise.all([getPlaylists(), getSmartPlaylists()]).then(([p, sp]) => { setPlaylists(p); setSmart(sp) })
@@ -74,7 +66,7 @@ export default function LibraryPage({ onOpenAlbum, onOpenArtist, onOpenBook, onO
       {tab === 'Songs' && <div><TrackList tracks={tracks} onPlay={play} onAction={setActionTrack} />{songsMore && <button onClick={loadMoreSongs} className="card-premium" style={{ width: '100%', padding: 14, marginTop: 10, color: 'var(--accent-primary)', fontWeight: 800 }}>Load More Songs</button>}</div>}
       {tab === 'Search' && <div><div style={{ position: 'relative', maxWidth: 360, margin: '0 auto 14px' }}>{!query && <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', color: 'var(--text-muted)', display: 'flex', gap: 8, alignItems: 'center', pointerEvents: 'none', fontSize: 14 }}><SearchIcon />Search music</span>}<input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && void results()} placeholder="" aria-label="Search music" style={{ width: '100%', boxSizing: 'border-box', padding: '11px 14px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', color: 'var(--text-primary)', textAlign: 'center' }} /></div><GroupedSearch search={search} onArtist={onOpenArtist} onAlbum={onOpenAlbum} onPlay={play} onStation={playStation} onBook={onOpenBook} onAction={setActionTrack} /></div>}
       {tab === 'Playlists' && <PlaylistsTab playlists={playlists} smart={smart} onRefresh={refreshPlaylists} onOpen={id => onOpenPlaylist?.(id)} onPlay={(id, shuffle) => void getPlaylistQueue(id, shuffle).then(r => play(r.queue))} onSmart={(key, shuffle) => void getSmartPlaylistQueue(key, shuffle).then(r => play(r.queue))} />}
-      <TrackActionSheet open={!!actionTrack} track={actionTrack} onClose={() => setActionTrack(null)} onGoToAlbum={openAlbumForTrack} onGoToArtist={track => onOpenArtist({ name: track.artist, track_count: 0 })} onStartRadio={handleStartRadio} onSaveStation={handleSaveStation} />
+      <TrackActionSheet open={!!actionTrack} track={actionTrack} onClose={() => setActionTrack(null)} onGoToAlbum={openAlbumForTrack} onGoToArtist={track => onOpenArtist({ name: track.artist, track_count: 0 })} onStartRadio={startSongRadio} onSaveStation={saveSongStation} />
     </div>
   )
 }
@@ -84,7 +76,7 @@ function AlbumRow({ album, onOpen, onPlay }: { album: AlbumSummary; onOpen: (a: 
 function Section({ title, children }: { title: string; children: ReactNode }) { return <section style={{ marginBottom: 18 }}><p className="section-label">{title}</p><div style={{ display: 'grid', gap: 7 }}>{children}</div></section> }
 function GroupedSearch({ search, onArtist, onAlbum, onPlay, onStation, onBook, onAction }: { search: SearchResults; onArtist: (a: ArtistSummary) => void; onAlbum: (a: AlbumSummary) => void; onPlay: (x: Track[], i?: number) => void; onStation: (type: string, seed?: string | null, stationName?: string) => void; onBook?: (id: number) => void; onAction: (track: Track) => void }) { const has = search.artists.length || search.albums.length || search.tracks.length || search.stations.length || search.audiobooks.length; if (!has) return <div className="card-premium" style={{ padding: 22, textAlign: 'center', color: 'var(--text-muted)' }}>Type a search and press Enter.</div>; return <div>{!!search.artists.length && <Section title="Artists">{search.artists.map(a => <button className="card-premium" style={{ padding: 12, textAlign: 'left' }} key={a.name} onClick={() => onArtist(a)}><strong>{a.name}</strong><span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>{a.track_count} tracks</span></button>)}</Section>}{!!search.albums.length && <Section title="Albums">{search.albums.map(a => <AlbumRow key={a.artist + a.title} album={a} onOpen={onAlbum} onPlay={() => {}} />)}</Section>}{!!search.tracks.length && <Section title="Songs"><TrackList tracks={search.tracks} onPlay={onPlay} onAction={onAction} /></Section>}{!!search.stations.length && <Section title="Stations">{search.stations.map(s => <button className="card-premium" style={{ padding: 12, textAlign: 'left' }} key={s.name} onClick={() => onStation(s.type, s.seed_value, s.name)}><strong>{s.name}</strong><span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>{s.track_count} tracks</span></button>)}</Section>}{!!search.audiobooks.length && <Section title="Books">{search.audiobooks.map(b => <button className="card-premium" style={{ padding: 12, textAlign: 'left' }} key={b.id} onClick={() => onBook?.(b.id)}><strong>{b.title}</strong><span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)' }}>{b.author}</span></button>)}</Section>}</div> }
 function TrackList({ tracks, onPlay, onAction }: { tracks: Track[]; onPlay: (x: Track[], i?: number) => void; onAction: (track: Track) => void }) { return <div style={{ display: 'grid', gap: 7 }}>{tracks.map((t, i) => <TrackRow key={String(t.id) + '-' + i + '-' + t.title + '-' + t.album} track={t} onPlay={() => onPlay(tracks, i)} onAction={() => onAction(t)} />)}</div> }
-function TrackRow({ track, onPlay, onAction }: { track: Track; onPlay: () => void; onAction: () => void }) { const longPress = useLongPress(onAction); return <div className="card-premium" style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 8 }} {...longPress}><button onClick={onPlay} style={{ flex: 1, minWidth: 0, textAlign: 'left' }}><strong style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cleanTrackTitle(track.title)}</strong><span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{track.artist}{track.album ? ' · ' + track.album : ''}</span></button><button className="track-overflow-button" aria-label="Track actions" onClick={(event) => { event.stopPropagation(); onAction() }}>⋯</button></div> }
+function TrackRow({ track, onPlay, onAction }: { track: Track; onPlay: () => void; onAction: () => void }) { const longPress = useLongPress(onAction); return <div className="card-premium" style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 8 }} {...longPress}><button onClick={onPlay} style={{ flex: 1, minWidth: 0, textAlign: 'left' }}><strong style={{ display: 'block', fontSize: 14, fontWeight: 600, marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cleanTrackTitle(track.title)}</strong><span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{track.artist}{track.album ? ' · ' + track.album : ''}</span></button><button className="track-overflow-button" aria-label="Track actions" onClick={(event) => { event.stopPropagation(); onAction() }}>&#8943;</button></div> }
 
 function PlaylistsTab({ playlists, smart, onRefresh, onOpen, onPlay, onSmart }: { playlists: PlaylistSummary[]; smart: SmartPlaylistSummary[]; onRefresh: () => void; onOpen: (id: number) => void; onPlay: (id: number, shuffle?: boolean) => void; onSmart: (key: string, shuffle?: boolean) => void }) {
   const [showCreate, setShowCreate] = useState(false)

@@ -11,8 +11,10 @@ import {
   getTrackFeedback,
   setTrackFavorite,
   setTrackFeedback,
+  type Track,
 } from '../api'
-import PlaylistPickerSheet from '../components/PlaylistPickerSheet'
+import TrackActionSheet from '../components/TrackActionSheet'
+import { useRadioActions } from '../hooks/useRadioActions'
 import {
   HeartIcon,
   NextIcon,
@@ -74,9 +76,10 @@ export default function NowPlayingPage({
 
   const [feedback, setFeedback] = useState('neutral')
   const [favorite, setFavorite] = useState(false)
-  const [showAdd, setShowAdd] = useState(false)
+  const [showActions, setShowActions] = useState(false)
   const artworkZoneRef = useRef<HTMLDivElement>(null)
   const [artworkSize, setArtworkSize] = useState(240)
+  const { startSongRadio, saveSongStation } = useRadioActions()
 
   useEffect(() => {
     const el = artworkZoneRef.current
@@ -97,7 +100,7 @@ export default function NowPlayingPage({
     let alive = true
     setFeedback('neutral')
     setFavorite(false)
-    setShowAdd(false)
+    setShowActions(false)
     if (!nowPlaying) return
 
     if (nowPlaying.mode === 'music') {
@@ -138,6 +141,15 @@ export default function NowPlayingPage({
   const hasPrev = queueIndex > 0
   const hasNext = queueIndex < queue.length - 1
   const sourceLabel = nowPlaying.stationName ?? (music ? 'NOW PLAYING' : 'AUDIOBOOK')
+  const currentTrack: Track | null = music ? {
+    id: nowPlaying.id,
+    title: nowPlaying.title,
+    artist: nowPlaying.artist ?? '',
+    album: nowPlaying.album ?? '',
+    cover_url: nowPlaying.coverUrl,
+    stream_url: nowPlaying.streamUrl,
+    duration_seconds: nowPlaying.durationSeconds,
+  } : null
 
   const thumb = (value: 'thumbs_up' | 'thumbs_down') => {
     if (!music) return
@@ -248,7 +260,7 @@ export default function NowPlayingPage({
 
         <div className="np-actions">
           {music ? (
-            <IconButton label="Add to playlist" onClick={() => setShowAdd(!showAdd)} active={showAdd} size={38} variant="ghost">
+            <IconButton label="Track actions" onClick={() => setShowActions(true)} active={showActions} size={38} variant="ghost">
               <AddIcon />
             </IconButton>
           ) : (
@@ -262,7 +274,7 @@ export default function NowPlayingPage({
           </IconButton>
         </div>
       </div>
-      <PlaylistPickerSheet open={music && showAdd} trackId={music ? nowPlaying.id : null} trackTitle={nowPlaying.title} onClose={() => setShowAdd(false)} />
+      <TrackActionSheet open={music && showActions} track={currentTrack} onClose={() => setShowActions(false)} onStartRadio={startSongRadio} onSaveStation={saveSongStation} />
     </div>
   )
 }
