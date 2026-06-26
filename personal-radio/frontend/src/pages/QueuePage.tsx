@@ -17,7 +17,7 @@ const asTrack = (item: NowPlaying): Track => ({
 })
 
 export default function QueuePage({ onBack }: { onBack: () => void }) {
-  const { queue, queueIndex, playQueue, nowPlaying } = usePlayback()
+  const { queue, queueIndex, playQueue, nowPlaying, queueSource } = usePlayback()
   const { startSongRadio, saveSongStation } = useRadioActions()
   const [actionTrack, setActionTrack] = useState<Track | null>(null)
   const [saveOpen, setSaveOpen] = useState(false)
@@ -35,7 +35,7 @@ export default function QueuePage({ onBack }: { onBack: () => void }) {
       const j = Math.floor(Math.random() * (i + 1))
       ;[rest[i], rest[j]] = [rest[j], rest[i]]
     }
-    playQueue([...before, ...rest], queueIndex)
+    playQueue([...before, ...rest], queueIndex, queueSource ?? undefined)
   }
 
   const saveQueue = async () => {
@@ -52,18 +52,18 @@ export default function QueuePage({ onBack }: { onBack: () => void }) {
 
   return (
     <div>
-      <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 0', marginBottom: 16, minHeight: 44, color: 'var(--text-secondary)', fontSize: 14, fontWeight: 500 }}>← Back</button>
+      <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 0', marginBottom: 16, minHeight: 44, color: 'var(--text-secondary)', fontSize: 14, fontWeight: 500 }}>&larr; Back</button>
       <h1 style={{ fontSize: '1.8rem', fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 18 }}>Queue</h1>
 
       {current ? (
-        <button onClick={() => playQueue(queue, Math.max(queueIndex, 0))} className="card-premium" style={{ width: '100%', padding: 14, marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left', borderColor: 'var(--accent-primary)' }}>
+        <div className="card-premium" style={{ width: '100%', padding: 14, marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left', borderColor: 'var(--accent-primary)' }}>
           <Artwork src={current.coverUrl} label={current.title} size={58} kind={current.mode === 'audiobook' ? 'book' : 'music'} />
           <span style={{ flex: 1, minWidth: 0 }}>
             <span className="section-label" style={{ marginBottom: 4, color: 'var(--accent-primary)' }}>Now Playing</span>
             <strong style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{current.title}</strong>
             <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{current.subtitle}</span>
           </span>
-        </button>
+        </div>
       ) : (
         <div className="card-premium" style={{ padding: 24, textAlign: 'center', marginBottom: 16 }}>Nothing queued yet.</div>
       )}
@@ -80,7 +80,7 @@ export default function QueuePage({ onBack }: { onBack: () => void }) {
           const track = item.mode === 'music' ? asTrack(item) : null
           return (
             <div key={`${item.id}-${index}`} className="card-premium" style={{ padding: 10, display: 'flex', gap: 10, alignItems: 'center' }}>
-              <button onClick={() => playQueue(queue, index)} style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1, minWidth: 0, textAlign: 'left' }}>
+              <button onClick={() => playQueue(queue, index, queueSource ?? undefined)} style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1, minWidth: 0, textAlign: 'left' }}>
                 <Artwork src={item.coverUrl} label={item.title} size={44} kind={item.mode === 'audiobook' ? 'book' : 'music'} />
                 <span style={{ minWidth: 0 }}>
                   <strong style={{ display: 'block', fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</strong>
