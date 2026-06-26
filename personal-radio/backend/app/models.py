@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum, Float, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum, Float, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -31,6 +31,52 @@ class Track(Base):
     thumbs = relationship("TrackThumb", back_populates="track")
     favorites = relationship("TrackFavorite", back_populates="track")
 
+
+class ArtistRadioProfile(Base):
+    __tablename__ = "artist_radio_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    artist = Column(String, unique=True, index=True, nullable=False)
+    primary_genre = Column(String, nullable=True)
+    subgenres_json = Column(Text, nullable=True)
+    moods_json = Column(Text, nullable=True)
+    energy = Column(String, nullable=True)
+    era = Column(String, nullable=True)
+    related_artists_json = Column(Text, nullable=True)
+    source = Column(String, default="seed")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class AlbumRadioProfile(Base):
+    __tablename__ = "album_radio_profiles"
+    __table_args__ = (UniqueConstraint("artist", "album", name="uq_album_radio_profile_artist_album"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    artist = Column(String, index=True, nullable=False)
+    album = Column(String, index=True, nullable=False)
+    primary_genre = Column(String, nullable=True)
+    subgenres_json = Column(Text, nullable=True)
+    moods_json = Column(Text, nullable=True)
+    energy = Column(String, nullable=True)
+    era = Column(String, nullable=True)
+    source = Column(String, default="seed")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+class TrackRadioProfile(Base):
+    __tablename__ = "track_radio_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    track_id = Column(Integer, ForeignKey("tracks.id"), unique=True, index=True, nullable=False)
+    primary_genre = Column(String, nullable=True)
+    subgenres_json = Column(Text, nullable=True)
+    moods_json = Column(Text, nullable=True)
+    energy = Column(String, nullable=True)
+    tempo_bucket = Column(String, nullable=True)
+    radio_tags_json = Column(Text, nullable=True)
+    source = Column(String, default="manual")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 class Audiobook(Base):
     __tablename__ = "audiobooks"
 

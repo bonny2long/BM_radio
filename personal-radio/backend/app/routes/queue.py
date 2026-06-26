@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..db import get_db
 from .serializers import track_item
+from ..radio_profiles import normalize_token, profile_for_track
 
 router = APIRouter()
 
@@ -91,6 +92,21 @@ def track_genre(track: models.Track) -> str:
     )
 
 
+
+def overlap_score(a: list[str], b: list[str], weight: float) -> float:
+    if not a or not b:
+        return 0.0
+    overlap = set(a) & set(b)
+    return min(len(overlap), 3) * weight
+
+
+def profile_genre(profile: dict) -> str:
+    return normalize_token(profile.get('primary_genre')) or ''
+
+
+def is_related_artist(profile: dict, track: models.Track) -> bool:
+    related = {normalize_token(name) for name in profile.get('related_artists', [])}
+    return normalize_token(track.artist) in related or normalize_token(track.album_artist) in related
 def latest_feedback(db: Session) -> dict[int, str]:
     rows = db.query(models.TrackThumb).order_by(models.TrackThumb.created_at.asc()).all()
     return {r.track_id: r.value.value for r in rows}
@@ -182,7 +198,8 @@ def score_tracks(db: Session, tracks: list[models.Track], station_type: str) -> 
 
 
 def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Track]) -> list[models.Track]:
-    seed_genre = track_genre(seed)
+    seed_profile = profile_for_track(db, seed)
+    seed_genre = profile_genre(seed_profile) or track_genre(seed)
     seed_year = seed.year or 0
     seed_artist = (seed.artist or '').strip().lower()
     seed_album = (seed.album or '').strip().lower()
@@ -196,18 +213,27 @@ def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Tr
         if t.id == seed.id:
             continue
 
+        candidate_profile = profile_for_track(db, t)
+        candidate_genre = profile_genre(candidate_profile) or track_genre(t)
         score = random.random() * 0.5
 
-        if track_genre(t) == seed_genre and seed_genre:
-            score += 4.0
+        score += overlap_score(seed_profile.get('subgenres', []), candidate_profile.get('subgenres', []), 5.0)
+        score += overlap_score(seed_profile.get('moods', []), candidate_profile.get('moods', []), 3.0)
+
+        if seed_profile.get('energy') and seed_profile.get('energy') == candidate_profile.get('energy'):
+            score += 1.5
+        if seed_genre and candidate_genre == seed_genre:
+            score += 3.0
+        if is_related_artist(seed_profile, t):
+            score += 1.0
 
         t_artist = (t.artist or '').strip().lower()
         t_album = (t.album or '').strip().lower()
 
         if t_artist == seed_artist:
-            score += 2.0
+            score += 1.5
         if (t.album_artist or '').strip().lower() == seed_artist:
-            score += 1.2
+            score += 0.8
 
         t_year = t.year or 0
         if seed_year and t_year:
@@ -220,7 +246,7 @@ def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Tr
                 score += 0.2
 
         if t.library_area and seed.library_area and t.library_area == seed.library_area:
-            score += 0.5
+            score += 0.4
 
         rating = fb.get(t.id)
         if rating == 'up':
@@ -231,7 +257,7 @@ def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Tr
         if t.id in favs:
             score += 0.3
         if t.id in recent:
-            score -= 0.45
+            score -= 1.0
         if t_album and t_album == seed_album:
             score -= 2.0
 
@@ -255,10 +281,11 @@ def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Tr
                 if oi < len(other_tracks):
                     result.append(other_tracks[oi])
                     oi += 1
+            if si >= len(seed_artist_tracks) and oi >= len(other_tracks):
+                break
         return result
 
     return ranked
-
 
 def no_repeats(tracks: list[models.Track], limit: int, artist_loose: bool = False) -> list[models.Track]:
     out = []
@@ -395,7 +422,7 @@ def station_queue(req: StationQueueRequest, db: Session = Depends(get_db)):
         tracks = [t for t in tracks if t.id not in down]
     elif req.type == 'genre':
         target = norm_genre(req.seed_value)
-        tracks = [t for t in q.limit(5000).all() if t.id not in down and track_genre(t) == target]
+        tracks = [t for t in q.limit(5000).all() if t.id not in down and ((profile_genre(profile_for_track(db, t)) or track_genre(t)) == target)]
         random.shuffle(tracks)
     elif req.type == 'song':
         seed_track = None
@@ -423,23 +450,33 @@ def station_queue(req: StationQueueRequest, db: Session = Depends(get_db)):
         ).limit(limit * 8).all()
         primary_tracks = [t for t in primary_tracks if t.id not in down]
 
-        related_names = set(RELATED_ARTISTS.get(seed_artist, []))
-        target_genre = norm_genre(ARTIST_GENRE_FALLBACKS.get(seed_artist, ''))
+        seed_profile = profile_for_track(db, primary_tracks[0]) if primary_tracks else {
+            'primary_genre': ARTIST_GENRE_FALLBACKS.get(seed_artist, ''),
+            'subgenres': [],
+            'moods': [],
+            'energy': None,
+            'related_artists': RELATED_ARTISTS.get(seed_artist, []),
+        }
+        related_names = set(RELATED_ARTISTS.get(seed_artist, [])) | set(seed_profile.get('related_artists', []))
+        target_genre = profile_genre(seed_profile) or norm_genre(ARTIST_GENRE_FALLBACKS.get(seed_artist, ''))
 
         related_tracks: list[models.Track] = []
-        if related_names or target_genre:
+        if related_names or target_genre or seed_profile.get('subgenres') or seed_profile.get('moods'):
             all_tracks = q.limit(5000).all()
             primary_ids = {t.id for t in primary_tracks}
-            related_tracks = [
-                t
-                for t in all_tracks
-                if t.id not in primary_ids
-                and t.id not in down
-                and (
+            related_tracks = []
+            for t in all_tracks:
+                if t.id in primary_ids or t.id in down:
+                    continue
+                candidate_profile = profile_for_track(db, t)
+                candidate_genre = profile_genre(candidate_profile) or track_genre(t)
+                if (
                     (related_names and (t.artist in related_names or t.album_artist in related_names))
-                    or (target_genre and track_genre(t) == target_genre)
-                )
-            ]
+                    or (target_genre and candidate_genre == target_genre)
+                    or overlap_score(seed_profile.get('subgenres', []), candidate_profile.get('subgenres', []), 1.0) > 0
+                    or overlap_score(seed_profile.get('moods', []), candidate_profile.get('moods', []), 1.0) > 0
+                ):
+                    related_tracks.append(t)
 
         if exclude_set:
             filtered_primary = [t for t in primary_tracks if t.id not in exclude_set]

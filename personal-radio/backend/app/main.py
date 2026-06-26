@@ -3,10 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from . import models, db
 from .config import settings
-from .routes import health, library, stations, audiobooks, queue, playback, media, search, playlists
+from .radio_profiles import seed_default_radio_profiles
+from .routes import health, library, stations, audiobooks, queue, playback, media, search, playlists, radio_profiles
 
 # Create database tables
 models.Base.metadata.create_all(bind=db.engine)
+with db.SessionLocal() as seed_db:
+    seed_default_radio_profiles(seed_db)
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -29,6 +32,7 @@ app.include_router(playback.router, prefix="/api/playback", tags=["Playback"])
 app.include_router(media.router, prefix="/api/media", tags=["Media"])
 app.include_router(search.router, prefix="/api", tags=["Search"])
 app.include_router(playlists.router, prefix="/api/playlists", tags=["Playlists"])
+app.include_router(radio_profiles.router, prefix="/api/radio-profiles", tags=["Radio Profiles"])
 
 @app.get("/")
 async def root():
