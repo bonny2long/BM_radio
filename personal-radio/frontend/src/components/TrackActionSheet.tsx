@@ -11,9 +11,10 @@ type TrackActionSheetProps = {
   onGoToAlbum?: (track: Track) => void
   onGoToArtist?: (track: Track) => void
   onStartRadio?: (track: Track) => void
+  onSaveStation?: (track: Track) => void
 }
 
-export default function TrackActionSheet({ open, track, onClose, onPlayNow, onGoToAlbum, onGoToArtist, onStartRadio }: TrackActionSheetProps) {
+export default function TrackActionSheet({ open, track, onClose, onPlayNow, onGoToAlbum, onGoToArtist, onStartRadio, onSaveStation }: TrackActionSheetProps) {
   const [favorite, setFavorite] = useState(false)
   const [showPlaylist, setShowPlaylist] = useState(false)
 
@@ -39,6 +40,7 @@ export default function TrackActionSheet({ open, track, onClose, onPlayNow, onGo
         <div style={{ display: 'grid', gap: 8 }}>
           {onPlayNow && <button onClick={() => { onPlayNow(); onClose() }} className="sheet-action-button">Play now</button>}
           {onStartRadio && track && <button onClick={() => { onStartRadio(track); onClose() }} className="sheet-action-button" style={{ color: 'var(--accent-primary)', fontWeight: 700 }}>Start Song Radio</button>}
+          {onSaveStation && track && <button onClick={() => { onSaveStation(track); onClose() }} className="sheet-action-button">Save as Station</button>}
           <button onClick={() => setShowPlaylist(true)} className="sheet-action-button">Add to playlist</button>
           <button onClick={toggleFavorite} className="sheet-action-button">{favorite ? 'Unfavorite' : 'Favorite'}</button>
           {track?.album && onGoToAlbum && <button onClick={() => { onGoToAlbum(track); onClose() }} className="sheet-action-button">Go to album</button>}
