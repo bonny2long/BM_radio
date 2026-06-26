@@ -255,13 +255,7 @@ export default function NowPlayingPage({
             <div style={{ width: 38 }} />
           )}
 
-          <div style={{ textAlign: 'center', flex: 1, minWidth: 0 }}>
-            {nowPlaying.stationName && (
-              <p style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {nowPlaying.stationName}
-              </p>
-            )}
-          </div>
+          <div style={{ flex: 1, minWidth: 0 }} />
 
           <IconButton label="Queue" onClick={onOpenQueue} size={38} variant="ghost">
             <QueueIcon />

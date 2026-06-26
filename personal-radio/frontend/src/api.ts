@@ -8,7 +8,7 @@ export type Audiobook={id:number;title:string;author:string;narrator?:string|nul
 export type ContainedBook={series_index?:string|number;title:string;display_title?:string;chapter_id?:number}
 export type Chapter={id:number;title:string;sort_order:number;duration_seconds?:number;stream_url:string}
 export type AudiobookDetail=Audiobook&{contained_books?:ContainedBook[];latest_progress?:{chapter_id?:number;position_seconds:number;progress_percent:number;chapter_progress_percent?:number;overall_progress_percent?:number;updated_at?:string}|null;chapters:Chapter[]}
-export type Station={name:string;type:string;seed_value?:string|null;track_count:number}
+export type Station={id?:number;name:string;type:string;seed_value?:string|null;track_count:number;source?:'system'|'user';favorite?:boolean}
 export type AlbumSummary={title:string;artist:string;year?:number|null;track_count:number;cover_url?:string|null}
 export type ArtistSummary={name:string;track_count:number;album_count?:number}
 export type ArtistDetail={name:string;track_count:number;album_count:number;albums:AlbumSummary[];tracks:Track[]}
@@ -28,7 +28,8 @@ export const getAudiobook=(id:number)=>request<AudiobookDetail>(`/audiobooks/${i
 export const getAlbums=()=>request<AlbumSummary[]>('/library/albums')
 export const getAlbumTracks=(artist:string,album:string)=>request<Track[]>(`/library/album-tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`)
 export const getStations=()=>request<Station[]>('/stations/')
-export const getStationQueue=(type:string,seedValue?:string|null)=>request<{queue:Track[]}>('/queue/station',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,seed_value:seedValue,limit:50,shuffle:true})})
+export const createStation=(name:string,type:string,seedValue?:string|null,seedTrackId?:number|null)=>request<Station>('/stations/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,type,seed_value:seedValue??null,seed_track_id:seedTrackId??null})})
+export const getStationQueue=(type:string,seedValue?:string|null,limit=50,excludeTrackIds:number[]=[])=>request<{queue:Track[]}>('/queue/station',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,seed_value:seedValue,limit,shuffle:true,exclude_track_ids:excludeTrackIds})})
 export const updateAudiobookProgress=(id:number,p:{chapter_id:number;position_seconds:number;progress_percent:number})=>request(`/audiobooks/${id}/progress`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)})
 export const favoriteAudiobook=(id:number)=>request<{favorite:boolean}>(`/audiobooks/${id}/favorite`,{method:'POST'})
 export const getArtists=()=>request<ArtistSummary[]>('/library/artists')
