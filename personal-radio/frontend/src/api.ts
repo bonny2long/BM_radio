@@ -29,8 +29,8 @@ export type RecentPlaybackItem={mode:'music'|'audiobook';track_id?:number;audiob
 export type PlaylistSummary={id:number;name:string;description?:string|null;kind:string;track_count:number}
 export type SmartPlaylistSummary={id:string;name:string;description?:string|null;kind:string;track_count:number}
 export type PlaylistDetail=PlaylistSummary&{tracks:Track[]}
-export type LibraryIntegrityIssue={type:string;severity:'info'|'notice'|'warning'|'error';title:string;message:string;count:number;items:Record<string,unknown>[]}
-export type LibraryIntegritySummary={total_tracks:number;total_albums:number;total_audiobooks:number;duplicate_music_track_release_rows:number;suspected_duplicate_recordings:number;duplicate_audiobook_editions:number;audiobook_variants?:number;missing_covers:number;unknown_genres:number;weak_titles_corrected:number;weak_title_candidates?:number;scanner_warnings:number;books_indexed?:boolean}
+export type LibraryIntegrityIssue={id?:string;type:string;category?:string;severity:'info'|'notice'|'warning'|'error';confidence?:'strong'|'possible'|'notice';title:string;message:string;description?:string;count:number;items:Record<string,unknown>[];read_only?:boolean}
+export type LibraryIntegritySummary={total_tracks:number;total_albums:number;total_audiobooks:number;duplicate_music_track_release_rows:number;duplicate_music_release_candidates?:number;strong_duplicate_candidates?:number;possible_duplicate_candidates?:number;suspected_duplicate_recordings:number;variant_release_candidates?:number;duplicate_audiobook_editions:number;audiobook_variants?:number;missing_covers:number;unknown_genres:number;weak_titles_corrected:number;weak_title_candidates?:number;scanner_warnings:number;books_indexed?:boolean}
 export type LibraryIntegrityReport={summary:LibraryIntegritySummary;issues:LibraryIntegrityIssue[]}
 export const mediaUrl=(path?:string|null):string|null=>{if(!path)return null;if(/^https?:\/\//.test(path))return path;return path.startsWith('/')?`${API_ORIGIN}${path}`:`${API_ORIGIN}/${path}`}
 export const getLibrarySummary=()=>cachedRequest<LibrarySummary>('library-summary','/library/summary',30000)
@@ -83,5 +83,6 @@ export const getSmartPlaylists=()=>request<SmartPlaylistSummary[]>('/playlists/s
 export const getSmartPlaylistQueue=(key:string,shuffle=false,limit=100)=>request<{queue:Track[]}>('/queue/smart-playlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,shuffle,limit})})
 export const createPlaylistFromTrackList=(name:string,trackIds:number[],description?:string)=>request<PlaylistDetail>('/playlists/from-track-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,description,track_ids:trackIds})})
 export const getLibraryIntegrity=()=>request<LibraryIntegrityReport>('/library/integrity')
+
 
 

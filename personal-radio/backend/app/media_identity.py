@@ -1,4 +1,4 @@
-import re
+﻿import re
 import unicodedata
 
 
@@ -49,6 +49,38 @@ def music_track_release_key(
         normalize_text(album),
         normalize_year(year),
         str(track_number or "").strip(),
+        normalize_text(title),
+    ])
+
+
+def music_duplicate_candidate_key(
+    artist: str | None,
+    album: str | None,
+    title: str | None,
+    year: str | int | None = None,
+    duration_seconds: float | int | None = None,
+) -> str:
+    return "|".join([
+        "music_duplicate_candidate",
+        normalize_people(artist),
+        normalize_text(album),
+        normalize_year(year),
+        normalize_text(title),
+        duration_bucket(duration_seconds, tolerance=5),
+    ])
+
+
+def music_possible_duplicate_key(
+    artist: str | None,
+    album: str | None,
+    title: str | None,
+    year: str | int | None = None,
+) -> str:
+    return "|".join([
+        "music_possible_duplicate",
+        normalize_people(artist),
+        normalize_text(album),
+        normalize_year(year),
         normalize_text(title),
     ])
 

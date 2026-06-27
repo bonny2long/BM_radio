@@ -52,7 +52,7 @@ function IssueCard({ issue }: { issue: LibraryIntegrityIssue }) {
       <button onClick={copy} style={{ color: 'var(--accent-primary)', fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{copied ? 'Copied' : 'Copy'}</button>
     </div>
     <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-      <span style={{ borderRadius: 'var(--radius-pill)', padding: '4px 8px', fontSize: 11, background: 'rgba(255,255,255,0.06)', color: severityColor[issue.severity] ?? 'var(--text-muted)', fontWeight: 800 }}>{issue.severity}</span>
+      <span style={{ borderRadius: 'var(--radius-pill)', padding: '4px 8px', fontSize: 11, background: 'rgba(255,255,255,0.06)', color: severityColor[issue.severity] ?? 'var(--text-muted)', fontWeight: 800 }}>{issue.confidence ?? issue.severity}</span>
       <span style={{ borderRadius: 'var(--radius-pill)', padding: '4px 8px', fontSize: 11, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>{issue.count} {issue.count === 1 ? 'item' : 'items'}</span>
       <span style={{ borderRadius: 'var(--radius-pill)', padding: '4px 8px', fontSize: 11, background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>{label(issue.type)}</span>
     </div>
@@ -96,11 +96,11 @@ export default function LibraryIntegrityPage({ onBack }: { onBack: () => void })
   const filters: Filter[] = ['all', 'warning', 'notice', 'info', 'error']
 
   return <div style={{ width: '100%', minWidth: 0 }}>
-    <button onClick={onBack} style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 18 }}>? Back to Library</button>
+    <button onClick={onBack} style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 18 }}>← Back to Library</button>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 18 }}>
       <div>
         <h1 style={{ fontSize: '1.6rem', fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 4 }}>Library Integrity</h1>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>Read-only BM Radio app-index diagnostics. No files are changed.</p>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>Read-only diagnostics. No files were changed.</p>
       </div>
       <button onClick={load} style={{ padding: '9px 12px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', color: 'var(--accent-primary)', fontWeight: 800, fontSize: 12 }}>Refresh</button>
     </div>
@@ -109,8 +109,8 @@ export default function LibraryIntegrityPage({ onBack }: { onBack: () => void })
       <SummaryCard label="Tracks" value={summary.total_tracks} />
       <SummaryCard label="Albums" value={summary.total_albums} />
       <SummaryCard label="Books" value={summary.total_audiobooks} />
-      <SummaryCard label="Dupes" value={summary.duplicate_music_track_release_rows + summary.duplicate_audiobook_editions} />
-      <SummaryCard label="Variants" value={(summary.suspected_duplicate_recordings ?? 0) + (summary.audiobook_variants ?? 0)} />
+      <SummaryCard label="Warnings" value={(summary.duplicate_music_release_candidates ?? summary.duplicate_music_track_release_rows) + summary.duplicate_audiobook_editions} />
+      <SummaryCard label="Variants" value={(summary.variant_release_candidates ?? summary.suspected_duplicate_recordings ?? 0) + (summary.audiobook_variants ?? 0)} />
       <SummaryCard label="Covers" value={summary.missing_covers} />
     </div>
 
@@ -124,4 +124,5 @@ export default function LibraryIntegrityPage({ onBack }: { onBack: () => void })
     </div>
   </div>
 }
+
 
