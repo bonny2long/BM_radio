@@ -202,9 +202,59 @@ def is_dirty_release_title(value: str | None, artist: str | None = None) -> bool
 def clean_title(name):
     value = str(name or '').strip()
     stem = Path(value).stem if Path(value).suffix.lower() in MUSIC_EXTENSIONS else value
-    cleaned = re.sub(r'^(?:\d+[-_.\s]+)?\d+\s*[-_.]+\s*', '', stem).strip()
-    cleaned = re.sub(r'^\d+\s*[-_.]\s*', '', cleaned).strip()
+    cleaned = strip_duplicate_track_prefix(stem, None)
     return cleaned or value
+
+
+def strip_duplicate_track_prefix(text: str, track_number: int | None) -> str:
+    value = str(text or '').strip()
+    if not value:
+        return value
+
+    if track_number is not None:
+        value = re.sub(r'^\(?\d{1,2}\)?\s*[-_.]\s*', '', value).strip()
+        value = re.sub(r'^\(?\d{1,2}\)?\s+(?=[A-Za-z])', '', value).strip()
+        return value
+
+    value = re.sub(r'^\(?\d{1,2}\)?\s*[-_.]\s*', '', value).strip()
+    value = re.sub(r'^\(\d{1,3}\)\s+', '', value).strip()
+    return value
+
+
+def strip_vinyl_side_prefix(text: str) -> str:
+    return re.sub(r'^[A-H]\d{1,2}\s*[-_.]?\s+(?=[A-Za-z0-9])', '', str(text or '').strip())
+
+
+def is_weak_embedded_title(
+    embedded_title: str | None,
+    path_title: str | None,
+    artist: str | None,
+    album: str | None,
+    year: int | None,
+) -> bool:
+    embedded = str(embedded_title or '').strip()
+    path_value = str(path_title or '').strip()
+    if not embedded:
+        return True
+    if generic(embedded):
+        return True
+
+    embedded_norm = normalize_compare(embedded)
+    path_norm = normalize_compare(path_value)
+    if not embedded_norm:
+        return True
+    if year and embedded_norm == str(year):
+        return True
+    if artist and embedded_norm == normalize_compare(artist):
+        return True
+    if album and embedded_norm == normalize_compare(album):
+        return True
+    if path_norm and embedded_norm != path_norm and embedded_norm in path_norm:
+        embedded_has_number = bool(re.search(r'\d', embedded))
+        path_has_number = bool(re.search(r'\d', path_value))
+        if path_has_number and not embedded_has_number:
+            return True
+    return False
 
 
 def remove_release_suffix(text: str, dirty: bool) -> str:
@@ -292,8 +342,10 @@ def parse_scene_track_filename(stem: str, canonical_artist: str | None, collecti
             break
 
     text = re.sub(r'^[\s_-]+', '', text).strip()
-    text = re.sub(r'^\(?\d{1,3}\)?[_\s.-]+', '', text).strip()
-    text = re.sub(r'^(\d{1,3})\.(?=[A-Za-z])', '', text).strip()
+    text = strip_duplicate_track_prefix(text, track_number)
+    if track_number is not None:
+        text = strip_vinyl_side_prefix(text)
+    text = re.sub(r'^(\d{1,2})\.(?=[A-Za-z])', '', text).strip()
     text = re.sub(r'^\[([^\]]+)\][\s_-]*', r'[\1] ', text).strip()
     text = re.sub(r'_+\s*-\s*_+', '-', text)
     text = re.sub(r'\s*_+\s*', '_', text)
@@ -305,11 +357,15 @@ def parse_scene_track_filename(stem: str, canonical_artist: str | None, collecti
         if detected and not detected_prefix_artist:
             detected_prefix_artist = detected
         text = re.sub(r'^[\s_-]+', '', text).strip()
-        text = re.sub(r'^\d{1,3}\s*[-_.]\s*', '', text).strip()
+        text = strip_duplicate_track_prefix(text, track_number)
+        if track_number is not None:
+            text = strip_vinyl_side_prefix(text)
 
     scene_dirty = dirty or bool(detected_prefix_artist) or '_' in original or re.search(r'-[A-Za-z0-9]{2,12}$', original)
     text = remove_release_suffix(text, scene_dirty)
-    text = re.sub(r'^\(?\d{1,3}\)?[_\s.-]+', '', text).strip()
+    text = strip_duplicate_track_prefix(text, track_number)
+    if track_number is not None:
+        text = strip_vinyl_side_prefix(text)
     clean = final_title_format(text, canonical_artist, album)
     return {
         'disc': disc,
@@ -318,6 +374,33 @@ def parse_scene_track_filename(stem: str, canonical_artist: str | None, collecti
         'clean_title': clean,
         'detected_prefix_artist': detected_prefix_artist,
     }
+
+
+def _title_parser_regression_cases() -> list[tuple[str, str, str | None, str]]:
+    return [
+        ("01 - 01. 100 Grandkids", "Mac Miller", "100 Grandkids", "100 Grandkids"),
+        ("01 - 01. Break the Law", "Mac Miller", "Break the Law", "Break the Law"),
+        ("01 - 05. 100 Grandkids", "Mac Miller", "GOOD AM", "100 Grandkids"),
+        ("01 - 10. Break the Law", "Mac Miller", "GOOD AM", "Break the Law"),
+        ("01 - A1 Bixby Canyon Bridge", "Death Cab for Cutie", "Narrow Stairs", "Bixby Canyon Bridge"),
+        ("01 - A2 I Will Possess Your Heart", "Death Cab for Cutie", "Narrow Stairs", "I Will Possess Your Heart"),
+        ("01 - A3 No Sunlight", "Death Cab for Cutie", "Narrow Stairs", "No Sunlight"),
+        ("01 - A4 Cath...", "Death Cab for Cutie", "Narrow Stairs", "Cath..."),
+        ("01 - 01 - Death Cab For Cutie - Photobooth", "Death Cab for Cutie", "Forbidden Love EP", "Photobooth"),
+        ("01 - 05 - Death Cab For Cutie - Company Calls Epilogue (Alternate)", "Death Cab for Cutie", "Forbidden Love EP", "Company Calls Epilogue (Alternate)"),
+        ("1-01 - 01-Bend_To_Squares", "Death Cab for Cutie", "Something About Airplanes", "Bend To Squares"),
+        ("01 - 04 - S.D.S.", "Mac Miller", "Watching Movies with the Sound Off", "S.D.S."),
+        ("01 - 12. 2009", "Mac Miller", "Swimming", "2009"),
+    ]
+
+
+def run_title_parser_regression() -> list[str]:
+    failures = []
+    for stem, artist, album, expected in _title_parser_regression_cases():
+        actual = parse_scene_track_filename(stem, artist, None, album)['clean_title']
+        if actual != expected:
+            failures.append(f"{stem}: expected {expected!r}, got {actual!r}")
+    return failures
 
 
 def clean_album(name):
@@ -441,6 +524,9 @@ def scan_music(db: Session):
         'roots_scanned': [str(r) for r in existing],
         'skipped_roots': [str(r) for r in roots if not r.is_dir()],
         'errors': [],
+        'weak_titles_detected': 0,
+        'titles_corrected': 0,
+        'title_parser_failures': run_title_parser_regression(),
     }
     for scan_root in existing:
         for path in safe_media_files(scan_root, MUSIC_EXTENSIONS, existing):
@@ -455,10 +541,20 @@ def scan_music(db: Session):
                 album = clean_album(path_data.get('album') if is_discography else (pick(side, path_data, tags, 'album') or path_data.get('album') or path.parent.name))
                 year = path_data.get('year') if is_discography else pick(side, path_data, tags, 'year')
 
-                raw_title = tags.get('title') or path.stem
+                embedded_title = tags.get('title')
+                raw_title = embedded_title or path.stem
                 path_title = path_data.get('title') or clean_release_title(path.stem, artist, path_data.get('collection_label'), album)
-                if is_discography or is_dirty_release_title(raw_title, artist):
+                weak_title = is_weak_embedded_title(embedded_title, path_title, artist, album, year)
+                if is_discography:
                     title = path_title
+                    if weak_title:
+                        result['weak_titles_detected'] += 1
+                        result['titles_corrected'] += 1
+                elif weak_title or is_dirty_release_title(raw_title, artist):
+                    title = path_title
+                    if weak_title:
+                        result['weak_titles_detected'] += 1
+                        result['titles_corrected'] += 1
                 else:
                     title = clean_title(raw_title)
 
