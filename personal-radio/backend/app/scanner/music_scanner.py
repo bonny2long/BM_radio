@@ -262,7 +262,7 @@ def remove_release_suffix(text: str, dirty: bool) -> str:
         return text
     left, right = text.rsplit('-', 1)
     suffix = re.sub(r'[^a-z0-9]', '', right.lower())
-    if 2 <= len(suffix) <= 12 and (suffix in RELEASE_SUFFIXES or re.fullmatch(r'[a-z0-9]{2,12}', suffix)):
+    if 2 <= len(suffix) <= 12 and suffix in RELEASE_SUFFIXES:
         return left.strip()
     return text
 
@@ -391,6 +391,7 @@ def _title_parser_regression_cases() -> list[tuple[str, str, str | None, str]]:
         ("1-01 - 01-Bend_To_Squares", "Death Cab for Cutie", "Something About Airplanes", "Bend To Squares"),
         ("01 - 04 - S.D.S.", "Mac Miller", "Watching Movies with the Sound Off", "S.D.S."),
         ("01 - 12. 2009", "Mac Miller", "Swimming", "2009"),
+        ("01 - 01 - Bastille - 2013 - Pompeii", "Bastille", "Bad Blood", "2013 - Pompeii"),
     ]
 
 
@@ -403,10 +404,25 @@ def run_title_parser_regression() -> list[str]:
     return failures
 
 
+def strip_release_junk_suffix(title: str) -> str:
+    value = str(title or '').strip()
+    value = re.sub(r'\s+HDtracks(?:\s*\(\d{4}\))?$', '', value, flags=re.I).strip()
+    value = re.sub(r'\s+\[?\d{2,3}(?:bit|kHz|khz|hz|flac|mp3)[^\]]*\]?$', '', value, flags=re.I).strip()
+    return value
+
+
+def strip_leading_album_year_from_title(title: str, year: int | None) -> str:
+    value = str(title or '').strip()
+    if year:
+        value = re.sub(rf'^{int(year)}\s*[-_.]\s*', '', value).strip()
+    return value
+
+
 def clean_album(name):
     if not name:
         return name
     _, title = year_title(str(name))
+    title = strip_release_junk_suffix(title)
     return re.sub(r'^(cd|disc)\s*\d+$', '', title, flags=re.I).strip() or title
 
 
@@ -544,6 +560,7 @@ def scan_music(db: Session):
                 embedded_title = tags.get('title')
                 raw_title = embedded_title or path.stem
                 path_title = path_data.get('title') or clean_release_title(path.stem, artist, path_data.get('collection_label'), album)
+                path_title = strip_leading_album_year_from_title(path_title, year)
                 weak_title = is_weak_embedded_title(embedded_title, path_title, artist, album, year)
                 if is_discography:
                     title = path_title
