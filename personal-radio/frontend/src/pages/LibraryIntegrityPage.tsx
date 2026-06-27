@@ -100,7 +100,7 @@ export default function LibraryIntegrityPage({ onBack }: { onBack: () => void })
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 18 }}>
       <div>
         <h1 style={{ fontSize: '1.6rem', fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 4 }}>Library Integrity</h1>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>Read-only diagnostics. No files were changed.</p>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>Read-only diagnostics. No files were changed. BM Radio keeps all archive releases but may prefer one version during radio playback.</p>
       </div>
       <button onClick={load} style={{ padding: '9px 12px', borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', color: 'var(--accent-primary)', fontWeight: 800, fontSize: 12 }}>Refresh</button>
     </div>
@@ -124,5 +124,6 @@ export default function LibraryIntegrityPage({ onBack }: { onBack: () => void })
     </div>
   </div>
 }
+
 
 

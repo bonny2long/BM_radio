@@ -1,4 +1,4 @@
-import random
+﻿import random
 import re
 
 from fastapi import APIRouter, Depends
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..db import get_db
 from ..perf import perf_segment
+from ..release_preferences import choose_preferred_tracks
 from .serializers import track_item
 from ..radio_profiles import load_radio_profile_cache, normalize_token, profile_for_track, profile_for_track_cached
 
@@ -798,7 +799,7 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
     pool_tracks = [db.get(models.Track, r['track_id']) for r in selected_rows if r.get('track_id')]
     pool_tracks = [t for t in pool_tracks if t]
 
-    selected_tracks = no_repeats(pool_tracks, limit, artist_loose=True, avoid_title_dups=True)
+    selected_tracks = no_repeats(choose_preferred_tracks(pool_tracks, mode="radio"), limit, artist_loose=True, avoid_title_dups=True)
     selected_ids = {t.id for t in selected_tracks if t}
 
     all_rows = seed_rows + strong_related + soft_similar + weak_related
@@ -1054,7 +1055,7 @@ def station_queue_impl(req: StationQueueRequest, db: Session = Depends(get_db)):
         with perf_segment('queue.station.song.score'):
             ranked = score_song_radio(db, seed_track, candidates, profile_cache)
         with perf_segment('queue.station.song.select'):
-            selected_tracks = no_repeats(ranked, limit, artist_loose=False)
+            selected_tracks = no_repeats(choose_preferred_tracks(ranked, mode="radio"), limit, artist_loose=False, avoid_title_dups=True)
         with perf_segment('queue.station.song.serialize'):
             return payload(selected_tracks)
     elif req.type == 'artist':
@@ -1132,7 +1133,7 @@ def station_queue_impl(req: StationQueueRequest, db: Session = Depends(get_db)):
                 selected_entries += seed_tracks[seed_target:seed_target + remaining]
 
             pool_tracks = [t for _, t in selected_entries]
-            selected_tracks = no_repeats(pool_tracks, limit, artist_loose=True, avoid_title_dups=True)
+            selected_tracks = no_repeats(choose_preferred_tracks(pool_tracks, mode="radio"), limit, artist_loose=True, avoid_title_dups=True)
         with perf_segment('queue.station.artist.serialize'):
             return payload(selected_tracks)
     else:
@@ -1143,7 +1144,7 @@ def station_queue_impl(req: StationQueueRequest, db: Session = Depends(get_db)):
 
     tracks = score_tracks(db, tracks, req.type)
     with perf_segment('queue.station.serialize'):
-        return payload(no_repeats(tracks, limit, artist_loose=req.type == 'artist'))
+        return payload(no_repeats(choose_preferred_tracks(tracks, mode="radio"), limit, artist_loose=req.type == 'artist', avoid_title_dups=True))
 
 
 @router.post('/album')
@@ -1171,7 +1172,7 @@ def artist_queue(req: ArtistQueueRequest, db: Session = Depends(get_db)):
     random.shuffle(tracks)
     if not req.shuffle:
         tracks = score_tracks(db, tracks, 'artist')
-    return payload(no_repeats(tracks, min(req.limit, 100), artist_loose=True))
+    return payload(no_repeats(choose_preferred_tracks(tracks, mode="radio"), min(req.limit, 100), artist_loose=True, avoid_title_dups=True))
 
 
 @router.post('/playlist')
@@ -1197,9 +1198,12 @@ def smart_playlist_queue(req: SmartPlaylistQueueRequest, db: Session = Depends(g
     tracks = [t for t in tracks if t]
     if req.shuffle:
         random.shuffle(tracks)
-    return payload(tracks)
+    return payload(choose_preferred_tracks(tracks, mode="smart_playlist"))
 
 
 @router.get('/current')
 def get_current_queue():
     return {'queue': []}
+
+
+
