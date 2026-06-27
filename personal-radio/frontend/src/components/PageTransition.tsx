@@ -1,8 +1,22 @@
 import type { ReactNode } from 'react'
 
-export default function PageTransition({ pageKey, children }: { pageKey: string; children: ReactNode }) {
+type NavType = 'tab' | 'push' | 'pop'
+
+export default function PageTransition({
+  pageKey,
+  navType = 'tab',
+  children,
+}: {
+  pageKey: string
+  navType?: NavType
+  children: ReactNode
+}) {
   return (
-    <div className="page-transition" data-page-key={pageKey}>
+    <div
+      className="page-transition"
+      data-page-key={pageKey}
+      data-nav-type={navType === 'tab' ? undefined : navType}
+    >
       {children}
     </div>
   )

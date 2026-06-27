@@ -17,9 +17,12 @@ import './styles/base.css'
 import './App.css'
 
 const MODAL_PAGES = new Set(['nowPlaying', 'queue'])
+const DETAIL_PAGES = new Set(['albumDetail', 'artistDetail', 'playlistDetail'])
+const TAB_PAGES = new Set(['home', 'radio', 'library', 'bookshelf'])
 
 function App() {
   const [currentPage, setCurrentPage] = useState('home')
+  const [navType, setNavType] = useState<'tab' | 'push' | 'pop'>('tab')
   const [album, setAlbum] = useState<AlbumSummary | null>(null)
   const [artist, setArtist] = useState<string | null>(null)
   const [bookId, setBookId] = useState<number | null>(null)
@@ -32,8 +35,14 @@ function App() {
     if (!MODAL_PAGES.has(page)) scrollMemory.current[page] = window.scrollY
   }
 
-  const navigate = (page: string) => {
+  const navigate = (page: string, type?: 'tab' | 'push' | 'pop') => {
     saveScroll()
+    const inferredType = type ?? (
+      DETAIL_PAGES.has(page) ? 'push' :
+      TAB_PAGES.has(page) || MODAL_PAGES.has(page) ? 'tab' :
+      'pop'
+    )
+    setNavType(inferredType)
     setCurrentPage(page)
   }
 
@@ -46,12 +55,12 @@ function App() {
   const openAlbum = (a: AlbumSummary, back = 'library') => {
     setAlbum(a)
     setAlbumBack(back)
-    navigate('albumDetail')
+    navigate('albumDetail', 'push')
   }
 
   const openArtist = (a: ArtistSummary | string) => {
     setArtist(typeof a === 'string' ? a : a.name)
-    navigate('artistDetail')
+    navigate('artistDetail', 'push')
   }
 
   const openBook = (id: number) => {
@@ -61,7 +70,7 @@ function App() {
 
   const openPlaylist = (id: number) => {
     setPlaylistId(id)
-    navigate('playlistDetail')
+    navigate('playlistDetail', 'push')
   }
 
   const openNowPlaying = () => {
@@ -69,10 +78,11 @@ function App() {
       saveScroll()
       previousPage.current = currentPage
     }
+    setNavType('tab')
     setCurrentPage('nowPlaying')
   }
 
-  const backFromNowPlaying = () => setCurrentPage(previousPage.current)
+  const backFromNowPlaying = () => { setNavType('tab'); setCurrentPage(previousPage.current) }
 
   const page = () => {
     switch (currentPage) {
@@ -83,15 +93,15 @@ function App() {
       case 'library':
         return <LibraryPage onOpenAlbum={a => openAlbum(a, 'library')} onOpenArtist={openArtist} onOpenBook={openBook} onOpenPlaylist={openPlaylist} />
       case 'artistDetail':
-        return artist ? <ArtistDetailPage artist={artist} onBack={() => navigate('library')} onOpenAlbum={a => openAlbum(a, 'artistDetail')} /> : null
+        return artist ? <ArtistDetailPage artist={artist} onBack={() => navigate('library', 'pop')} onOpenAlbum={a => openAlbum(a, 'artistDetail')} /> : null
       case 'albumDetail':
-        return album ? <AlbumDetailPage album={album} onBack={() => navigate(albumBack)} /> : null
+        return album ? <AlbumDetailPage album={album} onBack={() => navigate(albumBack, 'pop')} /> : null
       case 'playlistDetail':
-        return playlistId ? <PlaylistDetailPage playlistId={playlistId} onBack={() => navigate('library')} /> : null
+        return playlistId ? <PlaylistDetailPage playlistId={playlistId} onBack={() => navigate('library', 'pop')} /> : null
       case 'nowPlaying':
-        return <NowPlayingPage onBack={backFromNowPlaying} onOpenQueue={() => navigate('queue')} />
+        return <NowPlayingPage onBack={backFromNowPlaying} onOpenQueue={() => navigate('queue', 'tab')} />
       case 'queue':
-        return <QueuePage onBack={() => navigate('nowPlaying')} />
+        return <QueuePage onBack={() => navigate('nowPlaying', 'tab')} />
       default:
         return <HomePage onOpenAlbum={a => openAlbum(a, 'home')} onOpenBookshelf={() => navigate('bookshelf')} onOpenBook={openBook} onOpenNowPlaying={openNowPlaying} />
     }
@@ -99,8 +109,8 @@ function App() {
 
   return (
     <PlaybackProvider>
-      <AppShell currentPage={currentPage} onPageChange={navigate} onOpenNowPlaying={openNowPlaying} onOpenQueue={() => navigate('queue')}>
-        <PageTransition key={currentPage} pageKey={currentPage}>{page()}</PageTransition>
+      <AppShell currentPage={currentPage} onPageChange={navigate} onOpenNowPlaying={openNowPlaying} onOpenQueue={() => navigate('queue', 'tab')}>
+        <PageTransition key={currentPage} pageKey={currentPage} navType={navType}>{page()}</PageTransition>
       </AppShell>
     </PlaybackProvider>
   )

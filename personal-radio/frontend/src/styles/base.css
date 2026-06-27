@@ -318,43 +318,54 @@ html,body,#root{width:100%;min-width:0;max-width:100%;overflow-x:hidden}body{ove
 }
 
 .page-transition {
-  animation: bm-page-in 180ms ease-out both;
-  will-change: opacity, transform;
+  animation: bm-fade-in 160ms ease both;
 }
 
-@keyframes bm-page-in {
+.page-transition[data-nav-type="push"] {
+  animation: bm-push-in 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+.page-transition[data-nav-type="pop"] {
+  animation: bm-pop-in 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+@keyframes bm-fade-in {
+  from { opacity: 0.92; }
+  to { opacity: 1; }
+}
+
+@keyframes bm-push-in {
   from {
-    opacity: 0.72;
-    transform: translateY(6px);
-    filter: blur(1px);
+    opacity: 0.88;
+    transform: translateX(18px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
-    filter: blur(0);
+    transform: translateX(0);
+  }
+}
+
+@keyframes bm-pop-in {
+  from {
+    opacity: 0.88;
+    transform: translateX(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
 .tab-content-fade {
-  animation: bm-tab-in 140ms ease-out both;
-}
-
-@keyframes bm-tab-in {
-  from {
-    opacity: 0.78;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  animation: bm-fade-in 120ms ease both;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .page-transition,
+  .page-transition[data-nav-type="push"],
+  .page-transition[data-nav-type="pop"],
   .tab-content-fade {
     animation: none !important;
     transform: none !important;
-    filter: none !important;
   }
 }
