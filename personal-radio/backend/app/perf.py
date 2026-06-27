@@ -9,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from .config import settings
 from .db import engine
 
-query_count_var: ContextVar[int] = ContextVar('query_count', default=0)
+query_count_var: ContextVar[dict[str, int] | None] = ContextVar('query_count', default=None)
 _installed = False
 
 
@@ -20,18 +20,22 @@ def install_query_counter() -> None:
 
     @event.listens_for(engine, 'before_cursor_execute')
     def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-        query_count_var.set(query_count_var.get() + 1)
+        counter = query_count_var.get()
+        if counter is not None:
+            counter['count'] = counter.get('count', 0) + 1
 
     _installed = True
 
 
 class RequestTimingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        query_count_var.set(0)
+        counter = {'count': 0}
+        token = query_count_var.set(counter)
         start = time.perf_counter()
         response = await call_next(request)
         elapsed_ms = (time.perf_counter() - start) * 1000
-        query_count = query_count_var.get()
+        query_count = counter.get('count', 0)
+        query_count_var.reset(token)
         if elapsed_ms > 250 or query_count > 100:
             print(f'[PERF] {request.method} {request.url.path} {elapsed_ms:.1f}ms {query_count} queries')
         response.headers['X-BM-Radio-Time-Ms'] = f'{elapsed_ms:.1f}'
