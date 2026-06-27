@@ -6,6 +6,8 @@ type CacheEntry={expires:number;data?:unknown;promise?:Promise<unknown>}
 const cache=new Map<string,CacheEntry>()
 export function invalidateCache(prefix?:string){for(const key of [...cache.keys()]){if(!prefix||key===prefix||key.startsWith(`${prefix}:`))cache.delete(key)}}
 function cachedRequest<T>(key:string,path:string,ttlMs=30000):Promise<T>{const now=Date.now();const hit=cache.get(key);if(hit?.data!==undefined&&hit.expires>now)return Promise.resolve(hit.data as T);if(hit?.promise)return hit.promise as Promise<T>;const promise=request<T>(path).then(data=>{cache.set(key,{data,expires:Date.now()+ttlMs});return data}).catch(error=>{cache.delete(key);throw error});cache.set(key,{promise,expires:now+ttlMs});return promise}
+export function peekCache<T>(key:string):T|null{const hit=cache.get(key);if(hit?.data!==undefined&&hit.expires>Date.now())return hit.data as T;return null}
+export function hasFreshCache(key:string):boolean{return peekCache(key)!==null}
 function invalidateLibraryCaches(){invalidateCache('library-summary');invalidateCache('albums-page');invalidateCache('recent-albums');invalidateCache('artists-page')}
 function invalidateStationCaches(){invalidateCache('stations')}
 export type LibrarySummary={tracks:number;artists:number;albums:number}

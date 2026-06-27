@@ -4,7 +4,7 @@ import IconButton from '../components/IconButton'
 import LoadingSkeleton from '../components/LoadingSkeleton'
 import PageError from '../components/PageError'
 import { PlayIcon } from '../components/PlayerIcons'
-import { deleteStation as apiDeleteStation, getStationQueue, getStations, type Station } from '../api'
+import { deleteStation as apiDeleteStation, getStationQueue, getStations, peekCache, type Station } from '../api'
 import { usePlayback, type QueueSource } from '../state/PlaybackContext'
 import { trackToNowPlaying } from '../utils/mediaMappers'
 
@@ -15,22 +15,22 @@ const SECTION_GROUPS: [string, string[]][] = [
 ]
 
 export default function RadioPage() {
-  const [stations, setStations] = useState<Station[]>([])
+  const cachedStations = peekCache<Station[]>('stations')
+  const [stations, setStations] = useState<Station[]>(cachedStations ?? [])
   const [myStationsExpanded, setMyStationsExpanded] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!cachedStations)
   const [pageError, setPageError] = useState<string | null>(null)
   const { playQueue } = usePlayback()
 
   const loadStations = () => {
-    setLoading(true)
+    if (!stations.length) setLoading(true)
     setPageError(null)
     getStations()
       .then(setStations)
-      .catch(() => setPageError('Could not load stations. Check your NAS connection.'))
+      .catch(() => { if (!stations.length) setPageError('Could not load stations. Check your NAS connection.') })
       .finally(() => setLoading(false))
   }
-
   useEffect(loadStations, [])
 
   const deleteStation = async (id: number) => {
@@ -56,7 +56,7 @@ export default function RadioPage() {
 
   const featured = useMemo(() => stations.find(station => station.type === 'recently_added') ?? null, [stations])
 
-  if (loading) return <LoadingSkeleton rows={6} />
+  if (loading) return <LoadingSkeleton rows={6} preserveSpace />
   if (pageError) return <PageError message={pageError} onRetry={loadStations} />
 
   const renderStationRow = (station: Station, allowDelete = false) => (

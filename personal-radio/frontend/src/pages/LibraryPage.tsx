@@ -4,7 +4,7 @@ import LoadingSkeleton from '../components/LoadingSkeleton'
 import PageError from '../components/PageError'
 import TrackActionSheet from '../components/TrackActionSheet'
 import useLongPress from '../hooks/useLongPress'
-import { createPlaylist, deletePlaylist, getAlbumTracks, getAlbumsPage, getArtistsPage, getLibrarySummary, getPlaylistQueue, getPlaylists, getSmartPlaylistQueue, getSmartPlaylists, getStationQueue, getTracksPage, mediaUrl, searchAll, type AlbumSummary, type ArtistSummary, type LibrarySummary, type PlaylistSummary, type SmartPlaylistSummary, type SearchResults, type Track } from '../api'
+import { createPlaylist, deletePlaylist, getAlbumTracks, getAlbumsPage, getArtistsPage, getLibrarySummary, peekCache, getPlaylistQueue, getPlaylists, getSmartPlaylistQueue, getSmartPlaylists, getStationQueue, getTracksPage, mediaUrl, searchAll, type AlbumPage, type AlbumSummary, type ArtistPage, type ArtistSummary, type LibrarySummary, type PlaylistSummary, type SmartPlaylistSummary, type SearchResults, type Track } from '../api'
 import { useRadioActions } from '../hooks/useRadioActions'
 import { usePlayback, type QueueSource } from '../state/PlaybackContext'
 import { trackToNowPlaying } from '../utils/mediaMappers'
@@ -15,10 +15,13 @@ const SearchIcon = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="n
 const emptySearch: SearchResults = { artists: [], albums: [], tracks: [], stations: [], audiobooks: [] }
 
 export default function LibraryPage({ onOpenAlbum, onOpenArtist, onOpenBook, onOpenPlaylist }: { onOpenAlbum: (a: AlbumSummary) => void; onOpenArtist: (a: ArtistSummary) => void; onOpenBook?: (id: number) => void; onOpenPlaylist?: (id: number) => void }) {
+  const cachedSummary = peekCache<LibrarySummary>('library-summary')
+  const cachedAlbums = peekCache<AlbumPage>('albums-page:100:0')
+  const cachedArtists = peekCache<ArtistPage>('artists-page:100:0')
   const [tab, setTab] = useState<Tab>('Albums')
-  const [summary, setSummary] = useState<LibrarySummary>({ tracks: 0, artists: 0, albums: 0 })
-  const [albums, setAlbums] = useState<AlbumSummary[]>([])
-  const [artists, setArtists] = useState<ArtistSummary[]>([])
+  const [summary, setSummary] = useState<LibrarySummary>(cachedSummary ?? { tracks: 0, artists: 0, albums: 0 })
+  const [albums, setAlbums] = useState<AlbumSummary[]>(cachedAlbums?.items ?? [])
+  const [artists, setArtists] = useState<ArtistSummary[]>(cachedArtists?.items ?? [])
   const [tracks, setTracks] = useState<Track[]>([])
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([])
   const [smart, setSmart] = useState<SmartPlaylistSummary[]>([])
@@ -26,7 +29,7 @@ export default function LibraryPage({ onOpenAlbum, onOpenArtist, onOpenBook, onO
   const [songsMore, setSongsMore] = useState(false)
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState<SearchResults>(emptySearch)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!cachedSummary || !cachedAlbums)
   const [pageError, setPageError] = useState<string | null>(null)
   const [actionTrack, setActionTrack] = useState<Track | null>(null)
   const { playQueue } = usePlayback()
@@ -34,11 +37,11 @@ export default function LibraryPage({ onOpenAlbum, onOpenArtist, onOpenBook, onO
 
   const play = (list: Track[], index = 0) => playQueue(list.map(track => trackToNowPlaying(track)), index)
   const loadAll = () => {
-    setLoading(true)
+    if (!albums.length) setLoading(true)
     setPageError(null)
     Promise.all([getLibrarySummary(), getAlbumsPage(100, 0)])
       .then(([s, a]) => { setSummary(s); setAlbums(a.items) })
-      .catch(() => setPageError('Could not load your library. Check your NAS connection.'))
+      .catch(() => { if (!albums.length) setPageError('Could not load your library. Check your NAS connection.') })
       .finally(() => setLoading(false))
   }
   useEffect(loadAll, [])
@@ -48,7 +51,7 @@ export default function LibraryPage({ onOpenAlbum, onOpenArtist, onOpenBook, onO
     if (tab === 'Playlists' && !playlists.length && !smart.length) void Promise.all([getPlaylists(), getSmartPlaylists()]).then(([p, sp]) => { setPlaylists(p); setSmart(sp) }).catch(() => setPageError('Could not load playlists.'))
   }, [tab])
 
-  if (loading) return <LoadingSkeleton rows={7} />
+  if (loading) return <LoadingSkeleton rows={7} preserveSpace />
   if (pageError) return <PageError message={pageError} onRetry={loadAll} />
 
   const playArtist = (artist: string) => startArtistRadio(artist)
@@ -66,11 +69,13 @@ export default function LibraryPage({ onOpenAlbum, onOpenArtist, onOpenBook, onO
     <div style={{ width: '100%', minWidth: 0 }}>
       <div style={{ marginBottom: 20 }}><h1 style={{ fontSize: '1.6rem', fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 3 }}>Library</h1><p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{summary.tracks} tracks {'\u00b7'} {summary.artists} artists {'\u00b7'} {summary.albums} albums</p></div>
       <div className="library-tabs">{tabs.map(x => <button key={x} aria-label={x} title={x} onClick={() => setTab(x)} style={{ padding: '8px 11px', borderRadius: 'var(--radius-pill)', background: tab === x ? 'var(--accent-primary)' : 'var(--bg-surface)', whiteSpace: 'nowrap', color: tab === x ? '#fff' : 'var(--text-secondary)', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: tab === x ? 600 : 400, flexShrink: 0, border: '1px solid', borderColor: tab === x ? 'transparent' : 'var(--border-subtle)' }}>{x}</button>)}</div>
-      {tab === 'Albums' && <div style={{ display: 'grid', gap: 10 }}>{albums.map(a => <AlbumRow key={a.artist + a.title} album={a} onOpen={onOpenAlbum} onPlay={() => void getAlbumTracks(a.artist, a.title).then(x => play(x))} />)}</div>}
-      {tab === 'Artists' && <ArtistList artists={artists} onOpenArtist={onOpenArtist} onPlayArtist={playArtist} />}
-      {tab === 'Songs' && <div><TrackList tracks={tracks} onPlay={play} onAction={setActionTrack} />{songsMore && <button onClick={loadMoreSongs} className="card-premium" style={{ width: '100%', padding: 14, marginTop: 10, color: 'var(--accent-primary)', fontWeight: 800 }}>Load More Songs</button>}</div>}
-      {tab === 'Search' && <div><div style={{ position: 'relative', maxWidth: 360, margin: '0 auto 14px' }}>{!query && <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', color: 'var(--text-muted)', display: 'flex', gap: 8, alignItems: 'center', pointerEvents: 'none', fontSize: 14 }}><SearchIcon />Search music</span>}<input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && void results()} placeholder="" aria-label="Search music" style={{ width: '100%', boxSizing: 'border-box', padding: '11px 14px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', color: 'var(--text-primary)', textAlign: 'center' }} /></div><GroupedSearch search={search} onArtist={onOpenArtist} onAlbum={onOpenAlbum} onPlay={play} onStation={playStation} onBook={onOpenBook} onAction={setActionTrack} /></div>}
-      {tab === 'Playlists' && <PlaylistsTab playlists={playlists} smart={smart} onRefresh={refreshPlaylists} onOpen={id => onOpenPlaylist?.(id)} onPlay={(id, shuffle) => void getPlaylistQueue(id, shuffle).then(r => play(r.queue))} onSmart={(key, shuffle) => void getSmartPlaylistQueue(key, shuffle).then(r => play(r.queue))} />}
+      <div className="tab-content-fade" key={tab}>
+        {tab === 'Albums' && <div style={{ display: 'grid', gap: 10 }}>{albums.map(a => <AlbumRow key={a.artist + a.title} album={a} onOpen={onOpenAlbum} onPlay={() => void getAlbumTracks(a.artist, a.title).then(x => play(x))} />)}</div>}
+        {tab === 'Artists' && (artists.length ? <ArtistList artists={artists} onOpenArtist={onOpenArtist} onPlayArtist={playArtist} /> : <LoadingSkeleton rows={5} compact preserveSpace />)}
+        {tab === 'Songs' && <div>{tracks.length ? <TrackList tracks={tracks} onPlay={play} onAction={setActionTrack} /> : <LoadingSkeleton rows={6} compact preserveSpace />}{songsMore && <button onClick={loadMoreSongs} className="card-premium" style={{ width: '100%', padding: 14, marginTop: 10, color: 'var(--accent-primary)', fontWeight: 800 }}>Load More Songs</button>}</div>}
+        {tab === 'Search' && <div><div style={{ position: 'relative', maxWidth: 360, margin: '0 auto 14px' }}>{!query && <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', color: 'var(--text-muted)', display: 'flex', gap: 8, alignItems: 'center', pointerEvents: 'none', fontSize: 14 }}><SearchIcon />Search music</span>}<input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && void results()} placeholder="" aria-label="Search music" style={{ width: '100%', boxSizing: 'border-box', padding: '11px 14px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', color: 'var(--text-primary)', textAlign: 'center' }} /></div><GroupedSearch search={search} onArtist={onOpenArtist} onAlbum={onOpenAlbum} onPlay={play} onStation={playStation} onBook={onOpenBook} onAction={setActionTrack} /></div>}
+        {tab === 'Playlists' && (playlists.length || smart.length ? <PlaylistsTab playlists={playlists} smart={smart} onRefresh={refreshPlaylists} onOpen={id => onOpenPlaylist?.(id)} onPlay={(id, shuffle) => void getPlaylistQueue(id, shuffle).then(r => play(r.queue))} onSmart={(key, shuffle) => void getSmartPlaylistQueue(key, shuffle).then(r => play(r.queue))} /> : <LoadingSkeleton rows={5} compact preserveSpace />)}
+      </div>
       <TrackActionSheet open={!!actionTrack} track={actionTrack} onClose={() => setActionTrack(null)} onGoToAlbum={openAlbumForTrack} onGoToArtist={track => onOpenArtist({ name: track.artist, track_count: 0 })} onStartRadio={startSongRadio} onSaveStation={saveSongStation} />
     </div>
   )
