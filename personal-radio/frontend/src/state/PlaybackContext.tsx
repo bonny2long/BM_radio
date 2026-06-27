@@ -148,7 +148,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       const src = sourceRef.current
       if (src?.kind !== 'station') return
 
-      const excludeIds = queueRef.current.map(item => item.id)
+      const excludeIds = queueRef.current.slice(-100).map(item => item.id)
       void getStationQueue(src.stationType, src.seedValue ?? null, 50, excludeIds)
         .then(result => {
           if (!result.queue.length) return

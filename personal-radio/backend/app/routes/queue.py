@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..db import get_db
+from ..perf import perf_segment
 from .serializers import track_item
 from ..radio_profiles import load_radio_profile_cache, normalize_token, profile_for_track, profile_for_track_cached
 
@@ -61,6 +62,17 @@ RELATED_ARTISTS: dict[str, list[str]] = {
     'The Weeknd': ['Kanye West', 'Drake', 'Frank Ocean', 'SZA'],
     'Drake': ['The Weeknd', 'Lil Wayne', 'Kanye West', 'Future'],
 }
+
+MAX_STATION_LIMIT = 100
+MAX_EXCLUDE_IDS = 200
+
+
+def station_limit(value: int) -> int:
+    return min(max(value, 1), MAX_STATION_LIMIT)
+
+
+def station_exclude_set(req: StationQueueRequest) -> set[int]:
+    return set((req.exclude_track_ids or [])[:MAX_EXCLUDE_IDS])
 
 
 def lookup_by_normalized(mapping: dict, key: str | None, default=None):
@@ -645,7 +657,7 @@ def strip_internal_seed(seed: dict | None) -> dict | None:
 
 
 def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], exclude_set: set[int]) -> dict:
-    limit = min(max(req.limit, 1), 100)
+    limit = station_limit(req.limit)
     seed_track = db.get(models.Track, req.seed_track_id) if req.seed_track_id else None
     if seed_track is None and req.seed_value:
         try:
@@ -718,7 +730,7 @@ def generic_station_candidate_row(db: Session, track: models.Track, parts: list[
 
 
 def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], exclude_set: set[int]) -> dict:
-    limit = min(max(req.limit, 1), 100)
+    limit = station_limit(req.limit)
     seed_artist = req.seed_value or ''
     seed_token = normalize_token(seed_artist)
     all_tracks = db.query(models.Track).limit(5000).all()
@@ -837,7 +849,7 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
 
 
 def genre_station_debug(req: StationQueueRequest, db: Session, down: set[int], exclude_set: set[int]) -> dict:
-    limit = min(max(req.limit, 1), 100)
+    limit = station_limit(req.limit)
     target = norm_genre(req.seed_value)
     all_tracks = db.query(models.Track).limit(5000).all()
     profile_cache = load_radio_profile_cache(db)
@@ -890,6 +902,18 @@ def unique_tracks(tracks: list[models.Track]) -> list[models.Track]:
     return out
 
 
+def unique_tracks_cap(tracks: list[models.Track], cap: int) -> list[models.Track]:
+    out: list[models.Track] = []
+    seen: set[int] = set()
+    for track in tracks:
+        if track and track.id not in seen:
+            seen.add(track.id)
+            out.append(track)
+            if len(out) >= cap:
+                break
+    return out
+
+
 def tracks_by_artist_names(db: Session, names: set[str], limit: int = 2000) -> list[models.Track]:
     clean = [name for name in names if name]
     if not clean:
@@ -908,9 +932,15 @@ def payload(tracks):
 
 @router.post('/station/debug')
 def station_queue_debug(req: StationQueueRequest, db: Session = Depends(get_db)):
+    segment_name = f"queue.debug.{req.type}.total" if req.type in {'artist', 'song', 'genre'} else 'queue.debug.total'
+    with perf_segment(segment_name):
+        return station_queue_debug_impl(req, db)
+
+
+def station_queue_debug_impl(req: StationQueueRequest, db: Session = Depends(get_db)):
     fb = latest_feedback(db)
     down = {tid for tid, value in fb.items() if value == 'down'}
-    exclude_set = set(req.exclude_track_ids) if req.exclude_track_ids else set()
+    exclude_set = station_exclude_set(req)
 
     if req.type == 'song':
         return song_station_debug(req, db, down, exclude_set)
@@ -929,11 +959,18 @@ def station_queue_debug(req: StationQueueRequest, db: Session = Depends(get_db))
 
 @router.post('/station')
 def station_queue(req: StationQueueRequest, db: Session = Depends(get_db)):
-    limit = min(max(req.limit, 1), 100)
+    with perf_segment('queue.station.total'):
+        return station_queue_impl(req, db)
+
+
+def station_queue_impl(req: StationQueueRequest, db: Session = Depends(get_db)):
+    limit = station_limit(req.limit)
     q = db.query(models.Track)
-    fb = latest_feedback(db)
-    down = {tid for tid, value in fb.items() if value == 'down'}
-    exclude_set = set(req.exclude_track_ids) if req.exclude_track_ids else set()
+    with perf_segment('queue.station.feedback'):
+        fb = latest_feedback(db)
+        down = {tid for tid, value in fb.items() if value == 'down'}
+    with perf_segment('queue.station.exclude_set'):
+        exclude_set = station_exclude_set(req)
     profile_cache = load_radio_profile_cache(db)
 
     if req.type == 'favorites':
@@ -967,15 +1004,18 @@ def station_queue(req: StationQueueRequest, db: Session = Depends(get_db)):
         tracks = [t for t in tracks if t.id not in down]
     elif req.type == 'genre':
         target = norm_genre(req.seed_value)
+        genre_candidate_cap = min(max(limit * 40, 500), 2500)
         raw_genre_terms = {req.seed_value or '', display_genre(target), target}
         raw_matches = []
-        for term in raw_genre_terms:
-            if term:
-                raw_matches.extend(q.filter(models.Track.genre.ilike(term)).limit(limit * 40).all())
-        if len(raw_matches) < limit:
-            raw_matches.extend(q.order_by(models.Track.created_at.desc()).limit(limit * 40).all())
-        tracks = [t for t in unique_tracks(raw_matches) if t.id not in down and ((profile_genre(radio_profile(db, t, profile_cache)) or track_genre(t)) == target)]
-        random.shuffle(tracks)
+        with perf_segment('queue.station.genre.load_candidates'):
+            for term in raw_genre_terms:
+                if term:
+                    raw_matches.extend(q.filter(models.Track.genre.ilike(term)).limit(genre_candidate_cap).all())
+            if len(raw_matches) < limit:
+                raw_matches.extend(q.filter(models.Track.genre.isnot(None)).order_by(models.Track.created_at.desc()).limit(genre_candidate_cap).all())
+        with perf_segment('queue.station.genre.score_or_shuffle'):
+            tracks = [t for t in unique_tracks_cap(raw_matches, genre_candidate_cap) if t.id not in down and ((profile_genre(radio_profile(db, t, profile_cache)) or track_genre(t)) == target)]
+            random.shuffle(tracks)
     elif req.type == 'song':
         seed_track = None
         if req.seed_track_id:
@@ -988,45 +1028,56 @@ def station_queue(req: StationQueueRequest, db: Session = Depends(get_db)):
         if seed_track is None:
             return {'queue': []}
 
-        seed_profile = radio_profile(db, seed_track, profile_cache)
-        seed_genre = profile_genre(seed_profile) or track_genre(seed_track)
+        with perf_segment('queue.station.song.load_seed'):
+            seed_profile = radio_profile(db, seed_track, profile_cache)
+            seed_genre = profile_genre(seed_profile) or track_genre(seed_track)
+        song_candidate_cap = min(max(limit * 40, 500), 2500)
         candidate_pool: list[models.Track] = []
-        if seed_track.artist:
-            candidate_pool.extend(tracks_by_artist_names(db, {seed_track.artist, seed_track.album_artist or ''}, limit * 12))
-        related_names = {name for name in seed_profile.get('related_artists', []) if name}
-        related_names |= set(lookup_by_normalized(RELATED_ARTISTS, seed_track.artist, []) or [])
-        candidate_pool.extend(tracks_by_artist_names(db, related_names, limit * 20))
-        if seed_genre:
-            candidate_pool.extend(q.filter(models.Track.genre.ilike(display_genre(seed_genre))).limit(limit * 20).all())
-            candidate_pool.extend(q.filter(models.Track.genre.ilike(seed_genre)).limit(limit * 20).all())
-        fav_ids = list(favorite_ids(db))[:limit * 5]
-        if fav_ids:
-            candidate_pool.extend(q.filter(models.Track.id.in_(fav_ids)).all())
-        candidate_pool.extend(q.order_by(models.Track.created_at.desc(), models.Track.last_indexed_at.desc()).limit(limit * 20).all())
-        candidates = [t for t in unique_tracks(candidate_pool) if t.id not in down and t.id != seed_track.id]
+        with perf_segment('queue.station.song.load_candidates'):
+            if seed_track.artist:
+                candidate_pool.extend(tracks_by_artist_names(db, {seed_track.artist, seed_track.album_artist or ''}, min(limit * 12, song_candidate_cap)))
+            related_names = {name for name in seed_profile.get('related_artists', []) if name}
+            related_names |= set(lookup_by_normalized(RELATED_ARTISTS, seed_track.artist, []) or [])
+            candidate_pool.extend(tracks_by_artist_names(db, related_names, min(limit * 20, song_candidate_cap)))
+            if seed_genre:
+                candidate_pool.extend(q.filter(models.Track.genre.ilike(display_genre(seed_genre))).limit(min(limit * 20, song_candidate_cap)).all())
+                candidate_pool.extend(q.filter(models.Track.genre.ilike(seed_genre)).limit(min(limit * 20, song_candidate_cap)).all())
+            fav_ids = list(favorite_ids(db))[:min(limit * 5, 500)]
+            if fav_ids:
+                candidate_pool.extend(q.filter(models.Track.id.in_(fav_ids)).all())
+            if len(candidate_pool) < limit:
+                candidate_pool.extend(q.order_by(models.Track.created_at.desc(), models.Track.last_indexed_at.desc()).limit(min(limit * 20, song_candidate_cap)).all())
+        candidates = [t for t in unique_tracks_cap(candidate_pool, song_candidate_cap) if t.id not in down and t.id != seed_track.id]
         if exclude_set and len([t for t in candidates if t.id not in exclude_set]) >= 10:
             candidates = [t for t in candidates if t.id not in exclude_set]
 
-        ranked = score_song_radio(db, seed_track, candidates, profile_cache)
-        return payload(no_repeats(ranked, limit, artist_loose=False))
+        with perf_segment('queue.station.song.score'):
+            ranked = score_song_radio(db, seed_track, candidates, profile_cache)
+        with perf_segment('queue.station.song.select'):
+            selected_tracks = no_repeats(ranked, limit, artist_loose=False)
+        with perf_segment('queue.station.song.serialize'):
+            return payload(selected_tracks)
     elif req.type == 'artist':
         seed_artist = req.seed_value or ''
-        seed_token = normalize_token(seed_artist)
-        primary = (
-            q.filter(or_(models.Track.artist == seed_artist, models.Track.album_artist == seed_artist))
-            .limit(1000)
-            .all()
-        )
-        primary = [t for t in primary if t.id not in down and t.id not in exclude_set]
-        seed_profile = radio_profile(db, primary[0], profile_cache) if primary else {'primary_genre': lookup_by_normalized(ARTIST_GENRE_FALLBACKS, seed_artist, ''), 'subgenres': [], 'moods': [], 'energy': None, 'related_artists': lookup_by_normalized(RELATED_ARTISTS, seed_artist, []), 'source': None}
+        artist_seed_limit = min(max(limit * 10, 200), 1500)
+        artist_related_limit = min(max(limit * 10, 200), 1500)
+        artist_soft_limit = min(max(limit * 10, 200), 1000)
+        with perf_segment('queue.station.artist.load_candidates'):
+            primary = (
+                q.filter(or_(models.Track.artist == seed_artist, models.Track.album_artist == seed_artist))
+                .limit(artist_seed_limit)
+                .all()
+            )
+            primary = [t for t in primary if t.id not in down and t.id not in exclude_set]
+            seed_profile = radio_profile(db, primary[0], profile_cache) if primary else {'primary_genre': lookup_by_normalized(ARTIST_GENRE_FALLBACKS, seed_artist, ''), 'subgenres': [], 'moods': [], 'energy': None, 'related_artists': lookup_by_normalized(RELATED_ARTISTS, seed_artist, []), 'source': None}
 
-        related_names = set(lookup_by_normalized(RELATED_ARTISTS, seed_artist, [])) | set(seed_profile.get('related_artists', []))
-        related_tokens = {token for token in (normalize_token(name) for name in related_names) if token}
-        related_tracks = tracks_by_artist_names(db, related_names, 2000)
-        broad_tracks = []
-        if len(primary) + len(related_tracks) < limit:
-            broad_tracks = q.order_by(models.Track.created_at.desc(), models.Track.last_indexed_at.desc()).limit(limit * 30).all()
-        all_tracks = unique_tracks(primary + related_tracks + broad_tracks)
+            related_names = set(lookup_by_normalized(RELATED_ARTISTS, seed_artist, [])) | set(seed_profile.get('related_artists', []))
+            related_tokens = {token for token in (normalize_token(name) for name in related_names) if token}
+            related_tracks = tracks_by_artist_names(db, related_names, artist_related_limit)
+            broad_tracks = []
+            if len(primary) + len(related_tracks) < limit:
+                broad_tracks = q.order_by(models.Track.created_at.desc(), models.Track.last_indexed_at.desc()).limit(artist_soft_limit).all()
+            all_tracks = unique_tracks_cap(primary + related_tracks + broad_tracks, artist_seed_limit + artist_related_limit + artist_soft_limit)
 
         recent = recent_ids(db)
         favs = favorite_ids(db)
@@ -1036,52 +1087,54 @@ def station_queue(req: StationQueueRequest, db: Session = Depends(get_db)):
         soft_similar = []
         weak_related = []
 
-        for t in all_tracks:
-            if t.id in down or t.id in exclude_set:
-                continue
+        with perf_segment('queue.station.artist.score'):
+            for t in all_tracks:
+                if t.id in down or t.id in exclude_set:
+                    continue
 
-            candidate_profile = radio_profile(db, t, profile_cache)
-            score, _, tier = artist_radio_score_parts(seed_profile, candidate_profile, seed_artist, t, related_tokens, fb, recent, favs)
+                candidate_profile = radio_profile(db, t, profile_cache)
+                score, _, tier = artist_radio_score_parts(seed_profile, candidate_profile, seed_artist, t, related_tokens, fb, recent, favs)
 
-            if tier == 'excluded':
-                continue
+                if tier == 'excluded':
+                    continue
 
-            entry = (score, t)
-            if tier == 'seed_artist':
-                seed_tracks.append(entry)
-            elif tier == 'strong_related':
-                strong_related.append(entry)
-            elif tier == 'soft_similar':
-                soft_similar.append(entry)
-            elif tier == 'weak_related':
-                weak_related.append(entry)
+                entry = (score, t)
+                if tier == 'seed_artist':
+                    seed_tracks.append(entry)
+                elif tier == 'strong_related':
+                    strong_related.append(entry)
+                elif tier == 'soft_similar':
+                    soft_similar.append(entry)
+                elif tier == 'weak_related':
+                    weak_related.append(entry)
+        with perf_segment('queue.station.artist.select'):
+            seed_tracks.sort(key=lambda x: x[0], reverse=True)
+            strong_related.sort(key=lambda x: x[0], reverse=True)
+            soft_similar.sort(key=lambda x: x[0], reverse=True)
+            weak_related.sort(key=lambda x: x[0], reverse=True)
 
-        seed_tracks.sort(key=lambda x: x[0], reverse=True)
-        strong_related.sort(key=lambda x: x[0], reverse=True)
-        soft_similar.sort(key=lambda x: x[0], reverse=True)
-        weak_related.sort(key=lambda x: x[0], reverse=True)
+            selected_entries = []
+            seed_target = min(len(seed_tracks), max(int(limit * 0.80), limit - int(limit * 0.20)))
+            selected_entries += seed_tracks[:seed_target]
 
-        selected_entries = []
-        seed_target = min(len(seed_tracks), max(int(limit * 0.80), limit - int(limit * 0.20)))
-        selected_entries += seed_tracks[:seed_target]
+            remaining = limit - len(selected_entries)
+            selected_entries += strong_related[:remaining]
 
-        remaining = limit - len(selected_entries)
-        selected_entries += strong_related[:remaining]
+            remaining = limit - len(selected_entries)
+            selected_entries += soft_similar[:remaining]
 
-        remaining = limit - len(selected_entries)
-        selected_entries += soft_similar[:remaining]
+            remaining = limit - len(selected_entries)
+            weak_cap = max(1, int(limit * 0.10))
+            selected_entries += weak_related[:min(remaining, weak_cap)]
 
-        remaining = limit - len(selected_entries)
-        weak_cap = max(1, int(limit * 0.10))
-        selected_entries += weak_related[:min(remaining, weak_cap)]
+            remaining = limit - len(selected_entries)
+            if remaining > 0:
+                selected_entries += seed_tracks[seed_target:seed_target + remaining]
 
-        remaining = limit - len(selected_entries)
-        if remaining > 0:
-            selected_entries += seed_tracks[seed_target:seed_target + remaining]
-
-        pool_tracks = [t for _, t in selected_entries]
-        selected_tracks = no_repeats(pool_tracks, limit, artist_loose=True, avoid_title_dups=True)
-        return payload(selected_tracks)
+            pool_tracks = [t for _, t in selected_entries]
+            selected_tracks = no_repeats(pool_tracks, limit, artist_loose=True, avoid_title_dups=True)
+        with perf_segment('queue.station.artist.serialize'):
+            return payload(selected_tracks)
     else:
         return {'queue': []}
 
@@ -1089,7 +1142,8 @@ def station_queue(req: StationQueueRequest, db: Session = Depends(get_db)):
         tracks = [t for t in tracks if t.id not in exclude_set]
 
     tracks = score_tracks(db, tracks, req.type)
-    return payload(no_repeats(tracks, limit, artist_loose=req.type == 'artist'))
+    with perf_segment('queue.station.serialize'):
+        return payload(no_repeats(tracks, limit, artist_loose=req.type == 'artist'))
 
 
 @router.post('/album')
