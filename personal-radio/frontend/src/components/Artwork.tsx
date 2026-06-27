@@ -1,5 +1,52 @@
 import { useEffect, useState } from 'react'
-type Props={src?:string|null;label:string;size?:number;kind?:'music'|'book'|'station'|'radio';variant?:'square'|'rounded'|'circle';stationIndex?:number}
-function stationGradient(label:string){const grads=['var(--station-grad-a)','var(--station-grad-b)','var(--station-grad-c)','var(--station-grad-d)','var(--station-grad-e)'];let hash=0;for(let i=0;i<label.length;i++)hash=(hash*31+label.charCodeAt(i))|0;return grads[Math.abs(hash)%grads.length]}
-function initials(label:string,kind:Props['kind']){if(kind==='radio')return'BM';const cleaned=kind==='station'?label.replace(/^\d{4}[-\s.]+/,'').replace(/\s+Radio$/i,'').trim():label.replace(/^\d+[-\s.]+/,'');const words=cleaned.split(/\s+/).filter(Boolean).filter(w=>!['a','an','the','of','in','on','at','and','or'].includes(w.toLowerCase()));return words.slice(0,2).map(w=>w[0]).join('').toUpperCase()||(kind==='book'?'BK':kind==='station'?'ST':'MU')}
-export default function Artwork({src,label,size=48,kind='music',variant='rounded'}:Props){const [failed,setFailed]=useState(false);useEffect(()=>setFailed(false),[src]);const radius=variant==='circle'?'50%':variant==='square'?10:size>100?22:13;const bg=kind==='book'?'var(--gradient-books)':kind==='station'?stationGradient(label):'var(--gradient-radio)';return <div style={{width:size,height:kind==='book'?Math.round(size*1.18):size,flexShrink:0,borderRadius:radius,overflow:'hidden',background:bg,display:'grid',placeItems:'center',boxShadow:size>100?'0 20px 64px rgba(104,82,240,.50), 0 0 0 1px rgba(255,255,255,0.06)':'0 4px 16px rgba(104,82,240,.22)'}}>{src&&!failed?<img src={src} alt="" onError={()=>setFailed(true)} style={{width:'100%',height:'100%',objectFit:'cover'}}/>:<span style={{fontSize:Math.max(11,Math.round(size*.28)),fontWeight:800,letterSpacing:'.05em',color:'rgba(255,255,255,.92)'}}>{initials(label,kind)}</span>}</div>}
+
+type Props = {
+  src?: string | null
+  fallbackSrc?: string | null
+  label: string
+  size?: number
+  kind?: 'music' | 'book' | 'station' | 'radio'
+  variant?: 'square' | 'rounded' | 'circle'
+  stationIndex?: number
+}
+
+function stationGradient(label: string) {
+  const grads = ['var(--station-grad-a)', 'var(--station-grad-b)', 'var(--station-grad-c)', 'var(--station-grad-d)', 'var(--station-grad-e)']
+  let hash = 0
+  for (let i = 0; i < label.length; i++) hash = (hash * 31 + label.charCodeAt(i)) | 0
+  return grads[Math.abs(hash) % grads.length]
+}
+
+function initials(label: string, kind: Props['kind']) {
+  if (kind === 'radio') return 'BM'
+  const cleaned = kind === 'station'
+    ? label.replace(/^\d{4}[-\s.]+/, '').replace(/\s+Radio$/i, '').trim()
+    : label.replace(/^\d+[-\s.]+/, '')
+  const words = cleaned.split(/\s+/).filter(Boolean).filter(w => !['a', 'an', 'the', 'of', 'in', 'on', 'at', 'and', 'or'].includes(w.toLowerCase()))
+  return words.slice(0, 2).map(w => w[0]).join('').toUpperCase() || (kind === 'book' ? 'BK' : kind === 'station' ? 'ST' : 'MU')
+}
+
+function normalizeSrc(value?: string | null) {
+  return value && !['null', 'undefined', ''].includes(String(value).trim().toLowerCase()) ? value : null
+}
+
+export default function Artwork({ src, fallbackSrc, label, size = 48, kind = 'music', variant = 'rounded' }: Props) {
+  const safeSrc = normalizeSrc(src)
+  const safeFallbackSrc = normalizeSrc(fallbackSrc)
+  const [failed, setFailed] = useState(false)
+  const [usingFallback, setUsingFallback] = useState(false)
+  useEffect(() => { setFailed(false); setUsingFallback(false) }, [safeSrc, safeFallbackSrc])
+  const activeSrc = usingFallback ? safeFallbackSrc : safeSrc
+  const radius = variant === 'circle' ? '50%' : variant === 'square' ? 10 : size > 100 ? 22 : 13
+  const bg = kind === 'book' ? 'var(--gradient-books)' : kind === 'station' ? stationGradient(label) : 'var(--gradient-radio)'
+
+  return (
+    <div style={{ width: size, height: kind === 'book' ? Math.round(size * 1.18) : size, flexShrink: 0, borderRadius: radius, overflow: 'hidden', background: bg, display: 'grid', placeItems: 'center', boxShadow: size > 100 ? '0 20px 64px rgba(104,82,240,.50), 0 0 0 1px rgba(255,255,255,0.06)' : '0 4px 16px rgba(104,82,240,.22)' }}>
+      {activeSrc && !failed ? (
+        <img src={activeSrc} alt="" onError={() => { if (!usingFallback && safeFallbackSrc) setUsingFallback(true); else setFailed(true) }} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        <span style={{ fontSize: Math.max(11, Math.round(size * .28)), fontWeight: 800, letterSpacing: '.05em', color: 'rgba(255,255,255,.92)' }}>{initials(label, kind)}</span>
+      )}
+    </div>
+  )
+}
