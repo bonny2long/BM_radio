@@ -17,16 +17,16 @@ class Track(Base):
     title = Column(String, index=True)
     artist = Column(String, index=True)
     album = Column(String, index=True)
-    album_artist = Column(String)
+    album_artist = Column(String, index=True)
     genre = Column(String, index=True)
     year = Column(Integer)
     duration_seconds = Column(Float)
     file_ext = Column(String)
-    library_area = Column(String)  # Library, Discographies, etc.
+    library_area = Column(String, index=True)  # Library, Discographies, etc.
     cover_path = Column(String, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    last_indexed_at = Column(DateTime(timezone=True))
+    last_indexed_at = Column(DateTime(timezone=True), index=True)
 
     thumbs = relationship("TrackThumb", back_populates="track")
     favorites = relationship("TrackFavorite", back_populates="track")
@@ -91,9 +91,9 @@ class Audiobook(Base):
     duration_seconds = Column(Float, nullable=True)
     status = Column(String, default="available") # available, in_progress, finished, etc.
     favorite = Column(Boolean, default=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    last_indexed_at = Column(DateTime(timezone=True))
+    last_indexed_at = Column(DateTime(timezone=True), index=True)
 
     chapters = relationship("AudiobookChapter", back_populates="audiobook")
     progress = relationship("AudiobookProgress", back_populates="audiobook")
@@ -132,10 +132,10 @@ class TrackThumb(Base):
     __tablename__ = "track_thumbs"
 
     id = Column(Integer, primary_key=True, index=True)
-    track_id = Column(Integer, ForeignKey("tracks.id"))
-    station_id = Column(Integer, ForeignKey("stations.id"), nullable=True)
+    track_id = Column(Integer, ForeignKey("tracks.id"), index=True)
+    station_id = Column(Integer, ForeignKey("stations.id"), nullable=True, index=True)
     value = Column(Enum(ThumbValue))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     track = relationship("Track", back_populates="thumbs")
 
@@ -143,8 +143,8 @@ class TrackFavorite(Base):
     __tablename__ = "track_favorites"
 
     id = Column(Integer, primary_key=True, index=True)
-    track_id = Column(Integer, ForeignKey("tracks.id"))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    track_id = Column(Integer, ForeignKey("tracks.id"), index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     track = relationship("Track", back_populates="favorites")
 
@@ -152,12 +152,12 @@ class PlaybackEvent(Base):
     __tablename__ = "playback_events"
 
     id = Column(Integer, primary_key=True, index=True)
-    track_id = Column(Integer, ForeignKey("tracks.id"), nullable=True)
-    audiobook_id = Column(Integer, ForeignKey("audiobooks.id"), nullable=True)
-    station_id = Column(Integer, ForeignKey("stations.id"), nullable=True)
-    event_type = Column(String) # start, stop, skip, finish
+    track_id = Column(Integer, ForeignKey("tracks.id"), nullable=True, index=True)
+    audiobook_id = Column(Integer, ForeignKey("audiobooks.id"), nullable=True, index=True)
+    station_id = Column(Integer, ForeignKey("stations.id"), nullable=True, index=True)
+    event_type = Column(String, index=True) # start, stop, skip, finish
     position_seconds = Column(Float, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 class AudiobookProgress(Base):
     __tablename__ = "audiobook_progress"

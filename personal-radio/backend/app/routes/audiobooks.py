@@ -29,6 +29,16 @@ def get_audiobooks(db: Session=Depends(get_db)): return [audiobook_item(b) for b
 @router.get('/summary')
 def get_summary(db: Session=Depends(get_db)):
     books=db.query(models.Audiobook).all(); return {'available':len(books),'not_started':sum(b.status=='available' for b in books),'in_progress':sum(b.status=='in_progress' for b in books),'finished':sum(b.status=='finished' for b in books),'favorites':sum(b.favorite for b in books),'total_listening_seconds':db.query(func.coalesce(func.sum(models.AudiobookProgress.position_seconds),0)).scalar()}
+@router.get('/recent-or-progress')
+def recent_or_progress(limit:int=3,db:Session=Depends(get_db)):
+    limit=min(max(limit,1),20)
+    books=db.query(models.Audiobook).filter(models.Audiobook.status=='in_progress').order_by(models.Audiobook.updated_at.desc(),models.Audiobook.title).limit(limit).all()
+    if len(books)<limit:
+        seen={b.id for b in books}
+        more=db.query(models.Audiobook).order_by(models.Audiobook.created_at.desc(),models.Audiobook.title).limit(limit*2).all()
+        books.extend([b for b in more if b.id not in seen][:limit-len(books)])
+    return [audiobook_item(b) for b in books]
+
 @router.get('/{audiobook_id}')
 def get_audiobook(audiobook_id:int,db:Session=Depends(get_db)):
     book=db.get(models.Audiobook,audiobook_id)

@@ -14,6 +14,8 @@ export type ArtistSummary={name:string;track_count:number;album_count?:number}
 export type ArtistDetail={name:string;track_count:number;album_count:number;albums:AlbumSummary[];tracks:Track[]}
 export type SearchResults={artists:ArtistSummary[];albums:AlbumSummary[];tracks:Track[];stations:Station[];audiobooks:Audiobook[]}
 export type TrackPage={items:Track[];total:number;limit:number;offset:number;has_more:boolean}
+export type AlbumPage={items:AlbumSummary[];limit:number;offset:number}
+export type ArtistPage={items:ArtistSummary[];limit:number;offset:number}
 export type RecentPlaybackItem={mode:'music'|'audiobook';track_id?:number;audiobook_id?:number;chapter_id?:number;position_seconds?:number;title:string;subtitle:string;cover_url?:string|null;stream_url?:string|null;last_event_at:string}
 export type PlaylistSummary={id:number;name:string;description?:string|null;kind:string;track_count:number}
 export type SmartPlaylistSummary={id:string;name:string;description?:string|null;kind:string;track_count:number}
@@ -24,8 +26,11 @@ export const scanMusic=()=>request('/library/scan/music',{method:'POST'})
 export const getAudiobookSummary=()=>request<AudiobookSummary>('/audiobooks/summary')
 export const scanAudiobooks=()=>request('/audiobooks/scan',{method:'POST'})
 export const getAudiobooks=()=>request<Audiobook[]>('/audiobooks/')
+export const getRecentOrProgressAudiobooks=(limit=3)=>request<Audiobook[]>(`/audiobooks/recent-or-progress?limit=${limit}`)
 export const getAudiobook=(id:number)=>request<AudiobookDetail>(`/audiobooks/${id}`)
 export const getAlbums=()=>request<AlbumSummary[]>('/library/albums')
+export const getAlbumsPage=(limit=50,offset=0)=>request<AlbumPage>(`/library/albums-page?limit=${limit}&offset=${offset}`)
+export const getRecentAlbums=(limit=8)=>request<AlbumSummary[]>(`/library/recent-albums?limit=${limit}`)
 export const getAlbumTracks=(artist:string,album:string)=>request<Track[]>(`/library/album-tracks?artist=${encodeURIComponent(artist)}&album=${encodeURIComponent(album)}`)
 export const getStations=()=>request<Station[]>('/stations/')
 export const createStation=(name:string,type:string,seedValue?:string|null,seedTrackId?:number|null)=>request<Station>('/stations/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,type,seed_value:seedValue??null,seed_track_id:seedTrackId??null})})
@@ -34,6 +39,7 @@ export const getStationQueue=(type:string,seedValue?:string|null,limit=50,exclud
 export const updateAudiobookProgress=(id:number,p:{chapter_id:number;position_seconds:number;progress_percent:number})=>request(`/audiobooks/${id}/progress`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)})
 export const favoriteAudiobook=(id:number)=>request<{favorite:boolean}>(`/audiobooks/${id}/favorite`,{method:'POST'})
 export const getArtists=()=>request<ArtistSummary[]>('/library/artists')
+export const getArtistsPage=(limit=50,offset=0)=>request<ArtistPage>(`/library/artists-page?limit=${limit}&offset=${offset}`)
 export const getArtistDetail=(artist:string)=>request<ArtistDetail>(`/library/artists/${encodeURIComponent(artist)}/detail`)
 export const getTracks=(limit=100,offset=0)=>request<Track[]>(`/library/tracks?limit=${limit}&offset=${offset}`)
 export const searchTracks=(q:string)=>request<Track[]>(`/library/search?q=${encodeURIComponent(q)}`)

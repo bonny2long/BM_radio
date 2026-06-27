@@ -44,8 +44,23 @@ def smart_track_ids(db:Session,key:str,limit:int=500):
     if key=='never_played':
         rows=db.query(models.Track.id).outerjoin(models.PlaybackEvent,models.PlaybackEvent.track_id==models.Track.id).group_by(models.Track.id).having(func.count(models.PlaybackEvent.id)==0).order_by(models.Track.created_at.desc()).limit(limit).all();return [r[0] for r in rows]
     return []
+def smart_count(db:Session,key:str):
+    if key=='favorites':
+        return db.query(func.count(func.distinct(models.TrackFavorite.track_id))).scalar() or 0
+    if key=='thumbs_up':
+        return sum(1 for value in latest_thumb_values(db).values() if value=='up')
+    if key=='most_played':
+        return db.query(func.count(func.distinct(models.PlaybackEvent.track_id))).filter(models.PlaybackEvent.track_id.isnot(None)).scalar() or 0
+    if key=='recently_played':
+        return db.query(func.count(func.distinct(models.PlaybackEvent.track_id))).filter(models.PlaybackEvent.track_id.isnot(None)).scalar() or 0
+    if key=='recently_added':
+        return db.query(func.count(models.Track.id)).scalar() or 0
+    if key=='never_played':
+        return db.query(func.count(models.Track.id)).outerjoin(models.PlaybackEvent,models.PlaybackEvent.track_id==models.Track.id).group_by(models.Track.id).having(func.count(models.PlaybackEvent.id)==0).count()
+    return 0
+
 def smart_summary(db:Session,key:str,name:str,description:str):
-    return {'id':key,'name':name,'kind':'smart','track_count':len(smart_track_ids(db,key,1000)),'description':description}
+    return {'id':key,'name':name,'kind':'smart','track_count':smart_count(db,key),'description':description}
 def summary(p:models.Playlist,db:Session):
     count=db.query(func.count(models.PlaylistTrack.id)).filter_by(playlist_id=p.id).scalar()
     return {'id':p.id,'name':p.name,'description':p.description,'kind':p.kind,'track_count':count or 0}

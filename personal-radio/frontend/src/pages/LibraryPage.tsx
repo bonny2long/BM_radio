@@ -4,7 +4,7 @@ import LoadingSkeleton from '../components/LoadingSkeleton'
 import PageError from '../components/PageError'
 import TrackActionSheet from '../components/TrackActionSheet'
 import useLongPress from '../hooks/useLongPress'
-import { createPlaylist, deletePlaylist, getAlbumTracks, getAlbums, getArtists, getLibrarySummary, getPlaylistQueue, getPlaylists, getSmartPlaylistQueue, getSmartPlaylists, getStationQueue, getTracksPage, mediaUrl, searchAll, type AlbumSummary, type ArtistSummary, type LibrarySummary, type PlaylistSummary, type SmartPlaylistSummary, type SearchResults, type Track } from '../api'
+import { createPlaylist, deletePlaylist, getAlbumTracks, getAlbumsPage, getArtistsPage, getLibrarySummary, getPlaylistQueue, getPlaylists, getSmartPlaylistQueue, getSmartPlaylists, getStationQueue, getTracksPage, mediaUrl, searchAll, type AlbumSummary, type ArtistSummary, type LibrarySummary, type PlaylistSummary, type SmartPlaylistSummary, type SearchResults, type Track } from '../api'
 import { useRadioActions } from '../hooks/useRadioActions'
 import { usePlayback, type QueueSource } from '../state/PlaybackContext'
 import { trackToNowPlaying } from '../utils/mediaMappers'
@@ -36,12 +36,17 @@ export default function LibraryPage({ onOpenAlbum, onOpenArtist, onOpenBook, onO
   const loadAll = () => {
     setLoading(true)
     setPageError(null)
-    Promise.all([getLibrarySummary(), getAlbums(), getArtists(), getTracksPage(100, 0), getPlaylists(), getSmartPlaylists()])
-      .then(([s, a, ar, t, p, sp]) => { setSummary(s); setAlbums(a); setArtists(ar); setTracks(t.items); setSongsOffset(t.items.length); setSongsMore(t.has_more); setPlaylists(p); setSmart(sp) })
+    Promise.all([getLibrarySummary(), getAlbumsPage(100, 0)])
+      .then(([s, a]) => { setSummary(s); setAlbums(a.items) })
       .catch(() => setPageError('Could not load your library. Check your NAS connection.'))
       .finally(() => setLoading(false))
   }
   useEffect(loadAll, [])
+  useEffect(() => {
+    if (tab === 'Artists' && !artists.length) void getArtistsPage(100, 0).then(p => setArtists(p.items)).catch(() => setPageError('Could not load artists.'))
+    if (tab === 'Songs' && !tracks.length) void getTracksPage(100, 0).then(t => { setTracks(t.items); setSongsOffset(t.items.length); setSongsMore(t.has_more) }).catch(() => setPageError('Could not load songs.'))
+    if (tab === 'Playlists' && !playlists.length && !smart.length) void Promise.all([getPlaylists(), getSmartPlaylists()]).then(([p, sp]) => { setPlaylists(p); setSmart(sp) }).catch(() => setPageError('Could not load playlists.'))
+  }, [tab])
 
   if (loading) return <LoadingSkeleton rows={7} />
   if (pageError) return <PageError message={pageError} onRetry={loadAll} />

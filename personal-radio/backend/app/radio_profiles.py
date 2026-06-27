@@ -137,6 +137,53 @@ def profile_for_track(db: Session, track: models.Track) -> dict[str, Any]:
     return profile
 
 
+def load_radio_profile_cache(db: Session) -> dict[str, Any]:
+    return {
+        'artists': {
+            normalize_token(row.artist): row_profile(row)
+            for row in db.query(models.ArtistRadioProfile).all()
+            if normalize_token(row.artist)
+        },
+        'albums': {
+            (normalize_token(row.artist), normalize_token(row.album)): row_profile(row)
+            for row in db.query(models.AlbumRadioProfile).all()
+            if normalize_token(row.artist) and normalize_token(row.album)
+        },
+        'tracks': {
+            row.track_id: row_profile(row)
+            for row in db.query(models.TrackRadioProfile).all()
+        },
+    }
+
+
+def profile_for_track_cached(track: models.Track, cache: dict[str, Any]) -> dict[str, Any]:
+    profile = empty_profile(track)
+    artist_key = normalize_token(track.artist)
+    album_artist_key = normalize_token(track.album_artist)
+    album_key = normalize_token(track.album)
+
+    artist_profile = None
+    if artist_key:
+        artist_profile = cache.get('artists', {}).get(artist_key)
+    if not artist_profile and album_artist_key:
+        artist_profile = cache.get('artists', {}).get(album_artist_key)
+    if artist_profile:
+        profile = merge_profile(profile, artist_profile)
+
+    album_profile = None
+    if artist_key and album_key:
+        album_profile = cache.get('albums', {}).get((artist_key, album_key))
+    if not album_profile and album_artist_key and album_key:
+        album_profile = cache.get('albums', {}).get((album_artist_key, album_key))
+    if album_profile:
+        profile = merge_profile(profile, album_profile)
+
+    track_profile = cache.get('tracks', {}).get(track.id)
+    if track_profile:
+        profile = merge_profile(profile, track_profile)
+    if not profile.get('primary_genre'):
+        profile['primary_genre'] = fallback_genre(track)
+    return profile
 def artist_profile_payload(row: models.ArtistRadioProfile) -> dict[str, Any]:
     data = row_profile(row)
     return {'artist': row.artist, 'primary_genre': data['primary_genre'], 'subgenres': data['subgenres'], 'moods': data['moods'], 'energy': data['energy'], 'era': data['era'], 'related_artists': data['related_artists'], 'source': row.source}
