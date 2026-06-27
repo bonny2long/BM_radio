@@ -1,10 +1,11 @@
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 from .. import models
 from ..db import get_db
+from ..perf import perf_segment
 from ..scanner.audiobook_scanner import load_audiobook_sidecar, scan_audiobooks as run_audiobook_scan
 from .serializers import chapter_item, audiobook_item
 router = APIRouter()
@@ -28,16 +29,31 @@ def as_detail(book):
 def get_audiobooks(db: Session=Depends(get_db)): return [audiobook_item(b) for b in db.query(models.Audiobook).order_by(models.Audiobook.title)]
 @router.get('/summary')
 def get_summary(db: Session=Depends(get_db)):
-    books=db.query(models.Audiobook).all(); return {'available':len(books),'not_started':sum(b.status=='available' for b in books),'in_progress':sum(b.status=='in_progress' for b in books),'finished':sum(b.status=='finished' for b in books),'favorites':sum(b.favorite for b in books),'total_listening_seconds':db.query(func.coalesce(func.sum(models.AudiobookProgress.position_seconds),0)).scalar()}
+    with perf_segment('audiobooks.summary.sql'):
+        total, not_started, in_progress, finished, favorites = db.query(
+            func.count(models.Audiobook.id),
+            func.coalesce(func.sum(case((models.Audiobook.status == 'available', 1), else_=0)), 0),
+            func.coalesce(func.sum(case((models.Audiobook.status == 'in_progress', 1), else_=0)), 0),
+            func.coalesce(func.sum(case((models.Audiobook.status == 'finished', 1), else_=0)), 0),
+            func.coalesce(func.sum(case((models.Audiobook.favorite.is_(True), 1), else_=0)), 0),
+        ).one()
+        total_seconds = db.query(func.coalesce(func.sum(models.AudiobookProgress.position_seconds),0)).scalar() or 0
+    with perf_segment('audiobooks.summary.serialize'):
+        return {'available':total,'not_started':not_started,'in_progress':in_progress,'finished':finished,'favorites':favorites,'total_listening_seconds':total_seconds}
 @router.get('/recent-or-progress')
 def recent_or_progress(limit:int=3,db:Session=Depends(get_db)):
     limit=min(max(limit,1),20)
-    books=db.query(models.Audiobook).filter(models.Audiobook.status=='in_progress').order_by(models.Audiobook.updated_at.desc(),models.Audiobook.title).limit(limit).all()
-    if len(books)<limit:
-        seen={b.id for b in books}
-        more=db.query(models.Audiobook).order_by(models.Audiobook.created_at.desc(),models.Audiobook.title).limit(limit*2).all()
-        books.extend([b for b in more if b.id not in seen][:limit-len(books)])
-    return [audiobook_item(b) for b in books]
+    with perf_segment('audiobooks.recent_progress.sql'):
+        books=(
+            db.query(models.Audiobook)
+            .outerjoin(models.AudiobookProgress, models.AudiobookProgress.audiobook_id == models.Audiobook.id)
+            .group_by(models.Audiobook.id)
+            .order_by(func.max(models.AudiobookProgress.updated_at).desc().nullslast(), models.Audiobook.updated_at.desc(), models.Audiobook.created_at.desc(), models.Audiobook.title)
+            .limit(limit)
+            .all()
+        )
+    with perf_segment('audiobooks.recent_progress.serialize'):
+        return [audiobook_item(b) for b in books]
 
 @router.get('/{audiobook_id}')
 def get_audiobook(audiobook_id:int,db:Session=Depends(get_db)):

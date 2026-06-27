@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..config import settings
 from ..db import get_db
+from ..perf import perf_segment
 from ..scanner.path_safety import is_approved_path
 router = APIRouter()
 MEDIA_TYPES={'.mp3':'audio/mpeg','.flac':'audio/flac','.m4a':'audio/mp4','.m4b':'audio/mp4','.aac':'audio/aac','.ogg':'audio/ogg','.opus':'audio/opus','.wav':'audio/wav'}
@@ -43,9 +44,11 @@ def track_cover(track_id:int,db:Session=Depends(get_db)):
  if not track:raise HTTPException(404,'Track not found')
  roots=[Path(settings.MUSIC_LIBRARY_ROOT),Path(settings.MUSIC_DISCOGRAPHIES_ROOT)]
  if track.cover_path:
-  try:return safe_file(track.cover_path,roots,IMAGE_TYPES)
-  except HTTPException:pass
- cover=find_cover(Path(track.path).parent,roots)
+  with perf_segment('media.track_cover.use_stored_path'):
+   try:return safe_file(track.cover_path,roots,IMAGE_TYPES)
+   except HTTPException:pass
+ with perf_segment('media.track_cover.folder_walk'):
+  cover=find_cover(Path(track.path).parent,roots)
  if not cover:raise HTTPException(404,'Cover not found')
  return safe_file(str(cover),roots,IMAGE_TYPES)
 @router.get('/albums/cover')
@@ -54,9 +57,11 @@ def album_cover(artist:str,album:str,db:Session=Depends(get_db)):
  if not track:raise HTTPException(404,'Album not found')
  roots=[Path(settings.MUSIC_LIBRARY_ROOT),Path(settings.MUSIC_DISCOGRAPHIES_ROOT)]
  if track.cover_path:
-  try:return safe_file(track.cover_path,roots,IMAGE_TYPES)
-  except HTTPException:pass
- cover=find_cover(Path(track.path).parent,roots)
+  with perf_segment('media.album_cover.use_stored_path'):
+   try:return safe_file(track.cover_path,roots,IMAGE_TYPES)
+   except HTTPException:pass
+ with perf_segment('media.album_cover.folder_walk'):
+  cover=find_cover(Path(track.path).parent,roots)
  if not cover:raise HTTPException(404,'Cover not found')
  return safe_file(str(cover),roots,IMAGE_TYPES)
 @router.get('/audiobooks/{audiobook_id}/chapters/{chapter_id}/stream')

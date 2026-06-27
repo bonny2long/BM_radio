@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..config import settings
 from ..db import get_db
+from ..perf import perf_segment
 from ..scanner.music_scanner import scan_music
 from .serializers import track_item
 router = APIRouter()
@@ -51,11 +52,14 @@ def artist_tracks(artist:str,limit:int=50,offset:int=0,db:Session=Depends(get_db
 def artist_albums(artist:str,db:Session=Depends(get_db)):
  return [{'title':album,'artist':artist,'year':year,'track_count':count} for album,year,count in db.query(models.Track.album,func.min(models.Track.year),func.count(models.Track.id)).filter(or_(models.Track.artist==artist,models.Track.album_artist==artist)).group_by(models.Track.album).order_by(func.min(models.Track.year),models.Track.album).all()]
 
-def album_rows(db: Session, limit: int | None = None, offset: int = 0):
+def album_rows(db: Session, limit: int | None = None, offset: int = 0, segment_prefix: str = 'library.albums'):
  query=db.query(models.Track.album,models.Track.artist,func.min(models.Track.year),func.count(models.Track.id)).group_by(models.Track.album,models.Track.artist).order_by(func.max(models.Track.created_at).desc(),models.Track.artist,models.Track.album)
  if offset: query=query.offset(max(offset,0))
  if limit is not None: query=query.limit(min(max(limit,1),200))
- return [{'title':album,'artist':artist,'year':year,'track_count':count,'cover_url':f'/api/media/albums/cover?artist={artist}&album={album}'} for album,artist,year,count in query.all()]
+ with perf_segment(f'{segment_prefix}.sql'):
+  rows=query.all()
+ with perf_segment(f'{segment_prefix}.serialize'):
+  return [{'title':album,'artist':artist,'year':year,'track_count':count,'cover_url':f'/api/media/albums/cover?artist={artist}&album={album}'} for album,artist,year,count in rows]
 
 @router.get('/albums')
 async def get_albums(db:Session=Depends(get_db)):
@@ -65,7 +69,7 @@ def get_albums_page(limit:int=50,offset:int=0,db:Session=Depends(get_db)):
  return {'items':album_rows(db,limit,offset),'limit':min(max(limit,1),200),'offset':max(offset,0)}
 @router.get('/recent-albums')
 def get_recent_albums(limit:int=8,db:Session=Depends(get_db)):
- return album_rows(db,limit,0)
+ return album_rows(db,limit,0,'library.recent_albums')
 @router.get('/search')
 async def search(q:str,db:Session=Depends(get_db)):
  term=f'%{q.strip()}%';return [track_item(track) for track in db.query(models.Track).filter(or_(models.Track.title.ilike(term),models.Track.artist.ilike(term),models.Track.album.ilike(term),models.Track.album_artist.ilike(term),models.Track.genre.ilike(term),models.Track.relative_path.ilike(term),models.Track.library_area.ilike(term))).limit(300).all()]

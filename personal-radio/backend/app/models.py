@@ -89,10 +89,10 @@ class Audiobook(Base):
     series = Column(String, nullable=True)
     year = Column(Integer, nullable=True)
     duration_seconds = Column(Float, nullable=True)
-    status = Column(String, default="available") # available, in_progress, finished, etc.
+    status = Column(String, default="available", index=True) # available, in_progress, finished, etc.
     favorite = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), index=True)
     last_indexed_at = Column(DateTime(timezone=True), index=True)
 
     chapters = relationship("AudiobookChapter", back_populates="audiobook")
@@ -163,12 +163,12 @@ class AudiobookProgress(Base):
     __tablename__ = "audiobook_progress"
 
     id = Column(Integer, primary_key=True, index=True)
-    audiobook_id = Column(Integer, ForeignKey("audiobooks.id"))
-    chapter_id = Column(Integer, ForeignKey("audiobook_chapters.id"), nullable=True)
+    audiobook_id = Column(Integer, ForeignKey("audiobooks.id"), index=True)
+    chapter_id = Column(Integer, ForeignKey("audiobook_chapters.id"), nullable=True, index=True)
     position_seconds = Column(Float)
     progress_percent = Column(Float)
     status = Column(String) # in_progress, finished
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), index=True)
 
     audiobook = relationship("Audiobook", back_populates="progress")
 class Playlist(Base):
