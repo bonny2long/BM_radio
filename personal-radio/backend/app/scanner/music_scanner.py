@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..config import settings
+from ..media_identity import duration_bucket, music_recording_key, music_track_release_key
 from .path_safety import is_approved_path, safe_media_files
 
 MUSIC_EXTENSIONS = {'.mp3', '.flac', '.m4a', '.aac', '.ogg', '.opus', '.wav'}
@@ -194,6 +195,8 @@ def is_dirty_release_title(value: str | None, artist: str | None = None) -> bool
         return True
     if re.match(r'^\d{1,2}\s*-\s*\(?\d{1,3}\)?[_\s.-]*[\[_]?[a-z0-9_]+', lower):
         return True
+    if artist and normalize_compare(strip_known_leading_segments(raw, artist=artist)) != normalize_compare(raw):
+        return True
     if lower == raw and '_' in raw:
         return True
     return False
@@ -225,6 +228,76 @@ def strip_vinyl_side_prefix(text: str) -> str:
     return re.sub(r'^[A-H]\d{1,2}\s*[-_.]?\s+(?=[A-Za-z0-9])', '', str(text or '').strip())
 
 
+def segment_is_track_marker(segment: str, track_number: int | None = None) -> bool:
+    value = str(segment or '').strip().strip('.').strip()
+    if not value:
+        return False
+    if re.fullmatch(r'\(?\d{1,2}\)?', value):
+        if track_number is None:
+            return True
+        return int(value.strip('()')) == int(track_number)
+    if re.fullmatch(r'\d{1,2}-\d{1,2}', value):
+        return True
+    return False
+
+
+def segment_is_year_marker(segment: str, year: int | str | None) -> bool:
+    value = str(segment or '').strip()
+    if not re.fullmatch(r'\d{4}', value):
+        return False
+    try:
+        return year is not None and int(value) == int(str(year)[:4])
+    except Exception:
+        return False
+
+
+def segment_is_artist_marker(segment: str, artist: str | None, album_artist: str | None = None) -> bool:
+    value = normalize_compare(segment)
+    return bool(value and (value == normalize_compare(artist) or value == normalize_compare(album_artist)))
+
+
+def strip_known_leading_segments(
+    text: str,
+    artist: str | None = None,
+    album_artist: str | None = None,
+    album: str | None = None,
+    year: int | str | None = None,
+    track_number: int | None = None,
+) -> str:
+    value = str(text or '').strip()
+    if not value:
+        return value
+    value = re.sub(r'_+', ' ', value)
+    value = re.sub(r'\s*[-??]+\s*', ' - ', value)
+    value = strip_duplicate_track_prefix(value, track_number)
+    value = strip_vinyl_side_prefix(value)
+    parts = [part.strip() for part in value.split(' - ') if part.strip()]
+    dropped_metadata = track_number is not None
+    while len(parts) > 1:
+        first = parts[0]
+        if segment_is_track_marker(first, track_number):
+            parts.pop(0)
+            dropped_metadata = True
+            continue
+        if segment_is_artist_marker(first, artist, album_artist):
+            parts.pop(0)
+            dropped_metadata = True
+            continue
+        if segment_is_year_marker(first, year) or (dropped_metadata and re.fullmatch(r'(?:19|20)\d{2}', first)):
+            parts.pop(0)
+            dropped_metadata = True
+            continue
+        if album and normalize_compare(first) == normalize_compare(album):
+            parts.pop(0)
+            dropped_metadata = True
+            continue
+        break
+    cleaned = ' - '.join(parts) if parts else value
+    cleaned = strip_duplicate_track_prefix(cleaned, track_number)
+    cleaned = strip_vinyl_side_prefix(cleaned)
+    return final_title_format(cleaned, artist, album)
+
+
 def is_weak_embedded_title(
     embedded_title: str | None,
     path_title: str | None,
@@ -248,6 +321,10 @@ def is_weak_embedded_title(
     if artist and embedded_norm == normalize_compare(artist):
         return True
     if album and embedded_norm == normalize_compare(album):
+        return True
+    cleaned_embedded = strip_known_leading_segments(embedded, artist=artist, album=album, year=year)
+    cleaned_norm = normalize_compare(cleaned_embedded)
+    if path_norm and cleaned_norm == path_norm and cleaned_norm != embedded_norm:
         return True
     if path_norm and embedded_norm != path_norm and embedded_norm in path_norm:
         embedded_has_number = bool(re.search(r'\d', embedded))
@@ -366,7 +443,8 @@ def parse_scene_track_filename(stem: str, canonical_artist: str | None, collecti
     text = strip_duplicate_track_prefix(text, track_number)
     if track_number is not None:
         text = strip_vinyl_side_prefix(text)
-    clean = final_title_format(text, canonical_artist, album)
+    album_year, _ = year_title(album or '')
+    clean = strip_known_leading_segments(text, artist=canonical_artist, album_artist=canonical_artist, album=album, year=album_year, track_number=track_number)
     return {
         'disc': disc,
         'track_number': track_number,
@@ -390,8 +468,13 @@ def _title_parser_regression_cases() -> list[tuple[str, str, str | None, str]]:
         ("01 - 05 - Death Cab For Cutie - Company Calls Epilogue (Alternate)", "Death Cab for Cutie", "Forbidden Love EP", "Company Calls Epilogue (Alternate)"),
         ("1-01 - 01-Bend_To_Squares", "Death Cab for Cutie", "Something About Airplanes", "Bend To Squares"),
         ("01 - 04 - S.D.S.", "Mac Miller", "Watching Movies with the Sound Off", "S.D.S."),
+        ("01 - Bastille - 2013 - Pompeii", "Bastille", "Bad Blood", "Pompeii"),
+        ("02 - Bastille - 2013 - Things We Lost In The Fire", "Bastille", "Bad Blood", "Things We Lost In the Fire"),
+        ("03 - Bastille - 2013 - Bad Blood", "Bastille", "Bad Blood", "Bad Blood"),
+        ("01 - 01 - Bastille - 2013 - Pompeii", "Bastille", "Bad Blood", "Pompeii"),
         ("01 - 12. 2009", "Mac Miller", "Swimming", "2009"),
-        ("01 - 01 - Bastille - 2013 - Pompeii", "Bastille", "Bad Blood", "2013 - Pompeii"),
+        ("01 - 15. 55", "Mac Miller", "Faces", "55"),
+        ("01 - 18. 72", "Mac Miller", "I Love Life, Thank You", "72"),
     ]
 
 
@@ -543,7 +626,23 @@ def scan_music(db: Session):
         'weak_titles_detected': 0,
         'titles_corrected': 0,
         'title_parser_failures': run_title_parser_regression(),
+        'metadata_heavy_titles_cleaned': 0,
+        'duplicates_skipped': 0,
+        'duplicates_suspected': 0,
+        'variants_detected': 0,
+        'duplicate_warnings': [],
     }
+    release_seen: dict[str, dict[str, Any]] = {}
+    recording_seen: dict[str, dict[str, Any]] = {}
+    for existing_track in db.query(models.Track).all():
+        try:
+            _, existing_track_number, _ = parse_track_number_title(Path(existing_track.relative_path or existing_track.path or '').stem)
+        except Exception:
+            existing_track_number = None
+        existing_release_key = music_track_release_key(existing_track.album_artist or existing_track.artist, existing_track.album, existing_track.title, existing_track.year, existing_track_number)
+        existing_recording_key = music_recording_key(existing_track.artist, existing_track.title, existing_track.duration_seconds)
+        release_seen.setdefault(existing_release_key, {'id': existing_track.id, 'path': existing_track.path, 'duration_bucket': duration_bucket(existing_track.duration_seconds, tolerance=5), 'title': existing_track.title})
+        recording_seen.setdefault(existing_recording_key, {'id': existing_track.id, 'path': existing_track.path, 'release_key': existing_release_key, 'title': existing_track.title})
     for scan_root in existing:
         for path in safe_media_files(scan_root, MUSIC_EXTENSIONS, existing):
             try:
@@ -561,17 +660,24 @@ def scan_music(db: Session):
                 raw_title = embedded_title or path.stem
                 path_title = path_data.get('title') or clean_release_title(path.stem, artist, path_data.get('collection_label'), album)
                 path_title = strip_leading_album_year_from_title(path_title, year)
+                cleaned_embedded_title = strip_known_leading_segments(embedded_title or '', artist=artist, album_artist=album_artist, album=album, year=year)
                 weak_title = is_weak_embedded_title(embedded_title, path_title, artist, album, year)
+                metadata_heavy = bool(embedded_title and cleaned_embedded_title and normalize_compare(cleaned_embedded_title) != normalize_compare(embedded_title))
                 if is_discography:
                     title = path_title
                     if weak_title:
                         result['weak_titles_detected'] += 1
                         result['titles_corrected'] += 1
-                elif weak_title or is_dirty_release_title(raw_title, artist):
+                elif weak_title:
                     title = path_title
-                    if weak_title:
-                        result['weak_titles_detected'] += 1
-                        result['titles_corrected'] += 1
+                    result['weak_titles_detected'] += 1
+                    result['titles_corrected'] += 1
+                elif metadata_heavy:
+                    title = cleaned_embedded_title
+                    result['metadata_heavy_titles_cleaned'] += 1
+                    result['titles_corrected'] += 1
+                elif is_dirty_release_title(raw_title, artist):
+                    title = path_title
                 else:
                     title = clean_title(raw_title)
 
@@ -590,14 +696,47 @@ def scan_music(db: Session):
                     'cover_path': cover,
                     'last_indexed_at': datetime.now(timezone.utc),
                 }
+                track_number = path_data.get('track_number')
+                release_key = music_track_release_key(data['album_artist'], data['album'], data['title'], data['year'], track_number)
+                recording_key = music_recording_key(data['artist'], data['title'], data['duration_seconds'])
+                file_duration_bucket = duration_bucket(data['duration_seconds'], tolerance=5)
+                seen_release = release_seen.get(release_key)
+                if seen_release and seen_release.get('path') != str(path) and seen_release.get('duration_bucket') == file_duration_bucket:
+                    result['duplicates_skipped'] += 1
+                    result['tracks_scanned'] += 1
+                    result['duplicate_warnings'].append({
+                        'type': 'duplicate_skipped',
+                        'media_kind': 'music',
+                        'title': data['title'],
+                        'existing_id': seen_release.get('id'),
+                        'candidate_path': str(path),
+                        'reason': 'same music release key and duration bucket',
+                    })
+                    continue
+                seen_recording = recording_seen.get(recording_key)
+                if seen_recording and seen_recording.get('path') != str(path) and seen_recording.get('release_key') != release_key:
+                    result['duplicates_suspected'] += 1
+                    result['duplicate_warnings'].append({
+                        'type': 'recording_duplicate_detected',
+                        'media_kind': 'music',
+                        'title': data['title'],
+                        'existing_id': seen_recording.get('id'),
+                        'candidate_path': str(path),
+                        'reason': 'same recording key across different releases; kept as possible variant',
+                    })
+
                 track = db.query(models.Track).filter_by(path=str(path)).one_or_none()
                 if track:
                     for key, value in data.items():
                         setattr(track, key, value)
                     result['tracks_updated'] += 1
                 else:
-                    db.add(models.Track(path=str(path), **data))
+                    track = models.Track(path=str(path), **data)
+                    db.add(track)
+                    db.flush()
                     result['tracks_added'] += 1
+                release_seen[release_key] = {'id': getattr(track, 'id', None), 'path': str(path), 'duration_bucket': file_duration_bucket, 'title': data['title']}
+                recording_seen.setdefault(recording_key, {'id': getattr(track, 'id', None), 'path': str(path), 'release_key': release_key, 'title': data['title']})
                 result['tracks_scanned'] += 1
             except Exception as exc:
                 result['errors'].append(f'{path}: {exc}')
