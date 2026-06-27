@@ -31,9 +31,9 @@ def smart_track_ids(db:Session,key:str,limit:int=500):
     if key=='thumbs_up':
         latest=latest_thumb_values(db);return [tid for tid,value in latest.items() if value=='up'][:limit]
     if key=='most_played':
-        rows=db.query(models.PlaybackEvent.track_id,func.count(models.PlaybackEvent.id).label('plays')).filter(models.PlaybackEvent.track_id.isnot(None)).group_by(models.PlaybackEvent.track_id).order_by(func.count(models.PlaybackEvent.id).desc()).limit(limit).all();return [r[0] for r in rows]
+        rows=db.query(models.PlaybackEvent.track_id,func.count(models.PlaybackEvent.id).label('plays')).filter(models.PlaybackEvent.track_id.isnot(None),models.PlaybackEvent.event_type=='qualified_play').group_by(models.PlaybackEvent.track_id).order_by(func.count(models.PlaybackEvent.id).desc()).limit(limit).all();return [r[0] for r in rows]
     if key=='recently_played':
-        rows=db.query(models.PlaybackEvent.track_id).filter(models.PlaybackEvent.track_id.isnot(None)).order_by(models.PlaybackEvent.created_at.desc()).limit(limit*4).all();out=[];seen=set()
+        rows=db.query(models.PlaybackEvent.track_id).filter(models.PlaybackEvent.track_id.isnot(None),models.PlaybackEvent.event_type=='qualified_play').order_by(models.PlaybackEvent.created_at.desc()).limit(limit*4).all();out=[];seen=set()
         for (tid,) in rows:
             if tid and tid not in seen:
                 seen.add(tid);out.append(tid)
@@ -42,7 +42,7 @@ def smart_track_ids(db:Session,key:str,limit:int=500):
     if key=='recently_added':
         return [r[0] for r in db.query(models.Track.id).order_by(models.Track.created_at.desc(),models.Track.last_indexed_at.desc()).limit(limit).all()]
     if key=='never_played':
-        rows=db.query(models.Track.id).outerjoin(models.PlaybackEvent,models.PlaybackEvent.track_id==models.Track.id).group_by(models.Track.id).having(func.count(models.PlaybackEvent.id)==0).order_by(models.Track.created_at.desc()).limit(limit).all();return [r[0] for r in rows]
+        rows=db.query(models.Track.id).outerjoin(models.PlaybackEvent,(models.PlaybackEvent.track_id==models.Track.id) & (models.PlaybackEvent.event_type=='qualified_play')).group_by(models.Track.id).having(func.count(models.PlaybackEvent.id)==0).order_by(models.Track.created_at.desc()).limit(limit).all();return [r[0] for r in rows]
     return []
 def smart_count(db:Session,key:str):
     if key=='favorites':
@@ -50,13 +50,13 @@ def smart_count(db:Session,key:str):
     if key=='thumbs_up':
         return sum(1 for value in latest_thumb_values(db).values() if value=='up')
     if key=='most_played':
-        return db.query(func.count(func.distinct(models.PlaybackEvent.track_id))).filter(models.PlaybackEvent.track_id.isnot(None)).scalar() or 0
+        return db.query(func.count(func.distinct(models.PlaybackEvent.track_id))).filter(models.PlaybackEvent.track_id.isnot(None),models.PlaybackEvent.event_type=='qualified_play').scalar() or 0
     if key=='recently_played':
-        return db.query(func.count(func.distinct(models.PlaybackEvent.track_id))).filter(models.PlaybackEvent.track_id.isnot(None)).scalar() or 0
+        return db.query(func.count(func.distinct(models.PlaybackEvent.track_id))).filter(models.PlaybackEvent.track_id.isnot(None),models.PlaybackEvent.event_type=='qualified_play').scalar() or 0
     if key=='recently_added':
         return db.query(func.count(models.Track.id)).scalar() or 0
     if key=='never_played':
-        return db.query(func.count(models.Track.id)).outerjoin(models.PlaybackEvent,models.PlaybackEvent.track_id==models.Track.id).group_by(models.Track.id).having(func.count(models.PlaybackEvent.id)==0).count()
+        return db.query(func.count(models.Track.id)).outerjoin(models.PlaybackEvent,(models.PlaybackEvent.track_id==models.Track.id) & (models.PlaybackEvent.event_type=='qualified_play')).group_by(models.Track.id).having(func.count(models.PlaybackEvent.id)==0).count()
     return 0
 
 def smart_summary(db:Session,key:str,name:str,description:str):

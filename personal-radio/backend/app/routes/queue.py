@@ -378,7 +378,7 @@ def smart_track_ids(db: Session, key: str, limit: int = 100) -> list[int]:
     if key == 'most_played':
         rows = (
             db.query(models.PlaybackEvent.track_id, func.count(models.PlaybackEvent.id))
-            .filter(models.PlaybackEvent.track_id.isnot(None))
+            .filter(models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == 'qualified_play')
             .group_by(models.PlaybackEvent.track_id)
             .order_by(func.count(models.PlaybackEvent.id).desc())
             .limit(limit)
@@ -388,7 +388,7 @@ def smart_track_ids(db: Session, key: str, limit: int = 100) -> list[int]:
     if key == 'recently_played':
         rows = (
             db.query(models.PlaybackEvent.track_id)
-            .filter(models.PlaybackEvent.track_id.isnot(None))
+            .filter(models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == 'qualified_play')
             .order_by(models.PlaybackEvent.created_at.desc())
             .limit(limit * 4)
             .all()
@@ -413,7 +413,7 @@ def smart_track_ids(db: Session, key: str, limit: int = 100) -> list[int]:
     if key == 'never_played':
         rows = (
             db.query(models.Track.id)
-            .outerjoin(models.PlaybackEvent, models.PlaybackEvent.track_id == models.Track.id)
+            .outerjoin(models.PlaybackEvent, (models.PlaybackEvent.track_id == models.Track.id) & (models.PlaybackEvent.event_type == 'qualified_play'))
             .group_by(models.Track.id)
             .having(func.count(models.PlaybackEvent.id) == 0)
             .order_by(models.Track.created_at.desc())

@@ -1,5 +1,8 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from .. import models
 from ..db import get_db
@@ -30,17 +33,47 @@ def norm_event(v):
     return {'started':'start','completed':'finish','skipped':'skip','seeked':'seek','paused':'pause'}.get(v,v)
 def norm_thumb(v):
     return {'thumbs_up':'up','thumbs_down':'down','neutral':'neutral'}.get(v,v)
+def track_completion_percent(track: models.Track, position_seconds: float | None, completed_percent: float | None) -> float:
+    if completed_percent is not None:
+        return float(completed_percent)
+    if track.duration_seconds and track.duration_seconds > 0 and position_seconds is not None:
+        return (float(position_seconds) / float(track.duration_seconds)) * 100
+    return 0.0
+def should_qualify_track_listen(event_type: str, track: models.Track | None, payload: PlaybackEventCreate) -> bool:
+    if not track:
+        return False
+    if event_type == 'finish':
+        return True
+    percent = track_completion_percent(track, payload.position_seconds, payload.completed_percent)
+    return percent >= 50.0
+def recent_qualified_exists(db: Session, track_id: int, minutes: int = 30) -> bool:
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+    return (
+        db.query(models.PlaybackEvent.id)
+        .filter(
+            models.PlaybackEvent.track_id == track_id,
+            models.PlaybackEvent.event_type == 'qualified_play',
+            models.PlaybackEvent.created_at >= cutoff,
+        )
+        .first()
+        is not None
+    )
 @router.post('/event')
 def register_event(payload: PlaybackEventCreate, db: Session = Depends(get_db)):
     event_type=norm_event(payload.event_type)
-    if event_type not in {'start','pause','resume','skip','finish','seek','progress'}: raise HTTPException(422, 'Invalid playback event')
+    if event_type not in {'start','pause','resume','skip','finish','seek','progress','qualified_play'}: raise HTTPException(422, 'Invalid playback event')
+    track = db.get(models.Track, payload.track_id) if payload.track_id else None
     event=models.PlaybackEvent(event_type=event_type,track_id=payload.track_id,audiobook_id=payload.audiobook_id,station_id=payload.station_id,position_seconds=payload.position_seconds)
-    db.add(event); db.commit(); db.refresh(event); return {'id': event.id, 'event_type': event.event_type}
+    db.add(event)
+    if (payload.mode == 'music' or payload.track_id) and should_qualify_track_listen(event_type, track, payload):
+        if track and not recent_qualified_exists(db, track.id):
+            db.add(models.PlaybackEvent(event_type='qualified_play',track_id=track.id,station_id=payload.station_id,position_seconds=payload.position_seconds))
+    db.commit(); db.refresh(event); return {'id': event.id, 'event_type': event.event_type}
 @router.post('/events')
 def register_event_alias(payload: PlaybackEventCreate, db: Session = Depends(get_db)): return register_event(payload,db)
 @router.get('/recent')
 def recent_playback(limit:int=5,db:Session=Depends(get_db)):
-    rows=db.query(models.PlaybackEvent).filter(models.PlaybackEvent.event_type.in_(['start','pause','progress','seek'])).order_by(models.PlaybackEvent.created_at.desc()).limit(max(1,min(limit*4,40))).all()
+    rows=db.query(models.PlaybackEvent).filter(or_(and_(models.PlaybackEvent.track_id.isnot(None),models.PlaybackEvent.event_type=='qualified_play'),and_(models.PlaybackEvent.audiobook_id.isnot(None),models.PlaybackEvent.event_type.in_(['start','pause','progress','seek'])))).order_by(models.PlaybackEvent.created_at.desc()).limit(max(1,min(limit*4,40))).all()
     out=[];seen=set()
     for e in rows:
         key=('track',e.track_id) if e.track_id else ('book',e.audiobook_id)
