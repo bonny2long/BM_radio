@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { PlaybackProvider } from './state/PlaybackContext'
 import AppShell from './components/AppShell'
 import PageTransition from './components/PageTransition'
@@ -11,13 +11,14 @@ import QueuePage from './pages/QueuePage'
 import AlbumDetailPage from './pages/AlbumDetailPage'
 import ArtistDetailPage from './pages/ArtistDetailPage'
 import PlaylistDetailPage from './pages/PlaylistDetailPage'
+import LibraryIntegrityPage from './pages/LibraryIntegrityPage'
 import type { AlbumSummary, ArtistSummary } from './api'
 import './styles/tokens.css'
 import './styles/base.css'
 import './App.css'
 
 const MODAL_PAGES = new Set(['nowPlaying', 'queue'])
-const DETAIL_PAGES = new Set(['albumDetail', 'artistDetail', 'playlistDetail'])
+const DETAIL_PAGES = new Set(['albumDetail', 'artistDetail', 'playlistDetail', 'libraryIntegrity'])
 const TAB_PAGES = new Set(['home', 'radio', 'library', 'bookshelf'])
 
 function App() {
@@ -91,7 +92,9 @@ function App() {
       case 'bookshelf':
         return <BookshelfPage initialBookId={bookId} />
       case 'library':
-        return <LibraryPage onOpenAlbum={a => openAlbum(a, 'library')} onOpenArtist={openArtist} onOpenBook={openBook} onOpenPlaylist={openPlaylist} />
+        return <LibraryPage onOpenAlbum={a => openAlbum(a, 'library')} onOpenArtist={openArtist} onOpenBook={openBook} onOpenPlaylist={openPlaylist} onOpenIntegrity={() => navigate('libraryIntegrity', 'push')} />
+      case 'libraryIntegrity':
+        return <LibraryIntegrityPage onBack={() => navigate('library', 'pop')} />
       case 'artistDetail':
         return artist ? <ArtistDetailPage artist={artist} onBack={() => navigate('library', 'pop')} onOpenAlbum={a => openAlbum(a, 'artistDetail')} /> : null
       case 'albumDetail':
@@ -117,3 +120,6 @@ function App() {
 }
 
 export default App
+
+
+

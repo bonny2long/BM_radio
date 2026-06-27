@@ -5,7 +5,7 @@ from . import models, db
 from .config import settings
 from .radio_profiles import seed_default_radio_profiles
 from .perf import ensure_performance_indexes, install_performance_tools
-from .routes import health, library, stations, audiobooks, queue, playback, media, search, playlists, radio_profiles
+from .routes import health, library, stations, audiobooks, queue, playback, media, search, playlists, radio_profiles, library_integrity
 
 # Create database tables
 models.Base.metadata.create_all(bind=db.engine)
@@ -36,6 +36,7 @@ app.include_router(media.router, prefix="/api/media", tags=["Media"])
 app.include_router(search.router, prefix="/api", tags=["Search"])
 app.include_router(playlists.router, prefix="/api/playlists", tags=["Playlists"])
 app.include_router(radio_profiles.router, prefix="/api/radio-profiles", tags=["Radio Profiles"])
+app.include_router(library_integrity.router, prefix="/api/library", tags=["Library Integrity"])
 
 @app.get("/")
 async def root():
