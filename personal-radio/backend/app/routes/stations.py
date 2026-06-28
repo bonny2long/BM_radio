@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import models, radio_genres
 from ..db import get_db
 from ..perf import perf_segment
-from .queue import display_genre, norm_genre, track_genre
+from ..radio_profiles import load_radio_profile_cache, profile_for_track_cached
+from .queue import display_genre, norm_genre, track_genre, track_matches_genre
 
 router = APIRouter()
 
@@ -43,10 +44,19 @@ def build_station_count_maps(db: Session) -> dict:
             if artist
         }
         genre_counts: dict[str, int] = {}
-        for raw_genre, count in db.query(models.Track.genre, func.count(models.Track.id)).filter(models.Track.genre.isnot(None)).group_by(models.Track.genre).all():
-            key = norm_genre(raw_genre)
-            if key:
-                genre_counts[key] = genre_counts.get(key, 0) + int(count or 0)
+        profile_cache = load_radio_profile_cache(db)
+        for track in db.query(models.Track).limit(5000).all():
+            profile = profile_for_track_cached(track, profile_cache)
+            tokens = set(radio_genres.radio_genre_tokens(track, profile))
+            if 'hip-hop' in tokens:
+                tokens.discard('rap')
+            if 'r&b' in tokens:
+                tokens.discard('alternative r&b')
+            if 'electronic' in tokens:
+                tokens.discard('dance')
+            for key in tokens:
+                if key and key != 'unknown':
+                    genre_counts[key] = genre_counts.get(key, 0) + 1
         total = db.query(func.count(models.Track.id)).scalar() or 0
     return {'artist': artist_counts, 'album_artist': album_artist_counts, 'genre': genre_counts, 'total': total}
 
@@ -79,8 +89,9 @@ def station_track_count(station: models.Station, db: Session) -> int:
         ).scalar() or 0
     if station.type == 'genre' and station.seed_value:
         target = norm_genre(station.seed_value)
+        profile_cache = load_radio_profile_cache(db)
         all_tracks = db.query(models.Track).limit(5000).all()
-        return sum(1 for track in all_tracks if track_genre(track) == target)
+        return sum(1 for track in all_tracks if track_matches_genre(track, target, profile_for_track_cached(track, profile_cache)))
     return db.query(func.count(models.Track.id)).scalar() or 0
 
 
@@ -207,3 +218,4 @@ async def favorite_station(station_id: int, db: Session = Depends(get_db)):
     station.favorite = not station.favorite
     db.commit()
     return {'favorite': station.favorite}
+

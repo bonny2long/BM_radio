@@ -6,12 +6,12 @@ from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from .. import models
+from .. import models, radio_genres
 from ..db import get_db
 from ..perf import perf_segment
 from ..release_preferences import choose_preferred_tracks
 from .serializers import track_item
-from ..radio_profiles import load_radio_profile_cache, normalize_token, profile_for_track, profile_for_track_cached
+from ..radio_profiles import load_radio_profile_cache, normalize_token, profile_for_track, profile_for_track_cached, row_profile
 
 router = APIRouter()
 
@@ -54,6 +54,10 @@ ARTIST_GENRE_FALLBACKS = {
     'Kendrick Lamar': 'Hip-Hop',
     'Lil Wayne': 'Hip-Hop',
     'The Weeknd': 'R&B',
+    'Bastille': 'Alternative',
+    'Death Cab for Cutie': 'Alternative Rock',
+    'Daft Punk': 'Electronic',
+    'Mac Miller': 'Hip-Hop',
 }
 
 RELATED_ARTISTS: dict[str, list[str]] = {
@@ -86,26 +90,12 @@ def lookup_by_normalized(mapping: dict, key: str | None, default=None):
     return default
 
 
-GENRE_ALIASES = {
-    'hip hop': 'hip-hop',
-    'hip-hop': 'hip-hop',
-    'hiphop': 'hip-hop',
-    'rap': 'hip-hop',
-    'r&b': 'r&b',
-    'rnb': 'r&b',
-    'rhythm and blues': 'r&b',
-}
-
-
 def norm_genre(value: str | None) -> str:
-    v = (value or '').strip().lower().replace('/', ' ').replace('_', ' ')
-    v = ' '.join(v.split())
-    return GENRE_ALIASES.get(v, v)
+    return radio_genres.normalize_genre(value) or ''
 
 
 def display_genre(value: str | None) -> str:
-    v = norm_genre(value)
-    return {'hip-hop': 'Hip-Hop', 'r&b': 'R&B'}.get(v, (value or '').strip())
+    return radio_genres.display_genre(value)
 
 
 def track_genre(track: models.Track) -> str:
@@ -116,6 +106,9 @@ def track_genre(track: models.Track) -> str:
     )
 
 
+def track_matches_genre(track: models.Track, target: str | None, profile: dict | None = None) -> bool:
+    return radio_genres.genre_matches(target, track, profile) or bool(radio_genres.genre_family_tokens(target) & radio_genres.genre_family_tokens(track_genre(track)))
+
 
 def overlap_score(a: list[str], b: list[str], weight: float) -> float:
     if not a or not b:
@@ -125,7 +118,7 @@ def overlap_score(a: list[str], b: list[str], weight: float) -> float:
 
 
 def profile_genre(profile: dict) -> str:
-    return normalize_token(profile.get('primary_genre')) or ''
+    return norm_genre(profile.get('primary_genre'))
 
 
 def radio_profile(db: Session, track: models.Track, cache: dict | None = None) -> dict:
@@ -862,15 +855,20 @@ def genre_station_debug(req: StationQueueRequest, db: Session, down: set[int], e
         if t.id in down or t.id in exclude_set:
             continue
         profile = radio_profile(db, t, profile_cache)
-        profile_match = profile_genre(profile) == target
-        fallback_match = track_genre(t) == target
-        if not profile_match and not fallback_match:
+        profile_match = target in radio_genres.radio_genre_tokens(t, profile)
+        raw_match = bool(radio_genres.genre_family_tokens(target) & radio_genres.genre_family_tokens(t.genre))
+        fallback_match = track_matches_genre(t, target, profile)
+        if not fallback_match:
             continue
         parts: list[dict] = []
-        if profile_match:
-            parts.append(explain_score_part('profile_primary_genre_match', 3.0, display_genre(target)))
-        elif fallback_match:
-            parts.append(explain_score_part('fallback_genre_match', 1.5, display_genre(target)))
+        if profile_match and not raw_match:
+            parts.append(explain_score_part('radio_profile_genre_fallback', 3.0, display_genre(target)))
+        elif profile_match:
+            parts.append(explain_score_part('profile_genre_match', 3.0, display_genre(target)))
+        elif raw_match:
+            parts.append(explain_score_part('raw_genre_match', 2.0, display_genre(target)))
+        else:
+            parts.append(explain_score_part('artist_genre_fallback', 1.5, display_genre(target)))
         artist_token = normalize_token(t.artist) or ''
         if artist_token and artist_token not in artist_seen:
             parts.append(explain_score_part('artist_diversity', 0.4, t.artist))
@@ -886,7 +884,7 @@ def genre_station_debug(req: StationQueueRequest, db: Session, down: set[int], e
         'selected_count': len(selected),
         'excluded_thumbs_down': len([t for t in all_tracks if t.id in down]),
         'excluded_current_queue': len([t for t in all_tracks if t.id in exclude_set]),
-        'profile_matched_count': sum(1 for row in selected if any(part['label'] == 'profile_primary_genre_match' for part in row['score_parts'])),
+        'profile_matched_count': sum(1 for row in selected if any(part['label'] in {'profile_genre_match', 'radio_profile_genre_fallback'} for part in row['score_parts'])),
         'same_artist_count': 0,
         'other_artist_count': len(selected),
     }, selected, [row | {'reason': 'not_selected_after_ranking'} for row in rows if row['track_id'] not in selected_ids][:20])
@@ -1007,15 +1005,22 @@ def station_queue_impl(req: StationQueueRequest, db: Session = Depends(get_db)):
         target = norm_genre(req.seed_value)
         genre_candidate_cap = min(max(limit * 40, 500), 2500)
         raw_genre_terms = {req.seed_value or '', display_genre(target), target}
-        raw_matches = []
+        candidate_pool: list[models.Track] = []
         with perf_segment('queue.station.genre.load_candidates'):
             for term in raw_genre_terms:
                 if term:
-                    raw_matches.extend(q.filter(models.Track.genre.ilike(term)).limit(genre_candidate_cap).all())
-            if len(raw_matches) < limit:
-                raw_matches.extend(q.filter(models.Track.genre.isnot(None)).order_by(models.Track.created_at.desc()).limit(genre_candidate_cap).all())
+                    candidate_pool.extend(q.filter(models.Track.genre.ilike(term)).limit(genre_candidate_cap).all())
+            profile_artist_names = [
+                row.artist
+                for row in db.query(models.ArtistRadioProfile).all()
+                if radio_genres.genre_matches(target, None, row_profile(row))
+            ]
+            if profile_artist_names:
+                candidate_pool.extend(tracks_by_artist_names(db, set(profile_artist_names), genre_candidate_cap))
+            if len(candidate_pool) < limit:
+                candidate_pool.extend(q.order_by(models.Track.created_at.desc(), models.Track.last_indexed_at.desc()).limit(genre_candidate_cap).all())
         with perf_segment('queue.station.genre.score_or_shuffle'):
-            tracks = [t for t in unique_tracks_cap(raw_matches, genre_candidate_cap) if t.id not in down and ((profile_genre(radio_profile(db, t, profile_cache)) or track_genre(t)) == target)]
+            tracks = [t for t in unique_tracks_cap(candidate_pool, genre_candidate_cap) if t.id not in down and track_matches_genre(t, target, radio_profile(db, t, profile_cache))]
             random.shuffle(tracks)
     elif req.type == 'song':
         seed_track = None
@@ -1204,6 +1209,8 @@ def smart_playlist_queue(req: SmartPlaylistQueueRequest, db: Session = Depends(g
 @router.get('/current')
 def get_current_queue():
     return {'queue': []}
+
+
 
 
 

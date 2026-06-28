@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from typing import Any
@@ -20,10 +20,13 @@ GENRE_ALIASES = {
 DEFAULT_ARTIST_RADIO_PROFILES: dict[str, dict[str, Any]] = {
     'Kanye West': {'primary_genre': 'Hip-Hop', 'subgenres': ['soulful rap', 'experimental rap', 'pop rap', 'gospel rap'], 'moods': ['cinematic', 'reflective', 'hype', 'melodic'], 'energy': 'mixed', 'era': 'mixed', 'related_artists': ['Kendrick Lamar', 'Lil Wayne', 'The Weeknd', 'Kid Cudi', 'Pusha T', 'Jay-Z']},
     'Kendrick Lamar': {'primary_genre': 'Hip-Hop', 'subgenres': ['conscious rap', 'west coast rap', 'jazz rap', 'cinematic rap'], 'moods': ['lyrical', 'reflective', 'intense', 'cinematic'], 'energy': 'mixed', 'era': '2010s', 'related_artists': ['Kanye West', 'Lil Wayne', 'J. Cole', 'Drake']},
-    'Lil Wayne': {'primary_genre': 'Hip-Hop', 'subgenres': ['mixtape rap', 'southern rap', 'punchline rap'], 'moods': ['hype', 'raw', 'confident', 'street'], 'energy': 'high', 'era': '2000s', 'related_artists': ['Kanye West', 'Kendrick Lamar', 'Drake', 'Nicki Minaj']},
+    'Lil Wayne': {'primary_genre': 'Hip-Hop', 'subgenres': ['mixtape rap', 'southern rap', 'punchline rap', 'rap'], 'moods': ['hype', 'raw', 'confident', 'street'], 'energy': 'high', 'era': '2000s', 'related_artists': ['Kanye West', 'Kendrick Lamar', 'Drake', 'Nicki Minaj']},
     'The Weeknd': {'primary_genre': 'R&B', 'subgenres': ['dark r&b', 'alternative r&b', 'synthpop', 'pop r&b'], 'moods': ['late night', 'moody', 'atmospheric', 'melancholic'], 'energy': 'medium', 'era': '2010s', 'related_artists': ['Kanye West', 'Drake', 'Frank Ocean', 'SZA']},
+    'Bastille': {'primary_genre': 'Alternative', 'subgenres': ['indie pop', 'alternative pop', 'synthpop'], 'moods': ['anthemic', 'melodic', 'cinematic'], 'energy': 'medium', 'era': '2010s', 'related_artists': ['The Head And The Heart', 'Death Cab for Cutie']},
+    'Death Cab for Cutie': {'primary_genre': 'Alternative Rock', 'subgenres': ['indie rock', 'emo indie', 'alternative'], 'moods': ['melancholic', 'reflective', 'melodic'], 'energy': 'medium', 'era': '2000s', 'related_artists': ['Bastille', 'The Head And The Heart']},
+    'Daft Punk': {'primary_genre': 'Electronic', 'subgenres': ['dance', 'house', 'electro pop'], 'moods': ['groovy', 'bright', 'futuristic'], 'energy': 'high', 'era': 'mixed', 'related_artists': []},
+    'Mac Miller': {'primary_genre': 'Hip-Hop', 'subgenres': ['rap', 'alternative hip-hop', 'jazz rap'], 'moods': ['laid back', 'reflective', 'melodic'], 'energy': 'medium', 'era': '2010s', 'related_artists': ['Kendrick Lamar', 'Kanye West']},
 }
-
 DEFAULT_ALBUM_RADIO_PROFILES = [
     {'artist': 'The Weeknd', 'album': 'Trilogy', 'primary_genre': 'R&B', 'subgenres': ['dark r&b', 'alternative r&b'], 'moods': ['late night', 'moody', 'atmospheric'], 'energy': 'medium', 'era': '2010s'},
     {'artist': 'Kanye West', 'album': '808s & Heartbreak', 'primary_genre': 'Hip-Hop', 'subgenres': ['melodic rap', 'art pop', 'emo rap'], 'moods': ['melancholic', 'reflective', 'minimal'], 'energy': 'low-medium', 'era': '2000s'},

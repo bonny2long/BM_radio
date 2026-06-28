@@ -271,7 +271,7 @@ def library_integrity(db: Session = Depends(get_db)):
             "info",
             "notice",
             "Tracks with unknown genre",
-            "Tracks with blank or generic genre metadata.",
+            "Tracks with blank or generic embedded/app-index genre metadata. BM Radio may still use app-owned radio profile fallbacks for playback; Archive Assistant should fix archive metadata later.",
             [short_track(track) for track in unknown_genre_tracks],
         )
     if suspicious_titles:
@@ -321,3 +321,4 @@ def library_integrity(db: Session = Depends(get_db)):
         },
         "issues": issues,
     }
+
