@@ -16,10 +16,21 @@ function label(value: string) {
   return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
+function shortenLibraryPath(path: string): string {
+  if (!path) return ''
+  const normalized = path.replace(/\\/g, '/')
+  const prefixes = ['Music/Library/FLAC/', 'Music/Library/', 'Music/Discographies/', 'Library/FLAC/', 'Library/', 'Discographies/']
+  for (const prefix of prefixes) {
+    const idx = normalized.indexOf(prefix)
+    if (idx !== -1) return normalized.slice(idx + prefix.length)
+  }
+  const parts = normalized.split('/')
+  return parts.slice(Math.max(0, parts.length - 3)).join('/')
+}
 function itemText(item: Record<string, unknown>) {
   const title = String(item.title ?? item.album ?? item.name ?? 'Item')
   const subtitle = [item.artist, item.author, item.year].filter(Boolean).join(' · ')
-  const path = item.path ? `\n${String(item.path)}` : ''
+  const path = item.path ? `\n${shortenLibraryPath(String(item.path))}` : ''
   const reason = item.reason ? `\nReason: ${String(item.reason)}` : ''
   return `${title}${subtitle ? ` — ${subtitle}` : ''}${reason}${path}`
 }
@@ -60,7 +71,7 @@ function IssueCard({ issue }: { issue: LibraryIntegrityIssue }) {
       {issue.items.map((item, index) => <div key={index} style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 9 }}>
         <strong style={{ display: 'block', fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{String(item.title ?? item.album ?? item.name ?? 'Item')}</strong>
         <span style={{ display: 'block', marginTop: 2, fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[item.artist, item.author, item.year, item.reason].filter(Boolean).join(' · ')}</span>
-        {item.path !== undefined && <span style={{ display: 'block', marginTop: 2, fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{String(item.path)}</span>}
+        {item.path !== undefined && <span style={{ display: 'block', marginTop: 2, fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shortenLibraryPath(String(item.path))}</span>}
       </div>)}
     </div>}
   </article>
@@ -124,6 +135,7 @@ export default function LibraryIntegrityPage({ onBack }: { onBack: () => void })
     </div>
   </div>
 }
+
 
 
 

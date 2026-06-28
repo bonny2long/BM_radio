@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import Artwork from '../components/Artwork'
 import IconButton from '../components/IconButton'
 import LoadingSkeleton from '../components/LoadingSkeleton'
@@ -8,6 +8,18 @@ import { deleteStation as apiDeleteStation, getStationQueue, getStations, peekCa
 import { usePlayback, type QueueSource } from '../state/PlaybackContext'
 import { trackToNowPlaying } from '../utils/mediaMappers'
 
+const KEEP_UPPERCASE = new Set(['R&B', 'Hip-Hop', 'DJ', 'UK'])
+const ALWAYS_LOWER = new Set(['a', 'an', 'the', 'and', 'but', 'or', 'of', 'in', 'on', 'at'])
+function titleCaseWord(word: string): string {
+  return word.split('-').map(part => part ? part.charAt(0).toUpperCase() + part.slice(1) : part).join('-')
+}
+function toStationDisplayName(name: string): string {
+  return name.split(' ').map((word, i) => {
+    if (KEEP_UPPERCASE.has(word)) return word
+    if (i > 0 && ALWAYS_LOWER.has(word.toLowerCase())) return word.toLowerCase()
+    return titleCaseWord(word)
+  }).join(' ')
+}
 const SECTION_GROUPS: [string, string[]][] = [
   ['My Stations', ['song', 'custom', 'user']],
   ['Genres', ['genre']],
@@ -67,7 +79,7 @@ export default function RadioPage() {
     >
       <Artwork label={station.name} kind="station" size={48} />
       <div style={{ minWidth: 0 }}>
-        <strong style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 14 }}>{station.name}</strong>
+        <strong style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 14 }}>{toStationDisplayName(station.name)}</strong>
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
           {station.type === 'song' ? 'Song radio' : `${station.track_count} ${station.track_count === 1 ? 'track' : 'tracks'}`}
         </span>
@@ -77,7 +89,7 @@ export default function RadioPage() {
       </IconButton>
       {allowDelete && station.id && (
         <button onClick={() => void deleteStation(station.id!)} style={{ width: 28, height: 28, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 18, borderRadius: '50%' }} aria-label="Delete station">
-          ×
+          Ã—
         </button>
       )}
     </div>
@@ -116,7 +128,7 @@ export default function RadioPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}><p className="section-label" style={{ margin: 0 }}>{title}</p></div>
                 <div className="card-premium" style={{ padding: '20px 18px', textAlign: 'center' }}>
                   <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>No stations yet</p>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Long-press any song → <strong style={{ color: 'var(--accent-primary)' }}>Save as Station</strong></p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Long-press any song â†’ <strong style={{ color: 'var(--accent-primary)' }}>Save as Station</strong></p>
                 </div>
               </section>
             )
@@ -131,7 +143,7 @@ export default function RadioPage() {
                   <p className="section-label" style={{ margin: 0 }}>My Stations</p>
                   <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-pill)', padding: '2px 8px' }}>{list.length}</span>
                 </div>
-                {list.length > 3 && <button onClick={() => setMyStationsExpanded(!myStationsExpanded)} style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-primary)' }}>{myStationsExpanded ? 'Show less ↑' : 'View all ↓'}</button>}
+                {list.length > 3 && <button onClick={() => setMyStationsExpanded(!myStationsExpanded)} style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-primary)' }}>{myStationsExpanded ? 'Show less â†‘' : 'View all â†“'}</button>}
               </div>
 
               {!myStationsExpanded && (
@@ -140,7 +152,7 @@ export default function RadioPage() {
                     <button key={station.id ?? station.name} onClick={() => void play(station)} disabled={!!busy} className="card-premium" style={{ flexShrink: 0, width: 130, padding: '12px 14px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-primary)' }}>
                       <Artwork label={station.name} kind="station" size={36} variant="rounded" />
                       <div style={{ minWidth: 0, width: '100%' }}>
-                        <div style={{ fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{station.name}</div>
+                        <div style={{ fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toStationDisplayName(station.name)}</div>
                         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{station.type === 'song' ? 'Song radio' : 'Radio mix'}</div>
                       </div>
                     </button>
@@ -165,3 +177,4 @@ export default function RadioPage() {
     </div>
   )
 }
+
