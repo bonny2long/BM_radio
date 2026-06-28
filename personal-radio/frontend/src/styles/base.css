@@ -225,7 +225,7 @@ html,body,#root{width:100%;min-width:0;max-width:100%;overflow-x:hidden}body{ove
 .bottom-sheet-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 300;
+  z-index: 1000;
   background: rgba(0,0,0,.55);
   display: flex;
   align-items: flex-end;
@@ -245,6 +245,8 @@ html,body,#root{width:100%;min-width:0;max-width:100%;overflow-x:hidden}body{ove
   border-radius: 24px 24px 0 0;
   box-shadow: 0 -20px 70px rgba(0,0,0,.45), 0 0 32px rgba(139,109,255,.12);
   padding: 10px 16px calc(18px + env(safe-area-inset-bottom));
+  position: relative;
+  z-index: 1001;
 }
 
 .bottom-sheet-handle {

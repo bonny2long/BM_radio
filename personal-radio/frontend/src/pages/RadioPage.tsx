@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Artwork from '../components/Artwork'
 import IconButton from '../components/IconButton'
 import LoadingSkeleton from '../components/LoadingSkeleton'
@@ -59,7 +59,7 @@ export default function RadioPage() {
       else seed = station.seed_value ?? null
 
       const result = await getStationQueue(station.type, seed)
-      const source: QueueSource = { kind: 'station', stationType: station.type, seedValue: seed, stationName: station.name }
+      const source: QueueSource = { kind: 'station', stationType: station.type, seedValue: seed, stationName: station.name, canContinue: true }
       playQueue(result.queue.map(track => trackToNowPlaying(track, { stationName: station.name })), 0, source)
     } finally {
       setBusy(null)
@@ -88,9 +88,7 @@ export default function RadioPage() {
         <PlayIcon />
       </IconButton>
       {allowDelete && station.id && (
-        <button onClick={() => void deleteStation(station.id!)} style={{ width: 28, height: 28, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 18, borderRadius: '50%' }} aria-label="Delete station">
-          Ã—
-        </button>
+        <button onClick={() => void deleteStation(station.id!)} style={{ width: 28, height: 28, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 18, borderRadius: '50%' }} aria-label="Delete station">&times;</button>
       )}
     </div>
   )
@@ -128,7 +126,7 @@ export default function RadioPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}><p className="section-label" style={{ margin: 0 }}>{title}</p></div>
                 <div className="card-premium" style={{ padding: '20px 18px', textAlign: 'center' }}>
                   <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>No stations yet</p>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Long-press any song â†’ <strong style={{ color: 'var(--accent-primary)' }}>Save as Station</strong></p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Long-press any song, then <strong style={{ color: 'var(--accent-primary)' }}>Save as Station</strong></p>
                 </div>
               </section>
             )
@@ -143,7 +141,7 @@ export default function RadioPage() {
                   <p className="section-label" style={{ margin: 0 }}>My Stations</p>
                   <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-pill)', padding: '2px 8px' }}>{list.length}</span>
                 </div>
-                {list.length > 3 && <button onClick={() => setMyStationsExpanded(!myStationsExpanded)} style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-primary)' }}>{myStationsExpanded ? 'Show less â†‘' : 'View all â†“'}</button>}
+                {list.length > 3 && <button onClick={() => setMyStationsExpanded(!myStationsExpanded)} style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-primary)' }}>{myStationsExpanded ? 'Show less up' : 'View all down'}</button>}
               </div>
 
               {!myStationsExpanded && (
@@ -177,4 +175,3 @@ export default function RadioPage() {
     </div>
   )
 }
-

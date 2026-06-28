@@ -16,6 +16,7 @@ export function useRadioActions() {
           stationType: 'song',
           seedValue: String(track.id),
           stationName,
+          canContinue: true,
         } satisfies QueueSource,
       )
     })
@@ -36,6 +37,7 @@ export function useRadioActions() {
           stationType: 'artist',
           seedValue: artist,
           stationName,
+          canContinue: true,
         } satisfies QueueSource,
       )
     })

@@ -1,4 +1,5 @@
-﻿import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 type BottomSheetProps = {
   open: boolean
@@ -27,16 +28,17 @@ export default function BottomSheet({ open, title, children, onClose }: BottomSh
 
   if (!open) return null
 
-  return (
+  return createPortal(
     <div className="bottom-sheet-backdrop" onClick={onClose} role="presentation">
       <section className="bottom-sheet" role="dialog" aria-modal="true" aria-label={title ?? 'Options'} onClick={event => event.stopPropagation()}>
         <div className="bottom-sheet-handle" />
         <div className="bottom-sheet-header">
           <h2>{title}</h2>
-          <button onClick={onClose} aria-label="Close" className="bottom-sheet-close">×</button>
+          <button onClick={onClose} aria-label="Close" className="bottom-sheet-close">Ã—</button>
         </div>
         <div className="bottom-sheet-body">{children}</div>
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }

@@ -26,6 +26,7 @@ export default function QueuePage({ onBack }: { onBack: () => void }) {
   const current = queue[queueIndex] ?? nowPlaying
   const upcoming = queue.slice(Math.max(queueIndex + 1, 0))
   const musicQueue = useMemo(() => queue.filter(item => item.mode === 'music'), [queue])
+  const radioWindow = queueSource?.kind === 'station'
 
   const shuffleUpcoming = () => {
     if (!current) return
@@ -42,7 +43,7 @@ export default function QueuePage({ onBack }: { onBack: () => void }) {
     const value = name.trim()
     if (!value || !musicQueue.length) return
     try {
-      await createPlaylistFromTrackList(value, musicQueue.map(item => item.id), 'Saved from queue')
+      await createPlaylistFromTrackList(value, musicQueue.map(item => item.id), radioWindow ? 'Saved current radio queue window' : 'Saved from queue')
       setStatus('Saved playlist')
       window.setTimeout(() => setSaveOpen(false), 700)
     } catch {
@@ -70,7 +71,7 @@ export default function QueuePage({ onBack }: { onBack: () => void }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
         <button onClick={shuffleUpcoming} disabled={upcoming.length < 2} className="card-premium" style={{ padding: 12, color: 'var(--text-primary)', fontWeight: 800, opacity: upcoming.length < 2 ? .45 : 1 }}>Shuffle Up Next</button>
-        <button onClick={() => { setStatus(''); setSaveOpen(true) }} disabled={!musicQueue.length} className="card-premium" style={{ padding: 12, color: 'var(--text-primary)', fontWeight: 800, opacity: musicQueue.length ? 1 : .45 }}>Save Queue</button>
+        <button onClick={() => { setStatus(''); setSaveOpen(true) }} disabled={!musicQueue.length} className="card-premium" style={{ padding: 12, color: 'var(--text-primary)', fontWeight: 800, opacity: musicQueue.length ? 1 : .45 }}>{radioWindow ? 'Save Current Radio Queue' : 'Save Queue'}</button>
       </div>
 
       <p className="section-label">Up Next</p>
@@ -95,10 +96,10 @@ export default function QueuePage({ onBack }: { onBack: () => void }) {
       </div>
 
       <TrackActionSheet open={!!actionTrack} track={actionTrack} onClose={() => setActionTrack(null)} onStartRadio={startSongRadio} onSaveStation={saveSongStation} />
-      <BottomSheet open={saveOpen} title="Save Queue" onClose={() => setSaveOpen(false)}>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>Save the current music queue as a manual playlist.</p>
+      <BottomSheet open={saveOpen} title={radioWindow ? "Save Current Radio Queue" : "Save Queue"} onClose={() => setSaveOpen(false)}>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>{radioWindow ? "This saves the currently loaded radio window, not the full station. To keep this radio source, save it as a station." : "Save the current music queue as a manual playlist."}</p>
         <input value={name} onChange={event => setName(event.target.value)} placeholder="Playlist name" style={{ width: '100%', boxSizing: 'border-box', padding: '11px 12px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', color: 'var(--text-primary)', marginBottom: 10 }} />
-        <button onClick={() => void saveQueue()} disabled={!name.trim() || !musicQueue.length} style={{ width: '100%', padding: 12, borderRadius: 'var(--radius-pill)', background: 'var(--accent-primary)', color: '#fff', fontWeight: 800, opacity: name.trim() && musicQueue.length ? 1 : .45 }}>Save Queue</button>
+        <button onClick={() => void saveQueue()} disabled={!name.trim() || !musicQueue.length} style={{ width: '100%', padding: 12, borderRadius: 'var(--radius-pill)', background: 'var(--accent-primary)', color: '#fff', fontWeight: 800, opacity: name.trim() && musicQueue.length ? 1 : .45 }}>{radioWindow ? 'Save Current Queue' : 'Save Queue'}</button>
         {status && <p style={{ fontSize: 12, color: status.includes('Could') ? '#ff8888' : 'var(--accent-primary)', marginTop: 10 }}>{status}</p>}
       </BottomSheet>
     </div>

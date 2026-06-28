@@ -1,4 +1,4 @@
-﻿import random
+import random
 import re
 
 from fastapi import APIRouter, Depends
@@ -925,8 +925,10 @@ def tracks_by_artist_names(db: Session, names: set[str], limit: int = 2000) -> l
     )
 
 
-def payload(tracks):
-    return {'queue': [track_item(t) for t in tracks]}
+def payload(tracks, **meta):
+    data = {'queue': [track_item(t) for t in tracks]}
+    data.update(meta)
+    return data
 
 
 @router.post('/station/debug')
@@ -1032,7 +1034,7 @@ def station_queue_impl(req: StationQueueRequest, db: Session = Depends(get_db)):
             except (ValueError, TypeError):
                 pass
         if seed_track is None:
-            return {'queue': []}
+            return payload([], source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=0, exclude_count=len(exclude_set), exhausted=True, remaining_estimate=0)
 
         with perf_segment('queue.station.song.load_seed'):
             seed_profile = radio_profile(db, seed_track, profile_cache)
@@ -1061,15 +1063,19 @@ def station_queue_impl(req: StationQueueRequest, db: Session = Depends(get_db)):
                 if len(candidate_pool) < max(10, int(limit * 0.35)):
                     candidate_pool.extend(recent_pool)
         candidates = [t for t in unique_tracks_cap(candidate_pool, song_candidate_cap) if t.id not in down and t.id != seed_track.id]
-        if exclude_set and len([t for t in candidates if t.id not in exclude_set]) >= 10:
-            candidates = [t for t in candidates if t.id not in exclude_set]
+        if exclude_set:
+            fresh_candidates = [t for t in candidates if t.id not in exclude_set]
+            if fresh_candidates:
+                candidates = fresh_candidates
+            else:
+                return payload([], source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=0, exclude_count=len(exclude_set), exhausted=True, remaining_estimate=0)
 
         with perf_segment('queue.station.song.score'):
             ranked = score_song_radio(db, seed_track, candidates, profile_cache)
         with perf_segment('queue.station.song.select'):
             selected_tracks = no_repeats(choose_preferred_tracks(ranked, mode="radio"), limit, artist_loose=False, avoid_title_dups=True)
         with perf_segment('queue.station.song.serialize'):
-            return payload(selected_tracks)
+            return payload(selected_tracks, source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=len(selected_tracks), exclude_count=len(exclude_set), exhausted=not selected_tracks, remaining_estimate=max(0, len(candidates) - len(selected_tracks)))
     elif req.type == 'artist':
         seed_artist = req.seed_value or ''
         artist_seed_limit = min(max(limit * 10, 200), 1500)
@@ -1147,16 +1153,21 @@ def station_queue_impl(req: StationQueueRequest, db: Session = Depends(get_db)):
             pool_tracks = [t for _, t in selected_entries]
             selected_tracks = no_repeats(choose_preferred_tracks(pool_tracks, mode="radio"), limit, artist_loose=True, avoid_title_dups=True)
         with perf_segment('queue.station.artist.serialize'):
-            return payload(selected_tracks)
+            return payload(selected_tracks, source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=len(selected_tracks), exclude_count=len(exclude_set), exhausted=not selected_tracks, remaining_estimate=max(0, len(pool_tracks) - len(selected_tracks)))
     else:
-        return {'queue': []}
+        return payload([], source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=0, exclude_count=len(exclude_set), exhausted=True, remaining_estimate=0)
 
-    if exclude_set and len([t for t in tracks if t.id not in exclude_set]) >= 10:
-        tracks = [t for t in tracks if t.id not in exclude_set]
+    if exclude_set:
+        fresh_tracks = [t for t in tracks if t.id not in exclude_set]
+        if fresh_tracks:
+            tracks = fresh_tracks
+        else:
+            return payload([], source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=0, exclude_count=len(exclude_set), exhausted=True, remaining_estimate=0)
 
     tracks = score_tracks(db, tracks, req.type)
     with perf_segment('queue.station.serialize'):
-        return payload(no_repeats(choose_preferred_tracks(tracks, mode="radio"), limit, artist_loose=req.type == 'artist', avoid_title_dups=True))
+        selected = no_repeats(choose_preferred_tracks(tracks, mode="radio"), limit, artist_loose=req.type == 'artist', avoid_title_dups=True)
+        return payload(selected, source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=len(selected), exclude_count=len(exclude_set), exhausted=not selected, remaining_estimate=max(0, len(tracks) - len(selected)))
 
 
 @router.post('/album')
@@ -1217,10 +1228,3 @@ def smart_playlist_queue(req: SmartPlaylistQueueRequest, db: Session = Depends(g
 @router.get('/current')
 def get_current_queue():
     return {'queue': []}
-
-
-
-
-
-
-

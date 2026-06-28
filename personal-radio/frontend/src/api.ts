@@ -1,4 +1,4 @@
-﻿const API_BASE_URL=import.meta.env.VITE_API_BASE_URL??'http://127.0.0.1:8094/api'
+const API_BASE_URL=import.meta.env.VITE_API_BASE_URL??'http://127.0.0.1:8094/api'
 const API_ORIGIN=API_BASE_URL.replace(/\/api\/?$/,'')
 async function request<T>(path:string,init?:RequestInit):Promise<T>{const response=await fetch(`${API_BASE_URL}${path}`,init);if(!response.ok)throw new Error(`Request failed (${response.status})`);return response.json() as Promise<T>}
 
@@ -19,6 +19,7 @@ export type ContainedBook={series_index?:string|number;title:string;display_titl
 export type Chapter={id:number;title:string;sort_order:number;duration_seconds?:number;stream_url:string}
 export type AudiobookDetail=Audiobook&{contained_books?:ContainedBook[];latest_progress?:{chapter_id?:number;position_seconds:number;progress_percent:number;chapter_progress_percent?:number;overall_progress_percent?:number;updated_at?:string}|null;chapters:Chapter[]}
 export type Station={id?:number;name:string;type:string;seed_value?:string|null;track_count:number;source?:'system'|'user';favorite?:boolean}
+export type StationQueueResponse={queue:Track[];source_type?:string;seed_value?:string|null;requested_limit?:number;returned?:number;exclude_count?:number;exhausted?:boolean;remaining_estimate?:number}
 export type AlbumSummary={title:string;artist:string;year?:number|null;track_count:number;cover_url?:string|null}
 export type ArtistSummary={name:string;track_count:number;album_count?:number}
 export type ArtistDetail={name:string;track_count:number;album_count:number;albums:AlbumSummary[];tracks:Track[]}
@@ -49,8 +50,8 @@ export const getStations=()=>cachedRequest<Station[]>('stations','/stations/',30
 export const createStation=(name:string,type:string,seedValue?:string|null,seedTrackId?:number|null)=>request<Station>('/stations/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,type,seed_value:seedValue??null,seed_track_id:seedTrackId??null})}).then(r=>{invalidateStationCaches();return r})
 export const deleteStation=(id:number)=>request<{deleted:boolean}>('/stations/'+id,{method:'DELETE'}).then(r=>{invalidateStationCaches();return r})
 export const favoriteStation=(id:number)=>request<{favorite:boolean}>(`/stations/${id}/favorite`,{method:'POST'}).then(r=>{invalidateStationCaches();return r})
-const stationQueueRequests=new Map<string,Promise<{queue:Track[]}>>()
-export const getStationQueue=(type:string,seedValue?:string|null,limit=50,excludeTrackIds:number[]=[])=>{const cappedExcludeIds=excludeTrackIds.slice(-200);const key=JSON.stringify({type,seedValue:seedValue??null,limit,excludeTrackIds:cappedExcludeIds});const existing=stationQueueRequests.get(key);if(existing)return existing;const promise=request<{queue:Track[]}>('/queue/station',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,seed_value:seedValue,limit,shuffle:true,exclude_track_ids:cappedExcludeIds})}).finally(()=>stationQueueRequests.delete(key));stationQueueRequests.set(key,promise);return promise}
+const stationQueueRequests=new Map<string,Promise<StationQueueResponse>>()
+export const getStationQueue=(type:string,seedValue?:string|null,limit=50,excludeTrackIds:number[]=[])=>{const cappedExcludeIds=excludeTrackIds.slice(-200);const key=JSON.stringify({type,seedValue:seedValue??null,limit,excludeTrackIds:cappedExcludeIds});const existing=stationQueueRequests.get(key);if(existing)return existing;const promise=request<StationQueueResponse>('/queue/station',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,seed_value:seedValue,limit,shuffle:true,exclude_track_ids:cappedExcludeIds})}).finally(()=>stationQueueRequests.delete(key));stationQueueRequests.set(key,promise);return promise}
 export const updateAudiobookProgress=(id:number,p:{chapter_id:number;position_seconds:number;progress_percent:number})=>request(`/audiobooks/${id}/progress`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)})
 export const favoriteAudiobook=(id:number)=>request<{favorite:boolean}>(`/audiobooks/${id}/favorite`,{method:'POST'})
 export const getArtists=()=>request<ArtistSummary[]>('/library/artists')
@@ -84,10 +85,3 @@ export const getSmartPlaylists=()=>cachedRequest<SmartPlaylistSummary[]>('smart-
 export const getSmartPlaylistQueue=(key:string,shuffle=false,limit=1000)=>request<{queue:Track[]}>('/queue/smart-playlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,shuffle,limit})})
 export const createPlaylistFromTrackList=(name:string,trackIds:number[],description?:string)=>request<PlaylistDetail>('/playlists/from-track-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,description,track_ids:trackIds})}).then(r=>{invalidatePlaylistCaches();return r})
 export const getLibraryIntegrity=()=>request<LibraryIntegrityReport>('/library/integrity')
-
-
-
-
-
-
-

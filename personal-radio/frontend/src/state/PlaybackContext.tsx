@@ -1,12 +1,15 @@
-﻿import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { getStationQueue, logPlaybackEvent, updateAudiobookProgress } from '../api'
 import { trackToNowPlaying } from '../utils/mediaMappers'
 
 export type QueueSource =
-  | { kind: 'station'; stationType: string; seedValue?: string | null; stationName: string }
-  | { kind: 'album' }
-  | { kind: 'playlist' }
-  | { kind: 'manual' }
+  | { kind: 'station'; stationType: string; seedValue?: string | null; stationName: string; canContinue: true; exhausted?: boolean }
+  | { kind: 'artist-shuffle'; artist: string; canContinue: false }
+  | { kind: 'album'; artist?: string; album?: string; canContinue: false }
+  | { kind: 'smart-playlist'; key: string; canContinue: false }
+  | { kind: 'playlist'; playlistId?: number; canContinue: false }
+  | { kind: 'saved-queue'; playlistId?: number; canContinue: false }
+  | { kind: 'manual'; canContinue: false }
 
 export type NowPlaying = {
   mode: 'music' | 'audiobook'
@@ -43,6 +46,14 @@ type Playback = {
 }
 
 const Context = createContext<Playback | null>(null)
+const REFILL_THRESHOLD = 5
+const REFILL_LIMIT = 50
+
+const normalizeSource = (source?: QueueSource): QueueSource => {
+  if (!source) return { kind: 'manual', canContinue: false }
+  if (source.kind === 'station') return { ...source, canContinue: true, exhausted: source.exhausted ?? false }
+  return { ...source, canContinue: false } as QueueSource
+}
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -107,44 +118,82 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     void el.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false))
   }, [event])
 
-  const refillStationQueue = useCallback((startWhenReady = false) => {
+  const markStationExhausted = useCallback(() => {
     const src = sourceRef.current
-    if (src?.kind !== 'station' || refillInFlight.current) return
-    const excludeIds = queueRef.current.map(item => item.id).slice(-200)
+    if (src?.kind !== 'station') return
+    const exhausted: QueueSource = { ...src, canContinue: true, exhausted: true }
+    sourceRef.current = exhausted
+    setQueueSource(exhausted)
+  }, [])
+
+  const refillStationQueue = useCallback(async (startWhenReady = false): Promise<boolean> => {
+    const src = sourceRef.current
+    if (src?.kind !== 'station' || src.exhausted || refillInFlight.current) return false
+
+    const excludeIds = queueRef.current.filter(item => item.mode === 'music').map(item => item.id).slice(-200)
     refillInFlight.current = true
-    void getStationQueue(src.stationType, src.seedValue ?? null, 50, excludeIds)
-      .then(result => {
-        const existing = new Set(queueRef.current.map(item => item.id))
-        const newItems = result.queue
-          .filter(track => !existing.has(track.id))
-          .map(track => trackToNowPlaying(track, { stationName: src.stationName }))
-        if (!newItems.length) return
-        const startIndex = queueRef.current.length
-        const merged = [...queueRef.current, ...newItems]
-        queueRef.current = merged
-        setQueue(merged)
-        sourceRef.current = src
-        setQueueSource(src)
-        if (startWhenReady) {
-          indexRef.current = startIndex
-          setQueueIndex(startIndex)
-          load(merged[startIndex])
-        }
-      })
-      .catch(() => {})
-      .finally(() => { refillInFlight.current = false })
-  }, [load])
-  const advance = useCallback((step: number) => {
-    const next = indexRef.current + step
-    if (next < 0 || next >= queueRef.current.length) return
-    if (step > 0) event('skip')
-    indexRef.current = next
-    setQueueIndex(next)
-    load(queueRef.current[next])
-    if (sourceRef.current?.kind === 'station' && queueRef.current.length - next <= 5) {
-      refillStationQueue(false)
+    try {
+      const result = await getStationQueue(src.stationType, src.seedValue ?? null, REFILL_LIMIT, excludeIds)
+      const existing = new Set(queueRef.current.map(item => item.id))
+      const newItems = result.queue
+        .filter(track => !existing.has(track.id))
+        .map(track => trackToNowPlaying(track, { stationName: src.stationName }))
+
+      if (!newItems.length) {
+        if (result.exhausted !== false) markStationExhausted()
+        return false
+      }
+
+      const startIndex = queueRef.current.length
+      const merged = [...queueRef.current, ...newItems]
+      const updatedSource: QueueSource = { ...src, canContinue: true, exhausted: Boolean(result.exhausted) && !newItems.length }
+      queueRef.current = merged
+      sourceRef.current = updatedSource
+      setQueue(merged)
+      setQueueSource(updatedSource)
+
+      if (startWhenReady) {
+        indexRef.current = startIndex
+        setQueueIndex(startIndex)
+        load(merged[startIndex])
+      }
+      return true
+    } catch {
+      return false
+    } finally {
+      refillInFlight.current = false
     }
-  }, [event, load, refillStationQueue])
+  }, [load, markStationExhausted])
+
+  const maybePrefetchStation = useCallback((index: number) => {
+    const src = sourceRef.current
+    if (src?.kind === 'station' && !src.exhausted && queueRef.current.length - index - 1 <= REFILL_THRESHOLD) {
+      void refillStationQueue(false)
+    }
+  }, [refillStationQueue])
+
+  const continueOrEnd = useCallback(async (step: number, userInitiated = false) => {
+    const next = indexRef.current + step
+    if (next < 0) return
+
+    if (next < queueRef.current.length) {
+      if (step > 0 && userInitiated) event('skip')
+      indexRef.current = next
+      setQueueIndex(next)
+      load(queueRef.current[next])
+      if (step > 0) maybePrefetchStation(next)
+      return
+    }
+
+    const src = sourceRef.current
+    if (step > 0 && src?.kind === 'station' && !src.exhausted) {
+      if (userInitiated) event('skip')
+      const continued = await refillStationQueue(true)
+      if (continued) return
+    }
+
+    setIsPlaying(false)
+  }, [event, load, maybePrefetchStation, refillStationQueue])
 
   useEffect(() => {
     const el = new Audio()
@@ -169,14 +218,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const ended = () => {
       event('finish')
       saveProgress()
-
-      const nextIndex = indexRef.current + 1
-      if (nextIndex < queueRef.current.length) {
-        advance(1)
-        return
-      }
-
-      refillStationQueue(true)
+      void continueOrEnd(1, false)
     }
     const fail = () => {
       setIsPlaying(false)
@@ -199,7 +241,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       el.removeEventListener('ended', ended)
       el.removeEventListener('error', fail)
     }
-  }, [advance, event, load, refillStationQueue, saveProgress])
+  }, [continueOrEnd, event, saveProgress])
 
   useEffect(() => {
     if (!nowPlaying || nowPlaying.mode !== 'audiobook' || currentTime - lastSaved.current < 15) return
@@ -210,7 +252,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const playQueue = (items: NowPlaying[], index = 0, source?: QueueSource) => {
     if (!items.length) return
     const safeIndex = Math.max(0, Math.min(index, items.length - 1))
-    const src = source ?? ({ kind: 'manual' } as QueueSource)
+    const src = normalizeSource(source)
+    refillInFlight.current = false
     sourceRef.current = src
     setQueueSource(src)
     queueRef.current = items
@@ -218,6 +261,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setQueue(items)
     setQueueIndex(safeIndex)
     load(items[safeIndex])
+    maybePrefetchStation(safeIndex)
   }
 
   const playItem = (item: NowPlaying, items?: NowPlaying[]) => {
@@ -245,8 +289,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       playItem,
       playQueue,
       togglePlayPause,
-      next: () => advance(1),
-      previous: () => advance(-1),
+      next: () => { void continueOrEnd(1, true) },
+      previous: () => { void continueOrEnd(-1, true) },
       seek: (seconds) => {
         if (audioRef.current) {
           audioRef.current.currentTime = seconds
@@ -264,5 +308,3 @@ export const usePlayback = () => {
   if (!context) throw new Error('PlaybackProvider missing')
   return context
 }
-
-
