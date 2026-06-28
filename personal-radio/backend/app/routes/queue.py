@@ -46,7 +46,7 @@ class PlaylistQueueRequest(BaseModel):
 class SmartPlaylistQueueRequest(BaseModel):
     key: str
     shuffle: bool = False
-    limit: int = 100
+    limit: int = 1000
 
 
 ARTIST_GENRE_FALLBACKS = {
@@ -356,7 +356,7 @@ def no_repeats(tracks: list[models.Track], limit: int, artist_loose: bool = Fals
     return out
 
 
-def smart_track_ids(db: Session, key: str, limit: int = 100) -> list[int]:
+def smart_track_ids(db: Session, key: str, limit: int = 1000) -> list[int]:
     limit = max(1, min(limit, 1000))
     if key == 'favorites':
         return [
@@ -1050,9 +1050,16 @@ def station_queue_impl(req: StationQueueRequest, db: Session = Depends(get_db)):
                 candidate_pool.extend(q.filter(models.Track.genre.ilike(seed_genre)).limit(min(limit * 20, song_candidate_cap)).all())
             fav_ids = list(favorite_ids(db))[:min(limit * 5, 500)]
             if fav_ids:
-                candidate_pool.extend(q.filter(models.Track.id.in_(fav_ids)).all())
+                fav_tracks = q.filter(models.Track.id.in_(fav_ids)).all()
+                if seed_genre:
+                    fav_tracks = [t for t in fav_tracks if track_matches_genre(t, seed_genre, radio_profile(db, t, profile_cache))]
+                candidate_pool.extend(fav_tracks)
             if len(candidate_pool) < limit:
-                candidate_pool.extend(q.order_by(models.Track.created_at.desc(), models.Track.last_indexed_at.desc()).limit(min(limit * 20, song_candidate_cap)).all())
+                recent_pool = q.order_by(models.Track.created_at.desc(), models.Track.last_indexed_at.desc()).limit(min(limit * 20, song_candidate_cap)).all()
+                adjacent_recent = [t for t in recent_pool if seed_genre and track_matches_genre(t, seed_genre, radio_profile(db, t, profile_cache))]
+                candidate_pool.extend(adjacent_recent)
+                if len(candidate_pool) < max(10, int(limit * 0.35)):
+                    candidate_pool.extend(recent_pool)
         candidates = [t for t in unique_tracks_cap(candidate_pool, song_candidate_cap) if t.id not in down and t.id != seed_track.id]
         if exclude_set and len([t for t in candidates if t.id not in exclude_set]) >= 10:
             candidates = [t for t in candidates if t.id not in exclude_set]
@@ -1158,7 +1165,7 @@ def album_queue(req: AlbumQueueRequest, db: Session = Depends(get_db)):
         db.query(models.Track)
         .filter_by(artist=req.artist, album=req.album)
         .order_by(models.Track.relative_path, models.Track.title)
-        .limit(min(req.limit, 500))
+        .limit(min(max(req.limit, 1), 2000))
         .all()
     )
     if req.shuffle:
@@ -1168,16 +1175,17 @@ def album_queue(req: AlbumQueueRequest, db: Session = Depends(get_db)):
 
 @router.post('/artist')
 def artist_queue(req: ArtistQueueRequest, db: Session = Depends(get_db)):
+    max_tracks = min(max(req.limit, 1), 5000)
     tracks = (
         db.query(models.Track)
         .filter(or_(models.Track.artist == req.artist, models.Track.album_artist == req.artist))
-        .limit(min(req.limit * 8, 500))
+        .order_by(models.Track.album, models.Track.relative_path, models.Track.title)
+        .limit(max_tracks)
         .all()
     )
-    random.shuffle(tracks)
-    if not req.shuffle:
-        tracks = score_tracks(db, tracks, 'artist')
-    return payload(no_repeats(choose_preferred_tracks(tracks, mode="radio"), min(req.limit, 100), artist_loose=True, avoid_title_dups=True))
+    if req.shuffle:
+        random.shuffle(tracks)
+    return payload(tracks)
 
 
 @router.post('/playlist')
@@ -1209,6 +1217,8 @@ def smart_playlist_queue(req: SmartPlaylistQueueRequest, db: Session = Depends(g
 @router.get('/current')
 def get_current_queue():
     return {'queue': []}
+
+
 
 
 

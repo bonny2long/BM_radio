@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+﻿import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { getStationQueue, logPlaybackEvent, updateAudiobookProgress } from '../api'
 import { trackToNowPlaying } from '../utils/mediaMappers'
 
@@ -52,6 +52,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const sourceRef = useRef<QueueSource | null>(null)
   const lastSaved = useRef(0)
   const pendingStart = useRef(0)
+  const refillInFlight = useRef(false)
 
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null)
   const [queue, setQueue] = useState<NowPlaying[]>([])
@@ -106,6 +107,33 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     void el.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false))
   }, [event])
 
+  const refillStationQueue = useCallback((startWhenReady = false) => {
+    const src = sourceRef.current
+    if (src?.kind !== 'station' || refillInFlight.current) return
+    const excludeIds = queueRef.current.map(item => item.id).slice(-200)
+    refillInFlight.current = true
+    void getStationQueue(src.stationType, src.seedValue ?? null, 50, excludeIds)
+      .then(result => {
+        const existing = new Set(queueRef.current.map(item => item.id))
+        const newItems = result.queue
+          .filter(track => !existing.has(track.id))
+          .map(track => trackToNowPlaying(track, { stationName: src.stationName }))
+        if (!newItems.length) return
+        const startIndex = queueRef.current.length
+        const merged = [...queueRef.current, ...newItems]
+        queueRef.current = merged
+        setQueue(merged)
+        sourceRef.current = src
+        setQueueSource(src)
+        if (startWhenReady) {
+          indexRef.current = startIndex
+          setQueueIndex(startIndex)
+          load(merged[startIndex])
+        }
+      })
+      .catch(() => {})
+      .finally(() => { refillInFlight.current = false })
+  }, [load])
   const advance = useCallback((step: number) => {
     const next = indexRef.current + step
     if (next < 0 || next >= queueRef.current.length) return
@@ -113,7 +141,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     indexRef.current = next
     setQueueIndex(next)
     load(queueRef.current[next])
-  }, [event, load])
+    if (sourceRef.current?.kind === 'station' && queueRef.current.length - next <= 5) {
+      refillStationQueue(false)
+    }
+  }, [event, load, refillStationQueue])
 
   useEffect(() => {
     const el = new Audio()
@@ -145,23 +176,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      const src = sourceRef.current
-      if (src?.kind !== 'station') return
-
-      const excludeIds = queueRef.current.slice(-100).map(item => item.id)
-      void getStationQueue(src.stationType, src.seedValue ?? null, 50, excludeIds)
-        .then(result => {
-          if (!result.queue.length) return
-          const newItems = result.queue.map(track => trackToNowPlaying(track, { stationName: src.stationName }))
-          sourceRef.current = src
-          setQueueSource(src)
-          queueRef.current = newItems
-          indexRef.current = 0
-          setQueue(newItems)
-          setQueueIndex(0)
-          load(newItems[0])
-        })
-        .catch(() => {})
+      refillStationQueue(true)
     }
     const fail = () => {
       setIsPlaying(false)
@@ -184,7 +199,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       el.removeEventListener('ended', ended)
       el.removeEventListener('error', fail)
     }
-  }, [advance, event, load, saveProgress])
+  }, [advance, event, load, refillStationQueue, saveProgress])
 
   useEffect(() => {
     if (!nowPlaying || nowPlaying.mode !== 'audiobook' || currentTime - lastSaved.current < 15) return
@@ -249,3 +264,5 @@ export const usePlayback = () => {
   if (!context) throw new Error('PlaybackProvider missing')
   return context
 }
+
+

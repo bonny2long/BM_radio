@@ -50,7 +50,7 @@ export const createStation=(name:string,type:string,seedValue?:string|null,seedT
 export const deleteStation=(id:number)=>request<{deleted:boolean}>('/stations/'+id,{method:'DELETE'}).then(r=>{invalidateStationCaches();return r})
 export const favoriteStation=(id:number)=>request<{favorite:boolean}>(`/stations/${id}/favorite`,{method:'POST'}).then(r=>{invalidateStationCaches();return r})
 const stationQueueRequests=new Map<string,Promise<{queue:Track[]}>>()
-export const getStationQueue=(type:string,seedValue?:string|null,limit=50,excludeTrackIds:number[]=[])=>{const cappedExcludeIds=excludeTrackIds.slice(-100);const key=JSON.stringify({type,seedValue:seedValue??null,limit,excludeTrackIds:cappedExcludeIds});const existing=stationQueueRequests.get(key);if(existing)return existing;const promise=request<{queue:Track[]}>('/queue/station',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,seed_value:seedValue,limit,shuffle:true,exclude_track_ids:cappedExcludeIds})}).finally(()=>stationQueueRequests.delete(key));stationQueueRequests.set(key,promise);return promise}
+export const getStationQueue=(type:string,seedValue?:string|null,limit=50,excludeTrackIds:number[]=[])=>{const cappedExcludeIds=excludeTrackIds.slice(-200);const key=JSON.stringify({type,seedValue:seedValue??null,limit,excludeTrackIds:cappedExcludeIds});const existing=stationQueueRequests.get(key);if(existing)return existing;const promise=request<{queue:Track[]}>('/queue/station',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,seed_value:seedValue,limit,shuffle:true,exclude_track_ids:cappedExcludeIds})}).finally(()=>stationQueueRequests.delete(key));stationQueueRequests.set(key,promise);return promise}
 export const updateAudiobookProgress=(id:number,p:{chapter_id:number;position_seconds:number;progress_percent:number})=>request(`/audiobooks/${id}/progress`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)})
 export const favoriteAudiobook=(id:number)=>request<{favorite:boolean}>(`/audiobooks/${id}/favorite`,{method:'POST'})
 export const getArtists=()=>request<ArtistSummary[]>('/library/artists')
@@ -59,8 +59,8 @@ export const getArtistDetail=(artist:string)=>request<ArtistDetail>(`/library/ar
 export const getTracks=(limit=100,offset=0)=>request<Track[]>(`/library/tracks?limit=${limit}&offset=${offset}`)
 export const searchTracks=(q:string)=>request<Track[]>(`/library/search?q=${encodeURIComponent(q)}`)
 export const searchAll=(q:string)=>request<SearchResults>(`/search?q=${encodeURIComponent(q)}`)
-export const getArtistQueue=(artist:string,limit=50,shuffle=false)=>request<{queue:Track[]}>('/queue/artist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({artist,limit,shuffle})})
-export const getAlbumQueue=(artist:string,album:string,limit=500,shuffle=false)=>request<{queue:Track[]}>('/queue/album',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({artist,album,limit,shuffle})})
+export const getArtistQueue=(artist:string,limit=1000,shuffle=false)=>request<{queue:Track[]}>('/queue/artist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({artist,limit,shuffle})})
+export const getAlbumQueue=(artist:string,album:string,limit=2000,shuffle=false)=>request<{queue:Track[]}>('/queue/album',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({artist,album,limit,shuffle})})
 export const finishAudiobook=(id:number)=>request<{book_status:string}>(`/audiobooks/${id}/finished`,{method:'POST'})
 export const resetAudiobook=(id:number)=>request<{book_status:string}>(`/audiobooks/${id}/not-started`,{method:'POST'})
 export const setTrackFeedback=(trackId:number,value:'thumbs_up'|'thumbs_down'|'neutral')=>request<{value:string}>(`/playback/tracks/${trackId}/feedback`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value})}).then(r=>{invalidateStationCaches();return r})
@@ -81,9 +81,11 @@ export const addTrackToPlaylist=(playlistId:number,trackId:number)=>request<Play
 export const removeTrackFromPlaylist=(playlistId:number,trackId:number)=>request<PlaylistDetail>(`/playlists/${playlistId}/tracks/${trackId}`,{method:'DELETE'}).then(r=>{invalidatePlaylistCaches();return r})
 export const getPlaylistQueue=(playlistId:number,shuffle=false)=>request<{queue:Track[]}>('/queue/playlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({playlist_id:playlistId,shuffle})})
 export const getSmartPlaylists=()=>cachedRequest<SmartPlaylistSummary[]>('smart-playlists','/playlists/smart',15000)
-export const getSmartPlaylistQueue=(key:string,shuffle=false,limit=100)=>request<{queue:Track[]}>('/queue/smart-playlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,shuffle,limit})})
+export const getSmartPlaylistQueue=(key:string,shuffle=false,limit=1000)=>request<{queue:Track[]}>('/queue/smart-playlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,shuffle,limit})})
 export const createPlaylistFromTrackList=(name:string,trackIds:number[],description?:string)=>request<PlaylistDetail>('/playlists/from-track-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,description,track_ids:trackIds})}).then(r=>{invalidatePlaylistCaches();return r})
 export const getLibraryIntegrity=()=>request<LibraryIntegrityReport>('/library/integrity')
+
+
 
 
 
