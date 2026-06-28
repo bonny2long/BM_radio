@@ -10,6 +10,7 @@ export function peekCache<T>(key:string):T|null{const hit=cache.get(key);if(hit?
 export function hasFreshCache(key:string):boolean{return peekCache(key)!==null}
 function invalidateLibraryCaches(){invalidateCache('library-summary');invalidateCache('albums-page');invalidateCache('recent-albums');invalidateCache('artists-page')}
 function invalidateStationCaches(){invalidateCache('stations')}
+function invalidatePlaylistCaches(){invalidateCache('playlists');invalidateCache('smart-playlists')}
 export type LibrarySummary={tracks:number;artists:number;albums:number}
 export type AudiobookSummary={available:number;not_started:number;in_progress:number;finished:number;favorites:number;total_listening_seconds:number}
 export type Track={id:number;title:string;artist:string;album:string;year?:number|null;genre?:string|null;duration_seconds?:number;stream_url:string;cover_url?:string|null}
@@ -71,18 +72,20 @@ export const logPlaybackEvent=(event:{event_type:string;track_id?:number;audiobo
 export const getTracksPage=(limit=100,offset=0)=>request<TrackPage>(`/library/tracks-page?limit=${limit}&offset=${offset}`)
 export const getArtistTracks=(artist:string,limit=50,offset=0)=>request<TrackPage>(`/library/artists/${encodeURIComponent(artist)}/tracks?limit=${limit}&offset=${offset}`)
 
-export const getPlaylists=()=>request<PlaylistSummary[]>('/playlists')
-export const createPlaylist=(name:string,description?:string)=>request<PlaylistSummary>('/playlists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,description})})
-export const deletePlaylist=(id:number)=>request<{deleted:boolean}>('/playlists/'+id,{method:'DELETE'})
-export const renamePlaylist=(id:number,name:string)=>request<PlaylistSummary>('/playlists/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})})
+export const getPlaylists=()=>cachedRequest<PlaylistSummary[]>('playlists','/playlists',15000)
+export const createPlaylist=(name:string,description?:string)=>request<PlaylistSummary>('/playlists',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,description})}).then(r=>{invalidatePlaylistCaches();return r})
+export const deletePlaylist=(id:number)=>request<{deleted:boolean}>('/playlists/'+id,{method:'DELETE'}).then(r=>{invalidatePlaylistCaches();return r})
+export const renamePlaylist=(id:number,name:string)=>request<PlaylistSummary>('/playlists/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})}).then(r=>{invalidatePlaylistCaches();return r})
 export const getPlaylist=(id:number)=>request<PlaylistDetail>(`/playlists/${id}`)
-export const addTrackToPlaylist=(playlistId:number,trackId:number)=>request<PlaylistDetail>(`/playlists/${playlistId}/tracks`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({track_id:trackId})})
-export const removeTrackFromPlaylist=(playlistId:number,trackId:number)=>request<PlaylistDetail>(`/playlists/${playlistId}/tracks/${trackId}`,{method:'DELETE'})
+export const addTrackToPlaylist=(playlistId:number,trackId:number)=>request<PlaylistDetail>(`/playlists/${playlistId}/tracks`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({track_id:trackId})}).then(r=>{invalidatePlaylistCaches();return r})
+export const removeTrackFromPlaylist=(playlistId:number,trackId:number)=>request<PlaylistDetail>(`/playlists/${playlistId}/tracks/${trackId}`,{method:'DELETE'}).then(r=>{invalidatePlaylistCaches();return r})
 export const getPlaylistQueue=(playlistId:number,shuffle=false)=>request<{queue:Track[]}>('/queue/playlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({playlist_id:playlistId,shuffle})})
-export const getSmartPlaylists=()=>request<SmartPlaylistSummary[]>('/playlists/smart')
+export const getSmartPlaylists=()=>cachedRequest<SmartPlaylistSummary[]>('smart-playlists','/playlists/smart',15000)
 export const getSmartPlaylistQueue=(key:string,shuffle=false,limit=100)=>request<{queue:Track[]}>('/queue/smart-playlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,shuffle,limit})})
-export const createPlaylistFromTrackList=(name:string,trackIds:number[],description?:string)=>request<PlaylistDetail>('/playlists/from-track-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,description,track_ids:trackIds})})
+export const createPlaylistFromTrackList=(name:string,trackIds:number[],description?:string)=>request<PlaylistDetail>('/playlists/from-track-list',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,description,track_ids:trackIds})}).then(r=>{invalidatePlaylistCaches();return r})
 export const getLibraryIntegrity=()=>request<LibraryIntegrityReport>('/library/integrity')
+
+
 
 
 

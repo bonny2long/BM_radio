@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+﻿import { useEffect, useRef, type ReactNode } from 'react'
 
 type BottomSheetProps = {
   open: boolean
@@ -8,22 +8,22 @@ type BottomSheetProps = {
 }
 
 export default function BottomSheet({ open, title, children, onClose }: BottomSheetProps) {
-  const closeRef = useRef<HTMLButtonElement>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') onCloseRef.current()
     }
     document.addEventListener('keydown', onKey)
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    window.setTimeout(() => closeRef.current?.focus(), 0)
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = previous
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
@@ -33,7 +33,7 @@ export default function BottomSheet({ open, title, children, onClose }: BottomSh
         <div className="bottom-sheet-handle" />
         <div className="bottom-sheet-header">
           <h2>{title}</h2>
-          <button ref={closeRef} onClick={onClose} aria-label="Close" className="bottom-sheet-close">×</button>
+          <button onClick={onClose} aria-label="Close" className="bottom-sheet-close">×</button>
         </div>
         <div className="bottom-sheet-body">{children}</div>
       </section>

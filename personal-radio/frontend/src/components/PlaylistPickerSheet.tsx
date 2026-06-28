@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { addTrackToPlaylist, createPlaylist, getPlaylist, getPlaylists, type PlaylistSummary } from '../api'
 import BottomSheet from './BottomSheet'
 
@@ -8,22 +8,31 @@ type PlaylistPickerSheetProps = {
   trackTitle?: string
   onClose: () => void
   onAdded?: () => void
+  embedded?: boolean
+  onBack?: () => void
 }
 
-export default function PlaylistPickerSheet({ open, trackId, trackTitle, onClose, onAdded }: PlaylistPickerSheetProps) {
+function PlaylistPickerContent({ open, trackId, trackTitle, onClose, onAdded, onBack }: PlaylistPickerSheetProps) {
   const [playlists, setPlaylists] = useState<PlaylistSummary[]>([])
   const [newPlaylist, setNewPlaylist] = useState('')
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const load = () => void getPlaylists().then(setPlaylists).catch(() => setStatus('Could not load playlists.'))
+  const load = () => {
+    setLoading(true)
+    void getPlaylists()
+      .then(setPlaylists)
+      .catch(() => setStatus('Could not load playlists.'))
+      .finally(() => setLoading(false))
+  }
 
   useEffect(() => {
     if (!open) return
     setStatus('')
     setNewPlaylist('')
     load()
-  }, [open])
+  }, [open, trackId])
 
   const addTo = async (playlist: PlaylistSummary) => {
     if (!trackId || typeof playlist.id !== 'number') return
@@ -40,7 +49,7 @@ export default function PlaylistPickerSheet({ open, trackId, trackTitle, onClose
       onAdded?.()
       load()
     } catch {
-      setStatus('Could not add track.')
+      setStatus('Could not add track')
     } finally {
       setBusy(false)
     }
@@ -55,36 +64,39 @@ export default function PlaylistPickerSheet({ open, trackId, trackTitle, onClose
       const playlist = await createPlaylist(name)
       if (typeof playlist.id === 'number') await addTrackToPlaylist(playlist.id, trackId)
       setNewPlaylist('')
-      setStatus('Created and added')
+      setStatus('Added to playlist')
       onAdded?.()
       load()
     } catch {
-      setStatus('Could not create playlist.')
+      setStatus('Could not add track')
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <BottomSheet open={open} title="Add to playlist" onClose={onClose}>
-      {trackTitle && <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 }}>{trackTitle}</p>}
+    <div>
+      {onBack && <button onClick={onBack} style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 700, marginBottom: 12 }}>← Back to actions</button>}
+      {trackTitle && <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{trackTitle}</p>}
       <p className="section-label" style={{ marginBottom: 8 }}>Existing playlists</p>
       <div style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
-        {playlists.map(playlist => (
+        {loading && <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Loading playlists…</p>}
+        {!loading && playlists.map(playlist => (
           <button
             key={playlist.id}
             disabled={busy || !trackId}
             onClick={() => void addTo(playlist)}
-            style={{ display: 'flex', justifyContent: 'space-between', gap: 10, textAlign: 'left', padding: '12px 13px', borderRadius: 'var(--radius-m)', background: 'var(--bg-surface)', color: 'var(--text-primary)', opacity: busy ? .7 : 1 }}
+            className="card-premium"
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, textAlign: 'left', padding: '12px 13px', color: 'var(--text-primary)', opacity: busy ? .7 : 1 }}
           >
             <span style={{ minWidth: 0 }}>
               <strong style={{ display: 'block', fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{playlist.name}</strong>
-              {playlist.description && <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>{playlist.description}</span>}
+              <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{playlist.track_count} {playlist.track_count === 1 ? 'track' : 'tracks'}</span>
             </span>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', flexShrink: 0 }}>{playlist.track_count}</span>
+            <span style={{ fontSize: 12, color: 'var(--accent-primary)', fontWeight: 800, flexShrink: 0 }}>Add</span>
           </button>
         ))}
-        {!playlists.length && <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No playlists yet.</p>}
+        {!loading && !playlists.length && <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No playlists yet.</p>}
       </div>
       <p className="section-label" style={{ marginBottom: 8 }}>Create new playlist</p>
       <div style={{ display: 'flex', gap: 8 }}>
@@ -105,6 +117,17 @@ export default function PlaylistPickerSheet({ open, trackId, trackTitle, onClose
       </div>
       {status && <p style={{ fontSize: 12, color: status.includes('Could') ? '#ff8888' : 'var(--accent-primary)', marginTop: 12 }}>{status}</p>}
       <button onClick={onClose} style={{ width: '100%', padding: 12, marginTop: 14, borderRadius: 'var(--radius-pill)', background: 'var(--bg-surface)', color: 'var(--text-primary)', fontWeight: 800 }}>Done</button>
+    </div>
+  )
+}
+
+export default function PlaylistPickerSheet(props: PlaylistPickerSheetProps) {
+  if (props.embedded) return <PlaylistPickerContent {...props} />
+
+  return (
+    <BottomSheet open={props.open} title="Add to playlist" onClose={props.onClose}>
+      <PlaylistPickerContent {...props} />
     </BottomSheet>
   )
 }
+
