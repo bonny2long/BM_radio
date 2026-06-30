@@ -597,6 +597,35 @@ def pick(side, path_data, tags, key):
 
 
 
+def _pending_artist_profile(db: Session, artist: str | None):
+    target = normalize_compare(artist)
+    if not target:
+        return None
+    for item in db.new:
+        if isinstance(item, models.ArtistRadioProfile) and normalize_compare(item.artist) == target:
+            return item
+    return None
+
+
+def _pending_album_profile(db: Session, artist: str | None, album: str | None):
+    target = (normalize_compare(artist), normalize_compare(album))
+    if not target[0] or not target[1]:
+        return None
+    for item in db.new:
+        if isinstance(item, models.AlbumRadioProfile) and (normalize_compare(item.artist), normalize_compare(item.album)) == target:
+            return item
+    return None
+
+
+def _pending_track_profile(db: Session, track_id: int | None):
+    if not track_id:
+        return None
+    for item in db.new:
+        if isinstance(item, models.TrackRadioProfile) and item.track_id == track_id:
+            return item
+    return None
+
+
 def seed_aa_radio_profiles(db: Session, track: models.Track, manifest_meta: dict[str, Any]) -> None:
     if manifest_meta.get('metadata_source') != 'archive_assistant_manifest':
         return
@@ -608,10 +637,17 @@ def seed_aa_radio_profiles(db: Session, track: models.Track, manifest_meta: dict
     album_artist = manifest_meta.get('album_artist') or getattr(track, 'album_artist', None) or artist
     album = manifest_meta.get('album') or getattr(track, 'album', None)
 
+    seen_artist_keys: set[str] = set()
     for artist_name in [artist, album_artist]:
-        if not artist_name:
+        artist_name = str(artist_name or '').strip()
+        artist_key = normalize_compare(artist_name)
+        if not artist_name or not artist_key or artist_key in seen_artist_keys:
             continue
-        row = db.query(models.ArtistRadioProfile).filter_by(artist=artist_name).one_or_none()
+        seen_artist_keys.add(artist_key)
+        row = _pending_artist_profile(db, artist_name)
+        if not row:
+            with db.no_autoflush:
+                row = db.query(models.ArtistRadioProfile).filter_by(artist=artist_name).one_or_none()
         if row and row.source == 'manual':
             continue
         if not row:
@@ -622,7 +658,10 @@ def seed_aa_radio_profiles(db: Session, track: models.Track, manifest_meta: dict
             row.source = 'archive_assistant_manifest'
 
     if album_artist and album:
-        row = db.query(models.AlbumRadioProfile).filter_by(artist=album_artist, album=album).one_or_none()
+        row = _pending_album_profile(db, album_artist, album)
+        if not row:
+            with db.no_autoflush:
+                row = db.query(models.AlbumRadioProfile).filter_by(artist=album_artist, album=album).one_or_none()
         if not (row and row.source == 'manual'):
             if not row:
                 row = models.AlbumRadioProfile(artist=album_artist, album=album, source='archive_assistant_manifest')
@@ -631,7 +670,10 @@ def seed_aa_radio_profiles(db: Session, track: models.Track, manifest_meta: dict
                 row.primary_genre = primary_genre
                 row.source = 'archive_assistant_manifest'
 
-    row = db.query(models.TrackRadioProfile).filter_by(track_id=track.id).one_or_none()
+    row = _pending_track_profile(db, getattr(track, 'id', None))
+    if not row:
+        with db.no_autoflush:
+            row = db.query(models.TrackRadioProfile).filter_by(track_id=track.id).one_or_none()
     if row and row.source == 'manual':
         return
     if not row:
