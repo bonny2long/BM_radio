@@ -5,10 +5,12 @@ from . import models, db
 from .config import settings
 from .radio_profiles import seed_default_radio_profiles
 from .perf import ensure_performance_indexes, install_performance_tools
+from .schema_maintenance import ensure_manifest_ingestion_columns
 from .routes import health, library, stations, audiobooks, queue, playback, media, search, playlists, radio_profiles, library_integrity
 
 # Create database tables
 models.Base.metadata.create_all(bind=db.engine)
+ensure_manifest_ingestion_columns(db.engine)
 ensure_performance_indexes()
 with db.SessionLocal() as seed_db:
     seed_default_radio_profiles(seed_db)
