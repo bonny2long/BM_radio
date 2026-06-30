@@ -419,7 +419,7 @@ def explain_score_part(label: str, value: float, detail: str | None = None) -> d
 
 
 def profile_debug(profile: dict) -> dict:
-    return {
+    debug_dict = {
         'primary_genre': profile.get('primary_genre'),
         'subgenres': profile.get('subgenres', []),
         'moods': profile.get('moods', []),
@@ -427,6 +427,10 @@ def profile_debug(profile: dict) -> dict:
         'related_artists': profile.get('related_artists', []),
         'source': profile.get('source'),
     }
+    if profile.get('enrichment_source'):
+        debug_dict['enrichment_source'] = profile.get('enrichment_source')
+        debug_dict['enrichment_applied'] = profile.get('enrichment_applied')
+    return debug_dict
 
 
 def debug_track_row(track: models.Track, score: float, score_parts: list[dict], profile: dict, reason: str | None = None) -> dict:

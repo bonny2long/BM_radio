@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from . import models
+from . import models, radio_genres
 
 GENRE_ALIASES = {
     'hip hop': 'hip-hop',
@@ -15,6 +15,49 @@ GENRE_ALIASES = {
     'r&b': 'r&b',
     'rnb': 'r&b',
     'rhythm and blues': 'r&b',
+}
+
+GENRE_FAMILY_PROFILE_DEFAULTS = {
+    'electronic': {
+        'subgenres': ['electronic', 'electronica', 'idm', 'house', 'edm', 'techno', 'ambient electronic'],
+        'moods': ['futuristic', 'atmospheric', 'hypnotic'],
+        'energy': 'medium',
+    },
+    'hip-hop': {
+        'subgenres': ['hip-hop', 'rap', 'southern hip-hop', 'jazz rap', 'alternative hip-hop', 'mixtape'],
+        'moods': ['rhythmic', 'confident'],
+        'energy': 'medium',
+    },
+    'rock': {
+        'subgenres': ['rock', 'classic rock', 'progressive rock', 'alternative rock'],
+        'moods': ['driving'],
+        'energy': 'medium',
+    },
+    'jazz': {
+        'subgenres': ['jazz', 'bebop', 'hard bop', 'modal jazz', 'cool jazz'],
+        'moods': ['improvisational', 'warm'],
+        'energy': 'medium',
+    },
+    'pop': {
+        'subgenres': ['pop', 'dance pop', 'electropop'],
+        'moods': ['bright', 'melodic'],
+        'energy': 'medium',
+    },
+    'r&b': {
+        'subgenres': ['r&b', 'soul', 'funk', 'neo soul'],
+        'moods': ['groovy', 'smooth'],
+        'energy': 'medium',
+    },
+}
+
+ARTIST_PROFILE_ENRICHMENT = {
+    'aphex twin': {
+        'primary_genre': 'IDM',
+        'subgenres': ['idm', 'experimental electronic', 'ambient electronic', 'electronica'],
+        'moods': ['atmospheric', 'experimental', 'hypnotic'],
+        'energy': 'medium',
+        'related_artists': ['daft punk', 'deadmau5'],
+    }
 }
 
 DEFAULT_ARTIST_RADIO_PROFILES: dict[str, dict[str, Any]] = {
@@ -89,6 +132,44 @@ def merge_profile(base: dict[str, Any], override: dict[str, Any]) -> dict[str, A
     return merged
 
 
+def is_thin_radio_profile(profile: dict[str, Any]) -> bool:
+    if not profile:
+        return True
+    if profile.get('subgenres') or profile.get('moods') or profile.get('energy') or profile.get('related_artists'):
+        return False
+    return True
+
+
+def enrich_profile(profile: dict[str, Any], artist: str | None) -> dict[str, Any]:
+    if not profile or not is_thin_radio_profile(profile):
+        return profile
+    
+    enriched = dict(profile)
+    artist_key = normalize_token(artist)
+    override = ARTIST_PROFILE_ENRICHMENT.get(artist_key) if artist_key else None
+    
+    if override:
+        for k, v in override.items():
+            if not enriched.get(k):
+                enriched[k] = v
+        enriched['enrichment_source'] = 'bm_radio_artist_enrichment'
+        enriched['enrichment_applied'] = True
+        return enriched
+        
+    primary = profile.get('primary_genre')
+    if primary:
+        family = radio_genres.genre_family(primary)
+        defaults = GENRE_FAMILY_PROFILE_DEFAULTS.get(family) if family else None
+        if defaults:
+            for k, v in defaults.items():
+                if not enriched.get(k):
+                    enriched[k] = v
+            enriched['enrichment_source'] = 'bm_radio_genre_family'
+            enriched['enrichment_applied'] = True
+            
+    return enriched
+
+
 def fallback_genre(track: models.Track) -> str | None:
     genre = getattr(track, 'primary_genre', None) or track.genre or None
     if not genre:
@@ -139,7 +220,7 @@ def profile_for_track(db: Session, track: models.Track) -> dict[str, Any]:
         profile = merge_profile(profile, row_profile(track_row))
     if not profile.get('primary_genre'):
         profile['primary_genre'] = fallback_genre(track)
-    return profile
+    return enrich_profile(profile, track.artist)
 
 
 def load_radio_profile_cache(db: Session) -> dict[str, Any]:
@@ -188,7 +269,7 @@ def profile_for_track_cached(track: models.Track, cache: dict[str, Any]) -> dict
         profile = merge_profile(profile, track_profile)
     if not profile.get('primary_genre'):
         profile['primary_genre'] = fallback_genre(track)
-    return profile
+    return enrich_profile(profile, track.artist)
 def artist_profile_payload(row: models.ArtistRadioProfile) -> dict[str, Any]:
     data = row_profile(row)
     return {'artist': row.artist, 'primary_genre': data['primary_genre'], 'subgenres': data['subgenres'], 'moods': data['moods'], 'energy': data['energy'], 'era': data['era'], 'related_artists': data['related_artists'], 'source': row.source}
