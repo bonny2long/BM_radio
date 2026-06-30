@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..config import settings
 from ..media_identity import duration_bucket, music_recording_key, music_track_release_key
+from .archive_assistant_manifest import extract_music_manifest_metadata, load_aa_manifest_context
 from .path_safety import is_approved_path, safe_media_files
 
 MUSIC_EXTENSIONS = {'.mp3', '.flac', '.m4a', '.aac', '.ogg', '.opus', '.wav'}
@@ -595,6 +596,51 @@ def pick(side, path_data, tags, key):
     return None if generic(v) else v
 
 
+
+def seed_aa_radio_profiles(db: Session, track: models.Track, manifest_meta: dict[str, Any]) -> None:
+    if manifest_meta.get('metadata_source') != 'archive_assistant_manifest':
+        return
+    primary_genre = manifest_meta.get('primary_genre') or manifest_meta.get('genre')
+    if not primary_genre:
+        return
+
+    artist = manifest_meta.get('artist') or getattr(track, 'artist', None)
+    album_artist = manifest_meta.get('album_artist') or getattr(track, 'album_artist', None) or artist
+    album = manifest_meta.get('album') or getattr(track, 'album', None)
+
+    for artist_name in [artist, album_artist]:
+        if not artist_name:
+            continue
+        row = db.query(models.ArtistRadioProfile).filter_by(artist=artist_name).one_or_none()
+        if row and row.source == 'manual':
+            continue
+        if not row:
+            row = models.ArtistRadioProfile(artist=artist_name, source='archive_assistant_manifest')
+            db.add(row)
+        if not row.primary_genre or row.source != 'manual':
+            row.primary_genre = primary_genre
+            row.source = 'archive_assistant_manifest'
+
+    if album_artist and album:
+        row = db.query(models.AlbumRadioProfile).filter_by(artist=album_artist, album=album).one_or_none()
+        if not (row and row.source == 'manual'):
+            if not row:
+                row = models.AlbumRadioProfile(artist=album_artist, album=album, source='archive_assistant_manifest')
+                db.add(row)
+            if not row.primary_genre or row.source != 'manual':
+                row.primary_genre = primary_genre
+                row.source = 'archive_assistant_manifest'
+
+    row = db.query(models.TrackRadioProfile).filter_by(track_id=track.id).one_or_none()
+    if row and row.source == 'manual':
+        return
+    if not row:
+        row = models.TrackRadioProfile(track_id=track.id, source='archive_assistant_manifest')
+        db.add(row)
+    if not row.primary_genre or row.source != 'manual':
+        row.primary_genre = primary_genre
+        row.source = 'archive_assistant_manifest'
+
 def find_cover(album_dir: Path, roots: list[Path]) -> str | None:
     dirs = [album_dir, album_dir / 'metadata', album_dir / 'Artwork', album_dir / 'artwork', album_dir / 'Covers', album_dir / 'covers']
     for directory in dirs:
@@ -634,6 +680,7 @@ def scan_music(db: Session):
     }
     release_seen: dict[str, dict[str, Any]] = {}
     recording_seen: dict[str, dict[str, Any]] = {}
+    manifest_cache: dict[str, Any] = {}
     for existing_track in db.query(models.Track).all():
         try:
             _, existing_track_number, _ = parse_track_number_title(Path(existing_track.relative_path or existing_track.path or '').stem)
@@ -649,12 +696,17 @@ def scan_music(db: Session):
                 tags = read_metadata(path)
                 path_data = infer(path, root)
                 side = flatten_sidecar(sidecar(path, root))
+                aa_context = load_aa_manifest_context(path, existing, manifest_cache)
+                aa_meta = extract_music_manifest_metadata(aa_context, path)
                 is_discography = path_data.get('library_area') == 'Discographies'
 
-                artist = path_data.get('artist') if is_discography else (pick(side, path_data, tags, 'artist') or path.parent.name)
-                album_artist = path_data.get('album_artist') if is_discography else (pick(side, path_data, tags, 'album_artist') or artist)
-                album = clean_album(path_data.get('album') if is_discography else (pick(side, path_data, tags, 'album') or path_data.get('album') or path.parent.name))
-                year = path_data.get('year') if is_discography else pick(side, path_data, tags, 'year')
+                fallback_artist = path_data.get('artist') if is_discography else (pick(side, path_data, tags, 'artist') or path.parent.name)
+                artist = aa_meta.get('artist') or fallback_artist
+                fallback_album_artist = path_data.get('album_artist') if is_discography else (pick(side, path_data, tags, 'album_artist') or artist)
+                album_artist = aa_meta.get('album_artist') or fallback_album_artist or artist
+                fallback_album = path_data.get('album') if is_discography else (pick(side, path_data, tags, 'album') or path_data.get('album') or path.parent.name)
+                album = clean_album(aa_meta.get('album') or fallback_album)
+                year = aa_meta.get('year') or (path_data.get('year') if is_discography else pick(side, path_data, tags, 'year'))
 
                 embedded_title = tags.get('title')
                 raw_title = embedded_title or path.stem
@@ -663,7 +715,9 @@ def scan_music(db: Session):
                 cleaned_embedded_title = strip_known_leading_segments(embedded_title or '', artist=artist, album_artist=album_artist, album=album, year=year)
                 weak_title = is_weak_embedded_title(embedded_title, path_title, artist, album, year)
                 metadata_heavy = bool(embedded_title and cleaned_embedded_title and normalize_compare(cleaned_embedded_title) != normalize_compare(embedded_title))
-                if is_discography:
+                if aa_meta.get('title'):
+                    title = str(aa_meta.get('title')).strip()
+                elif is_discography:
                     title = path_title
                     if weak_title:
                         result['weak_titles_detected'] += 1
@@ -688,15 +742,22 @@ def scan_music(db: Session):
                     'artist': artist,
                     'album': album,
                     'album_artist': album_artist or artist,
-                    'genre': pick(side, path_data, tags, 'genre'),
+                    'genre': aa_meta.get('genre') or pick(side, path_data, tags, 'genre'),
                     'year': year,
                     'duration_seconds': tags.get('duration_seconds'),
                     'file_ext': path.suffix.lower(),
                     'library_area': path_data.get('library_area', 'Library'),
                     'cover_path': cover,
+                    'metadata_source': aa_meta.get('metadata_source') or ('embedded_tag' if any(tags.get(k) for k in ('title', 'artist', 'album', 'genre', 'year')) else 'path_inference'),
+                    'source_manifest_path': aa_meta.get('source_manifest_path'),
+                    'source_manifest_version': aa_meta.get('source_manifest_version'),
+                    'source_metadata_version': aa_meta.get('source_metadata_version'),
+                    'track_number': aa_meta.get('track_number') or path_data.get('track_number'),
+                    'disc_number': aa_meta.get('disc_number') or path_data.get('disc'),
+                    'primary_genre': aa_meta.get('primary_genre') or aa_meta.get('genre') or pick(side, path_data, tags, 'genre'),
                     'last_indexed_at': datetime.now(timezone.utc),
                 }
-                track_number = path_data.get('track_number')
+                track_number = data.get('track_number')
                 release_key = music_track_release_key(data['album_artist'], data['album'], data['title'], data['year'], track_number)
                 recording_key = music_recording_key(data['artist'], data['title'], data['duration_seconds'])
                 file_duration_bucket = duration_bucket(data['duration_seconds'], tolerance=5)
@@ -737,6 +798,7 @@ def scan_music(db: Session):
                     result['tracks_added'] += 1
                 release_seen[release_key] = {'id': getattr(track, 'id', None), 'path': str(path), 'duration_bucket': file_duration_bucket, 'title': data['title']}
                 recording_seen.setdefault(recording_key, {'id': getattr(track, 'id', None), 'path': str(path), 'release_key': release_key, 'title': data['title']})
+                seed_aa_radio_profiles(db, track, aa_meta)
                 result['tracks_scanned'] += 1
             except Exception as exc:
                 result['errors'].append(f'{path}: {exc}')

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..config import settings
 from ..media_identity import audiobook_edition_key, audiobook_work_key, duration_bucket, normalize_text
+from .archive_assistant_manifest import extract_audiobook_manifest_metadata, load_aa_manifest_context
 from .music_scanner import read_metadata
 from .path_safety import safe_media_files
 AUDIOBOOK_EXTENSIONS={'.mp3','.m4b','.m4a','.flac','.aac','.ogg','.opus'}
@@ -17,12 +18,16 @@ def _read_json(path:Path)->dict:
 def _merge_meta(target:dict,source:dict):
  for k,v in source.items():
   if v not in (None,'',[],{}) and target.get(k) in (None,'',[],{}):target[k]=v
-def load_audiobook_sidecar(book_path:Path)->dict:
+def load_audiobook_sidecar(book_path:Path, roots:list[Path]|None=None, cache:dict|None=None)->dict:
+ roots = roots or [book_path]
+ cache = cache if cache is not None else {}
+ aa_context = load_aa_manifest_context(book_path, roots, cache)
+ aa_meta = extract_audiobook_manifest_metadata(aa_context, book_path)
  meta_dir=book_path/'metadata';raw={}
  for name in ('audiobook.json','metadata.json','move_manifest.json'):
   data=_read_json(meta_dir/name)
   if data:raw[name]=data
- out={'title':None,'author':None,'year':None,'narrator':None,'series':None,'series_index':None,'contained_books':[],'original_release_name':None}
+ out={'title':aa_meta.get('title'),'author':aa_meta.get('author'),'year':aa_meta.get('year'),'narrator':aa_meta.get('narrator'),'series':aa_meta.get('series'),'series_index':aa_meta.get('series_index'),'contained_books':aa_meta.get('contained_books') or [],'original_release_name':None,'metadata_source':aa_meta.get('metadata_source'),'source_manifest_path':aa_meta.get('source_manifest_path'),'source_manifest_version':aa_meta.get('source_manifest_version'),'source_metadata_version':aa_meta.get('source_metadata_version')}
  candidates=[]
  for data in raw.values():
   if isinstance(data.get('metadata_json'),dict):candidates.append(data['metadata_json'])
@@ -58,6 +63,7 @@ def chapter_title(path,order,contained):
 def scan_audiobooks(db:Session):
  root=Path(settings.AUDIOBOOKS_ROOT);result={'status':'ok','audiobooks_scanned':0,'audiobooks_added':0,'audiobooks_updated':0,'chapters_scanned':0,'roots_scanned':[],'skipped_roots':[],'errors':[],'duplicates_skipped':0,'duplicates_suspected':0,'variants_detected':0,'duplicate_warnings':[]}
  if not root.is_dir():result['skipped_roots'].append(str(root));return result
+ manifest_cache={}
  edition_seen={}
  work_seen={}
  for existing in db.query(models.Audiobook).all():
@@ -72,7 +78,7 @@ def scan_audiobooks(db:Session):
   parts=path.relative_to(root).parts;book=root/parts[0]/parts[1] if len(parts)>1 else root/parts[0];groups.setdefault(book,[]).append(path)
  for book,chapters in groups.items():
   try:
-   chapters.sort(key=key);meta=load_audiobook_sidecar(book);title=meta.get('title') or re.sub(r'^\d{4}\s*-\s*','',book.name);author=meta.get('author') or book.parent.name;contained=meta.get('contained_books',[]);data={'relative_path':str(book.relative_to(root)),'title':title,'author':author,'narrator':meta.get('narrator'),'series':meta.get('series'),'year':meta.get('year'),'duration_seconds':0.0,'last_indexed_at':datetime.now(timezone.utc)};rows=[]
+   chapters.sort(key=key);meta=load_audiobook_sidecar(book,[root],manifest_cache);title=meta.get('title') or re.sub(r'^\d{4}\s*-\s*','',book.name);author=meta.get('author') or book.parent.name;contained=meta.get('contained_books',[]);data={'relative_path':str(book.relative_to(root)),'title':title,'author':author,'narrator':meta.get('narrator'),'series':meta.get('series'),'year':meta.get('year'),'duration_seconds':0.0,'metadata_source':meta.get('metadata_source') or 'path_inference','source_manifest_path':meta.get('source_manifest_path'),'source_manifest_version':meta.get('source_manifest_version'),'source_metadata_version':meta.get('source_metadata_version'),'last_indexed_at':datetime.now(timezone.utc)};rows=[]
    for order,path in enumerate(chapters,1):
     duration=read_metadata(path).get('duration_seconds') or 0;data['duration_seconds']+=duration;rows.append((path,duration,order))
    chapter_count=len(rows)

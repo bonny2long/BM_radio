@@ -23,3 +23,7 @@ dist-ssr
 # OS
 .DS_Store
 Thumbs.db
+
+# Backend validation temp folders
+backend/tmp_tests/
+backend/.tmp_tests/

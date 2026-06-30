@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from typing import Any
@@ -88,7 +88,7 @@ def merge_profile(base: dict[str, Any], override: dict[str, Any]) -> dict[str, A
 
 
 def fallback_genre(track: models.Track) -> str | None:
-    genre = track.genre or None
+    genre = getattr(track, 'primary_genre', None) or track.genre or None
     if not genre:
         if track.artist in DEFAULT_ARTIST_RADIO_PROFILES:
             genre = DEFAULT_ARTIST_RADIO_PROFILES[track.artist].get('primary_genre')
