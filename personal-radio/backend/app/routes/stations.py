@@ -44,28 +44,30 @@ def build_station_count_maps(db: Session) -> dict:
             if artist
         }
         genre_counts: dict[str, int] = {}
+        family_counts: dict[str, int] = {}
         profile_cache = load_radio_profile_cache(db)
         for track in db.query(models.Track).limit(5000).all():
             profile = profile_for_track_cached(track, profile_cache)
-            tokens = set(radio_genres.radio_genre_tokens(track, profile))
-            if 'hip-hop' in tokens:
-                tokens.discard('rap')
-            if 'r&b' in tokens:
-                tokens.discard('alternative r&b')
-            if 'electronic' in tokens:
-                tokens.discard('dance')
+            tokens = {token for token in radio_genres.radio_genre_tokens(track, profile) if token and not radio_genres.is_generic_genre(token)}
+            families = {radio_genres.genre_family(token) for token in tokens}
             for key in tokens:
                 if key and key != 'unknown':
                     genre_counts[key] = genre_counts.get(key, 0) + 1
+            for family in families:
+                if family and family != 'unknown':
+                    family_counts[family] = family_counts.get(family, 0) + 1
         total = db.query(func.count(models.Track.id)).scalar() or 0
-    return {'artist': artist_counts, 'album_artist': album_artist_counts, 'genre': genre_counts, 'total': total}
+    return {'artist': artist_counts, 'album_artist': album_artist_counts, 'genre': genre_counts, 'genre_family': family_counts, 'total': total}
 
 
 def station_track_count_from_maps(station: models.Station, counts: dict) -> int:
     if station.type == 'artist' and station.seed_value:
         return int(counts['artist'].get(station.seed_value, 0) or 0) + int(counts['album_artist'].get(station.seed_value, 0) or 0)
     if station.type == 'genre' and station.seed_value:
-        return int(counts['genre'].get(norm_genre(station.seed_value), 0) or 0)
+        seed = norm_genre(station.seed_value)
+        if radio_genres.is_family_genre(seed):
+            return int(counts.get('genre_family', {}).get(seed, 0) or counts['genre'].get(seed, 0) or 0)
+        return int(counts['genre'].get(seed, 0) or 0)
     if station.type == 'song':
         return 0
     return int(counts.get('total', 0) or 0)
@@ -107,6 +109,47 @@ def station_to_dict(station: models.Station, db: Session) -> dict:
     }
 
 
+def genre_station_dict(key: str, count: int, featured: bool = False, is_family_station: bool | None = None) -> dict:
+    family = radio_genres.genre_family(key) or key
+    family_station = radio_genres.is_family_genre(key) if is_family_station is None else is_family_station
+    return {
+        'name': f'{display_genre(key)} Radio',
+        'type': 'genre',
+        'seed_value': display_genre(key),
+        'track_count': int(count),
+        'source': 'system',
+        'family': family,
+        'display_family': radio_genres.display_family(key),
+        'featured': bool(featured),
+        'is_family_station': bool(family_station),
+    }
+
+
+def useful_genre_station_rows(counts: dict) -> list[dict]:
+    family_counts = counts.get('genre_family', {})
+    exact_counts = counts.get('genre', {})
+    rows: list[tuple[str, int, bool]] = []
+    for family, count in family_counts.items():
+        if count >= 2 and radio_genres.is_family_genre(family):
+            rows.append((family, int(count), True))
+    for key, count in exact_counts.items():
+        if count < 2 or radio_genres.is_generic_genre(key) or radio_genres.is_family_genre(key):
+            continue
+        rows.append((key, int(count), False))
+    seen: set[str] = set()
+    unique: list[tuple[str, int, bool]] = []
+    for key, count, is_family in sorted(rows, key=lambda item: (not item[2], -item[1], display_genre(item[0]))):
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append((key, count, is_family))
+    featured_keys = {key for key, _, _ in sorted([item for item in unique if item[2]], key=lambda item: item[1], reverse=True)[:5]}
+    if len(featured_keys) < 5:
+        remaining_featured = [key for key, _, _ in sorted(unique, key=lambda item: item[1], reverse=True) if key not in featured_keys]
+        featured_keys |= set(remaining_featured[:5 - len(featured_keys)])
+    return [genre_station_dict(key, count, key in featured_keys, is_family) for key, count, is_family in unique]
+
+
 @router.get('/')
 async def get_stations(db: Session = Depends(get_db)):
     counts = build_station_count_maps(db)
@@ -127,14 +170,7 @@ async def get_stations(db: Session = Depends(get_db)):
             {'name': 'Recently Added', 'type': 'recently_added', 'track_count': total, 'source': 'system'},
             {'name': 'Deep Cuts', 'type': 'deep_cuts', 'track_count': total, 'source': 'system'},
         ]
-        for key, count in sorted(counts['genre'].items(), key=lambda item: item[1], reverse=True)[:5]:
-            stations.append({
-                'name': f'{display_genre(key)} Radio',
-                'type': 'genre',
-                'seed_value': display_genre(key),
-                'track_count': count,
-                'source': 'system',
-            })
+        stations.extend(useful_genre_station_rows(counts))
         for artist, count in sorted(counts['artist'].items(), key=lambda item: item[1], reverse=True)[:5]:
             if not artist:
                 continue

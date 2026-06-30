@@ -102,7 +102,7 @@ def genre_radio_tiers(target: str, ranked: list[models.Track], profile_cache: di
         raw = norm_genre(track.genre)
         if target and (target in tokens or raw == target or profile_genre(profile) == target):
             tier = StationCandidateTier.SAME_GENRE
-        elif target and track_matches_genre(track, target, profile):
+        elif target and track_is_genre_compatible(track, target, profile):
             tier = StationCandidateTier.FAMILY
         else:
             tier = StationCandidateTier.EXPLORATION
@@ -153,7 +153,8 @@ def candidate_genre(track: models.Track, profile: dict | None = None) -> str:
 def track_is_genre_compatible(track: models.Track, target: str | None, profile: dict | None = None) -> bool:
     if not target:
         return True
-    return track_matches_genre(track, target, profile) or radio_genres.same_genre_family(target, candidate_genre(track, profile))
+    primary = candidate_genre(track, profile)
+    return bool(primary and radio_genres.same_genre_family(target, primary))
 
 
 def overlap_score(a: list[str], b: list[str], weight: float) -> float:
@@ -910,7 +911,7 @@ def genre_station_debug(req: StationQueueRequest, db: Session, down: set[int], e
         profile = radio_profile(db, t, profile_cache)
         profile_match = target in radio_genres.radio_genre_tokens(t, profile)
         raw_match = bool(radio_genres.genre_family_tokens(target) & radio_genres.genre_family_tokens(t.genre))
-        fallback_match = track_matches_genre(t, target, profile)
+        fallback_match = track_is_genre_compatible(t, target, profile)
         if not fallback_match:
             continue
         parts: list[dict] = []
@@ -1073,10 +1074,9 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
             ]
             if profile_artist_names:
                 candidate_pool.extend(tracks_by_artist_names(db, set(profile_artist_names), genre_candidate_cap))
-            if len(candidate_pool) < limit:
-                candidate_pool.extend(q.order_by(models.Track.created_at.desc(), models.Track.last_indexed_at.desc()).limit(genre_candidate_cap).all())
+            candidate_pool.extend(q.order_by(models.Track.created_at.desc(), models.Track.last_indexed_at.desc()).limit(genre_candidate_cap).all())
         with perf_segment('queue.station.genre.score_or_shuffle'):
-            tracks = [t for t in unique_tracks_cap(candidate_pool, genre_candidate_cap) if t.id not in down and track_matches_genre(t, target, radio_profile(db, t, profile_cache))]
+            tracks = [t for t in unique_tracks_cap(candidate_pool, genre_candidate_cap) if t.id not in down and track_is_genre_compatible(t, target, radio_profile(db, t, profile_cache))]
             random.shuffle(tracks)
     elif req.type == 'song':
         seed_track = None

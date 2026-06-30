@@ -1,0 +1,1831 @@
+{
+  "station": {
+    "type": "song",
+    "seed_value": null,
+    "seed_track_id": 248,
+    "limit": 25
+  },
+  "seed": {
+    "track_id": 248,
+    "title": "Jynweythek",
+    "artist": "Aphex Twin",
+    "album": "Drukqs",
+    "profile": {
+      "primary_genre": "IDM",
+      "subgenres": [],
+      "moods": [],
+      "energy": null,
+      "related_artists": [],
+      "source": "archive_assistant_manifest"
+    }
+  },
+  "summary": {
+    "candidate_count": 61,
+    "selected_count": 25,
+    "excluded_seed_track": 1,
+    "excluded_thumbs_down": 0,
+    "excluded_current_queue": 0,
+    "unrelated_genre_blocked_count": 492,
+    "excluded_recent": 10,
+    "profile_matched_count": 13,
+    "same_artist_count": 13,
+    "other_artist_count": 12,
+    "tier_counts": {
+      "seed_artist": 13,
+      "same_genre": 12
+    },
+    "artist_distribution": {
+      "aphex twin": 13,
+      "daft punk": 7,
+      "deadmau5": 5
+    },
+    "release_distribution": {
+      "aphex twin|drukqs": 13,
+      "daft punk|random access memories": 7,
+      "deadmau5|for lack of a better name": 5
+    },
+    "seed_artist_percent": 52.0,
+    "exploration_percent": 0.0,
+    "profile_coverage_percent": 28.0
+  },
+  "selected": [
+    {
+      "track_id": 261,
+      "title": "Cock/Ver10",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.942,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.442
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 262,
+      "title": "Father",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.956,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.456
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 224,
+      "title": "GLBTM (Studio Outtakes)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 0.857,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.457
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 219,
+      "title": "Fragments Of Time",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 0.794,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.394
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 205,
+      "title": "Soma",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 0.813,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.413
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 204,
+      "title": "Word Problems",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 0.859,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.459
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 223,
+      "title": "Horizon (Japan CD)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 0.795,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.395
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 277,
+      "title": "54 Cymru Beats",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.965,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.465
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 272,
+      "title": "Ziggomatic 17",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.957,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.457
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 228,
+      "title": "LYTD (Vocoder Tests)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 0.795,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.395
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 249,
+      "title": "Btoum-Roumada",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.955,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.455
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 270,
+      "title": "Orban Eq Trx4",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.923,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.423
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 208,
+      "title": "Strobe",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 0.878,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.478
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 258,
+      "title": "Gwety Mernans",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.911,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.411
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 268,
+      "title": "Ruglen Holon",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.904,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.404
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 203,
+      "title": "Bot",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 0.772,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.372
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 229,
+      "title": "The Writing Of Fragments Of Time",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 0.677,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.277
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 250,
+      "title": "Vordhosbn",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.906,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.406
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 221,
+      "title": "Contact",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 0.689,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.289
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 264,
+      "title": "Taking Control",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.833,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.333
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 267,
+      "title": "Gwarek2",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.813,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.313
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 216,
+      "title": "Get Lucky",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 0.686,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.286
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 202,
+      "title": "Hi Friend!",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 0.635,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.235
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 266,
+      "title": "Petiatil Cx Htdui",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.74,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.24
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 275,
+      "title": "Kesson Dalef",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.898,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.398
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "tier": "seed_artist"
+    }
+  ],
+  "top_rejected": [
+    {
+      "track_id": 248,
+      "title": "Jynweythek",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [],
+      "reason": "seed_track"
+    },
+    {
+      "track_id": 1,
+      "title": "Hold On, Be Strong",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "IDM"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 2,
+      "title": "Return Of The \"G\"",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "IDM"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 3,
+      "title": "Rosa Parks",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "IDM"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 4,
+      "title": "Skew It On The Bar-B",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "IDM"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 5,
+      "title": "Aquemini",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "IDM"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 6,
+      "title": "Synthesizer",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "IDM"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 7,
+      "title": "Slump",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "IDM"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 8,
+      "title": "West Savannah",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "IDM"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 9,
+      "title": "Da Art Of Storytellin', Pt. 1",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "IDM"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 10,
+      "title": "Da Art Of Storytellin', Pt. 2",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "IDM"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 273,
+      "title": "Beskhu3epnm",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.732,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.232
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 259,
+      "title": "Bbydhyonchord",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.658,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.158
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 263,
+      "title": "Avril 14th",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.655,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.155
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 257,
+      "title": "Bit 4",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.651,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.151
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 260,
+      "title": "Prep Gwarlek 3b",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.615,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.115
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 251,
+      "title": "Kladfvgbungmicshk",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.591,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.091
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 274,
+      "title": "Hy A Scullyas Lyf Adhagrow",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.591,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.091
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 269,
+      "title": "Afx237 V.7",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.583,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.083
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 276,
+      "title": "Nanou2",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 4.545,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.045
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "IDM"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Aphex Twin"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2001"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Drukqs"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    }
+  ],
+  "warnings": [
+    "unrelated_genre_blocked",
+    "seed_track_uses_artist_profile_only",
+    "low_profile_coverage"
+  ]
+}

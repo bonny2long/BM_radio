@@ -1,0 +1,1291 @@
+{
+  "station": {
+    "type": "genre",
+    "seed_value": "Electronic",
+    "seed_track_id": null,
+    "limit": 25
+  },
+  "seed": {
+    "genre": "Electronic",
+    "profile": {
+      "primary_genre": "Electronic"
+    }
+  },
+  "summary": {
+    "candidate_count": 62,
+    "selected_count": 25,
+    "excluded_thumbs_down": 0,
+    "excluded_current_queue": 0,
+    "profile_matched_count": 12,
+    "same_artist_count": 0,
+    "other_artist_count": 25,
+    "tier_counts": {
+      "same_genre": 12,
+      "family": 13
+    },
+    "artist_distribution": {
+      "daft punk": 12,
+      "deadmau5": 8,
+      "aphex twin": 5
+    },
+    "release_distribution": {
+      "daft punk|random access memories": 12,
+      "deadmau5|for lack of a better name": 8,
+      "aphex twin|drukqs": 5
+    },
+    "seed_artist_percent": 0,
+    "exploration_percent": 0.0,
+    "profile_coverage_percent": 48.0
+  },
+  "selected": [
+    {
+      "track_id": 213,
+      "title": "Instant Crush",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 203,
+      "title": "Bot",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "family"
+    },
+    {
+      "track_id": 214,
+      "title": "Lose Yourself To Dance",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 200,
+      "title": "Moar Ghosts n stuff",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "family"
+    },
+    {
+      "track_id": 248,
+      "title": "Jynweythek",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.4,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "artist_diversity",
+          "value": 0.4,
+          "detail": "Aphex Twin"
+        }
+      ],
+      "tier": "family"
+    },
+    {
+      "track_id": 256,
+      "title": "Strotha Tynhe",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "family"
+    },
+    {
+      "track_id": 206,
+      "title": "Lack Of A Better Name",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "family"
+    },
+    {
+      "track_id": 210,
+      "title": "The Game Of Love",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 202,
+      "title": "Hi Friend!",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "family"
+    },
+    {
+      "track_id": 218,
+      "title": "Motherboard",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 205,
+      "title": "Soma",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "family"
+    },
+    {
+      "track_id": 216,
+      "title": "Get Lucky",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 209,
+      "title": "Give Life Back To Music",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.4,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "artist_diversity",
+          "value": 0.4,
+          "detail": "Daft Punk"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 204,
+      "title": "Word Problems",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "family"
+    },
+    {
+      "track_id": 252,
+      "title": "Lornaderek",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "family"
+    },
+    {
+      "track_id": 250,
+      "title": "Vordhosbn",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "family"
+    },
+    {
+      "track_id": 215,
+      "title": "Touch",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 220,
+      "title": "Doin’ It Right",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 208,
+      "title": "Strobe",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "family"
+    },
+    {
+      "track_id": 221,
+      "title": "Contact",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 223,
+      "title": "Horizon (Japan CD)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 251,
+      "title": "Kladfvgbungmicshk",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "family"
+    },
+    {
+      "track_id": 219,
+      "title": "Fragments Of Time",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 199,
+      "title": "FML",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 1.4,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "artist_diversity",
+          "value": 0.4,
+          "detail": "Deadmau5"
+        },
+        {
+          "label": "recent_penalty",
+          "value": -1.0
+        }
+      ],
+      "tier": "family"
+    },
+    {
+      "track_id": 225,
+      "title": "Infinity Repeating (2013 Demo)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "tier": "same_genre"
+    }
+  ],
+  "top_rejected": [
+    {
+      "track_id": 222,
+      "title": "Horizon Ouverture",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 224,
+      "title": "GLBTM (Studio Outtakes)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 226,
+      "title": "GL (Early Take)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 228,
+      "title": "LYTD (Vocoder Tests)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 229,
+      "title": "The Writing Of Fragments Of Time",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 230,
+      "title": "Touch (2021 Epilogue)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 3.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 211,
+      "title": "Giorgio By Moroder",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "recent_penalty",
+          "value": -1.0
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 212,
+      "title": "Within",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "recent_penalty",
+          "value": -1.0
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 217,
+      "title": "Beyond",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "recent_penalty",
+          "value": -1.0
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 227,
+      "title": "Prime (2012 Unfinished)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "profile_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "recent_penalty",
+          "value": -1.0
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 249,
+      "title": "Btoum-Roumada",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 257,
+      "title": "Bit 4",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 258,
+      "title": "Gwety Mernans",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 259,
+      "title": "Bbydhyonchord",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 260,
+      "title": "Prep Gwarlek 3b",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 261,
+      "title": "Cock/Ver10",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 262,
+      "title": "Father",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 263,
+      "title": "Avril 14th",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 264,
+      "title": "Taking Control",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 265,
+      "title": "Mt Saint Michel + Saint Michael's Mount",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 2.0,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "raw_genre_match",
+          "value": 2.0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    }
+  ],
+  "warnings": []
+}

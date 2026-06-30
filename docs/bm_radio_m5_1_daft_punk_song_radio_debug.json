@@ -1,0 +1,2263 @@
+{
+  "station": {
+    "type": "song",
+    "seed_value": null,
+    "seed_track_id": 209,
+    "limit": 25
+  },
+  "seed": {
+    "track_id": 209,
+    "title": "Give Life Back To Music",
+    "artist": "Daft Punk",
+    "album": "Random Access Memories",
+    "profile": {
+      "primary_genre": "Electronic",
+      "subgenres": [
+        "dance",
+        "house",
+        "electro pop"
+      ],
+      "moods": [
+        "groovy",
+        "bright",
+        "futuristic"
+      ],
+      "energy": "high",
+      "related_artists": [],
+      "source": "archive_assistant_manifest"
+    }
+  },
+  "summary": {
+    "candidate_count": 61,
+    "selected_count": 25,
+    "excluded_seed_track": 1,
+    "excluded_thumbs_down": 0,
+    "excluded_current_queue": 0,
+    "unrelated_genre_blocked_count": 492,
+    "excluded_recent": 10,
+    "profile_matched_count": 13,
+    "same_artist_count": 13,
+    "other_artist_count": 12,
+    "tier_counts": {
+      "seed_artist": 13,
+      "same_genre": 12
+    },
+    "artist_distribution": {
+      "daft punk": 13,
+      "aphex twin": 7,
+      "deadmau5": 5
+    },
+    "release_distribution": {
+      "daft punk|random access memories": 13,
+      "aphex twin|drukqs": 7,
+      "deadmau5|for lack of a better name": 5
+    },
+    "seed_artist_percent": 52.0,
+    "exploration_percent": 0.0,
+    "profile_coverage_percent": 52.0
+  },
+  "selected": [
+    {
+      "track_id": 220,
+      "title": "Doin’ It Right",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.456,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.456
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 224,
+      "title": "GLBTM (Studio Outtakes)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.468,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.468
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 268,
+      "title": "Ruglen Holon",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 0.873,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.473
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 263,
+      "title": "Avril 14th",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 0.803,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.403
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 205,
+      "title": "Soma",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 0.845,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.445
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 206,
+      "title": "Lack Of A Better Name",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 0.757,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.357
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 252,
+      "title": "Lornaderek",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 0.824,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.424
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 228,
+      "title": "LYTD (Vocoder Tests)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.43,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.43
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 226,
+      "title": "GL (Early Take)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.382,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.382
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 277,
+      "title": "54 Cymru Beats",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 0.819,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.419
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 215,
+      "title": "Touch",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.466,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.466
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 218,
+      "title": "Motherboard",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.402,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.402
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 276,
+      "title": "Nanou2",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 0.823,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.423
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 214,
+      "title": "Lose Yourself To Dance",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.471,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.471
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 203,
+      "title": "Bot",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 0.784,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.384
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 208,
+      "title": "Strobe",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 0.546,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.146
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 216,
+      "title": "Get Lucky",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.348,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.348
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 213,
+      "title": "Instant Crush",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.217,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.217
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 260,
+      "title": "Prep Gwarlek 3b",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 0.83,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.43
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 219,
+      "title": "Fragments Of Time",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.237,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.237
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 221,
+      "title": "Contact",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.259,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.259
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 272,
+      "title": "Ziggomatic 17",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 0.722,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.322
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    },
+    {
+      "track_id": 225,
+      "title": "Infinity Repeating (2013 Demo)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.337,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.337
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 230,
+      "title": "Touch (2021 Epilogue)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.209,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.209
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "tier": "seed_artist"
+    },
+    {
+      "track_id": 204,
+      "title": "Word Problems",
+      "artist": "Deadmau5",
+      "album": "For Lack of a Better Name",
+      "score": 0.629,
+      "profile": {
+        "primary_genre": "progressive house",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.229
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "tier": "same_genre"
+    }
+  ],
+  "top_rejected": [
+    {
+      "track_id": 209,
+      "title": "Give Life Back To Music",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [],
+      "reason": "seed_track"
+    },
+    {
+      "track_id": 1,
+      "title": "Hold On, Be Strong",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 2,
+      "title": "Return Of The \"G\"",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 3,
+      "title": "Rosa Parks",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 4,
+      "title": "Skew It On The Bar-B",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 5,
+      "title": "Aquemini",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 6,
+      "title": "Synthesizer",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 7,
+      "title": "Slump",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 8,
+      "title": "West Savannah",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 9,
+      "title": "Da Art Of Storytellin', Pt. 1",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 10,
+      "title": "Da Art Of Storytellin', Pt. 2",
+      "artist": "OutKast",
+      "album": "Aquemini",
+      "score": 0,
+      "profile": {
+        "primary_genre": "Hip-Hop",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "blocked_unrelated_genre",
+          "value": 0,
+          "detail": "Electronic"
+        }
+      ],
+      "reason": "unrelated_genre_blocked"
+    },
+    {
+      "track_id": 222,
+      "title": "Horizon Ouverture",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.322,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.322
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 223,
+      "title": "Horizon (Japan CD)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.166,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.166
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 229,
+      "title": "The Writing Of Fragments Of Time",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.019,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.019
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 210,
+      "title": "The Game Of Love",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 30.004,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.004
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 217,
+      "title": "Beyond",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 29.326,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.326
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "recent_penalty",
+          "value": -1.0
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 211,
+      "title": "Giorgio By Moroder",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 29.247,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.247
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "recent_penalty",
+          "value": -1.0
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 212,
+      "title": "Within",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 29.119,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.119
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "recent_penalty",
+          "value": -1.0
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 227,
+      "title": "Prime (2012 Unfinished)",
+      "artist": "Daft Punk",
+      "album": "Random Access Memories",
+      "score": 29.053,
+      "profile": {
+        "primary_genre": "Electronic",
+        "subgenres": [
+          "dance",
+          "house",
+          "electro pop"
+        ],
+        "moods": [
+          "groovy",
+          "bright",
+          "futuristic"
+        ],
+        "energy": "high",
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.053
+        },
+        {
+          "label": "subgenre_overlap",
+          "value": 15.0,
+          "detail": "dance, electro pop, house"
+        },
+        {
+          "label": "mood_overlap",
+          "value": 9.0,
+          "detail": "bright, futuristic, groovy"
+        },
+        {
+          "label": "energy_match",
+          "value": 1.5,
+          "detail": "high"
+        },
+        {
+          "label": "primary_genre_match",
+          "value": 3.0,
+          "detail": "Electronic"
+        },
+        {
+          "label": "same_artist",
+          "value": 1.5,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "same_album_artist",
+          "value": 0.8,
+          "detail": "Daft Punk"
+        },
+        {
+          "label": "year_proximity",
+          "value": 0.8,
+          "detail": "2023"
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        },
+        {
+          "label": "recent_penalty",
+          "value": -1.0
+        },
+        {
+          "label": "same_album_penalty",
+          "value": -2.0,
+          "detail": "Random Access Memories"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    },
+    {
+      "track_id": 271,
+      "title": "Aussois",
+      "artist": "Aphex Twin",
+      "album": "Drukqs",
+      "score": 0.797,
+      "profile": {
+        "primary_genre": "IDM",
+        "subgenres": [],
+        "moods": [],
+        "energy": null,
+        "related_artists": [],
+        "source": "archive_assistant_manifest"
+      },
+      "score_parts": [
+        {
+          "label": "random_base",
+          "value": 0.397
+        },
+        {
+          "label": "same_library_area",
+          "value": 0.4,
+          "detail": "Library"
+        }
+      ],
+      "reason": "not_selected_after_ranking"
+    }
+  ],
+  "warnings": [
+    "unrelated_genre_blocked"
+  ]
+}

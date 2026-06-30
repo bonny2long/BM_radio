@@ -22,14 +22,31 @@ function toStationDisplayName(name: string): string {
 }
 const SECTION_GROUPS: [string, string[]][] = [
   ['My Stations', ['song', 'custom', 'user']],
-  ['Genres', ['genre']],
   ['Artists', ['artist']],
 ]
+
+const FAMILY_CHIPS = ['All', 'Hip-Hop', 'Electronic', 'Rock', 'Pop', 'Jazz', 'R&B / Soul / Funk']
+
+function familyKey(label: string) {
+  if (label === 'All') return 'all'
+  if (label === 'R&B / Soul / Funk') return 'r&b'
+  return label.toLowerCase()
+}
+
+function stationFamily(station: Station) {
+  return station.family ?? station.display_family?.toLowerCase() ?? 'other'
+}
+
+function StationCount({ count }: { count: number }) {
+  return <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-pill)', padding: '2px 8px' }}>{count}</span>
+}
 
 export default function RadioPage() {
   const cachedStations = peekCache<Station[]>('stations')
   const [stations, setStations] = useState<Station[]>(cachedStations ?? [])
   const [myStationsExpanded, setMyStationsExpanded] = useState(false)
+  const [genresExpanded, setGenresExpanded] = useState(false)
+  const [genreFamily, setGenreFamily] = useState('all')
   const [busy, setBusy] = useState<string | null>(null)
   const [loading, setLoading] = useState(!cachedStations)
   const [pageError, setPageError] = useState<string | null>(null)
@@ -67,6 +84,9 @@ export default function RadioPage() {
   }
 
   const featured = useMemo(() => stations.find(station => station.type === 'recently_added') ?? null, [stations])
+  const genreStations = useMemo(() => stations.filter(station => station.type === 'genre' && station.source !== 'user'), [stations])
+  const filteredGenreStations = useMemo(() => genreFamily === 'all' ? genreStations : genreStations.filter(station => stationFamily(station) === genreFamily), [genreFamily, genreStations])
+  const featuredGenres = useMemo(() => (filteredGenreStations.filter(station => station.featured).length ? filteredGenreStations.filter(station => station.featured) : filteredGenreStations).slice(0, 5), [filteredGenreStations])
 
   if (loading) return <LoadingSkeleton rows={6} preserveSpace />
   if (pageError) return <PageError message={pageError} onRetry={loadStations} />
@@ -114,6 +134,45 @@ export default function RadioPage() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21" /></svg>
           </div>
         </button>
+      )}
+
+      {!!genreStations.length && (
+        <section style={{ marginBottom: 26 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <p className="section-label" style={{ margin: 0 }}>Genres</p>
+              <StationCount count={genreStations.length} />
+            </div>
+            {genreStations.length > 5 && <button onClick={() => setGenresExpanded(!genresExpanded)} style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-primary)' }}>{genresExpanded ? 'Show less' : 'View all'}</button>}
+          </div>
+
+          {genresExpanded && (
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, marginBottom: 10, scrollbarWidth: 'none' }}>
+              {FAMILY_CHIPS.map(label => {
+                const key = familyKey(label)
+                const active = genreFamily === key
+                return <button key={label} onClick={() => setGenreFamily(key)} style={{ flexShrink: 0, padding: '7px 12px', borderRadius: 'var(--radius-pill)', background: active ? 'var(--accent-primary)' : 'var(--bg-card)', border: '1px solid', borderColor: active ? 'var(--accent-primary)' : 'var(--border-subtle)', color: active ? '#fff' : 'var(--text-secondary)', fontSize: 12, fontWeight: 700 }}>{label}</button>
+              })}
+            </div>
+          )}
+
+          {!genresExpanded ? (
+            <div style={{ display: 'grid', gap: 9 }}>{featuredGenres.map(station => renderStationRow(station))}</div>
+          ) : (
+            <div style={{ display: 'grid', gap: 14 }}>
+              {Object.entries(filteredGenreStations.reduce<Record<string, Station[]>>((groups, station) => {
+                const label = station.display_family ?? 'Other'
+                groups[label] = groups[label] ? [...groups[label], station] : [station]
+                return groups
+              }, {})).map(([family, list]) => (
+                <div key={family}>
+                  {genreFamily === 'all' && <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 8px' }}><span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{family}</span><StationCount count={list.length} /></div>}
+                  <div style={{ display: 'grid', gap: 9 }}>{list.map(station => renderStationRow(station))}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
       {SECTION_GROUPS.map(([title, types]) => {
