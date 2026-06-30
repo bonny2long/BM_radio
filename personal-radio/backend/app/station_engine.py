@@ -28,6 +28,8 @@ ARTIST_GENRE_FALLBACKS = {
     'Death Cab for Cutie': 'Alternative Rock',
     'Daft Punk': 'Electronic',
     'Mac Miller': 'Hip-Hop',
+    'deadmau5': 'Electronic',
+    'Aphex Twin': 'Electronic',
 }
 
 RELATED_ARTISTS: dict[str, list[str]] = {
@@ -36,6 +38,9 @@ RELATED_ARTISTS: dict[str, list[str]] = {
     'Lil Wayne': ['Kanye West', 'Kendrick Lamar', 'Drake', 'Nicki Minaj'],
     'The Weeknd': ['Kanye West', 'Drake', 'Frank Ocean', 'SZA'],
     'Drake': ['The Weeknd', 'Lil Wayne', 'Kanye West', 'Future'],
+    'Daft Punk': ['deadmau5', 'Aphex Twin', 'Chemical Brothers', 'Boards of Canada'],
+    'deadmau5': ['Daft Punk', 'Aphex Twin', 'Chemical Brothers', 'Skrillex'],
+    'Aphex Twin': ['Daft Punk', 'deadmau5', 'Boards of Canada', 'Autechre'],
 }
 
 MAX_STATION_LIMIT = 100

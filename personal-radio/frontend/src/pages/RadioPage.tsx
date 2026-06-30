@@ -20,11 +20,6 @@ function toStationDisplayName(name: string): string {
     return titleCaseWord(word)
   }).join(' ')
 }
-const SECTION_GROUPS: [string, string[]][] = [
-  ['My Stations', ['song', 'custom', 'user']],
-  ['Artists', ['artist']],
-]
-
 const FAMILY_CHIPS = ['All', 'Hip-Hop', 'Electronic', 'Rock', 'Pop', 'Jazz', 'R&B / Soul / Funk']
 
 function familyKey(label: string) {
@@ -87,6 +82,8 @@ export default function RadioPage() {
   const genreStations = useMemo(() => stations.filter(station => station.type === 'genre' && station.source !== 'user'), [stations])
   const filteredGenreStations = useMemo(() => genreFamily === 'all' ? genreStations : genreStations.filter(station => stationFamily(station) === genreFamily), [genreFamily, genreStations])
   const featuredGenres = useMemo(() => (filteredGenreStations.filter(station => station.featured).length ? filteredGenreStations.filter(station => station.featured) : filteredGenreStations).slice(0, 5), [filteredGenreStations])
+  const myStations = useMemo(() => stations.filter(station => station.source === 'user'), [stations])
+  const artistStations = useMemo(() => stations.filter(station => station.type === 'artist' && station.source !== 'user' && station !== featured), [stations, featured])
 
   if (loading) return <LoadingSkeleton rows={6} preserveSpace />
   if (pageError) return <PageError message={pageError} onRetry={loadStations} />
@@ -136,6 +133,45 @@ export default function RadioPage() {
         </button>
       )}
 
+      <section style={{ marginBottom: 26 }}>
+        {!myStations.length ? (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}><p className="section-label" style={{ margin: 0 }}>My Stations</p></div>
+            <div className="card-premium" style={{ padding: '20px 18px', textAlign: 'center' }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>No stations yet</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Long-press any song, then <strong style={{ color: 'var(--accent-primary)' }}>Save as Station</strong></p>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <p className="section-label" style={{ margin: 0 }}>My Stations</p>
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-pill)', padding: '2px 8px' }}>{myStations.length}</span>
+              </div>
+              {myStations.length > 3 && <button onClick={() => setMyStationsExpanded(!myStationsExpanded)} style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-primary)' }}>{myStationsExpanded ? 'Show less up' : 'View all down'}</button>}
+            </div>
+
+            {!myStationsExpanded && (
+              <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+                {myStations.slice(0, 3).map(station => (
+                  <button key={station.id ?? station.name} onClick={() => void play(station)} disabled={!!busy} className="card-premium" style={{ flexShrink: 0, width: 130, padding: '12px 14px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-primary)' }}>
+                    <Artwork label={station.name} kind="station" size={36} variant="rounded" />
+                    <div style={{ minWidth: 0, width: '100%' }}>
+                      <div style={{ fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toStationDisplayName(station.name)}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{station.type === 'song' ? 'Song radio' : 'Radio mix'}</div>
+                    </div>
+                  </button>
+                ))}
+                {myStations.length > 3 && <button onClick={() => setMyStationsExpanded(true)} style={{ flexShrink: 0, width: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 12 }}><div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', display: 'grid', placeItems: 'center', fontSize: 16, color: 'var(--accent-primary)' }}>+{myStations.length - 3}</div>more</button>}
+              </div>
+            )}
+
+            {myStationsExpanded && <div style={{ display: 'grid', gap: 9 }}>{myStations.map(station => renderStationRow(station, true))}</div>}
+          </>
+        )}
+      </section>
+
       {!!genreStations.length && (
         <section style={{ marginBottom: 26 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -175,62 +211,12 @@ export default function RadioPage() {
         </section>
       )}
 
-      {SECTION_GROUPS.map(([title, types]) => {
-        const list = stations.filter(station => title === 'My Stations' ? station.source === 'user' : types.includes(station.type) && station.source !== 'user' && station !== featured)
-
-        if (title === 'My Stations') {
-          if (!list.length) {
-            return (
-              <section key={title} style={{ marginBottom: 26 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}><p className="section-label" style={{ margin: 0 }}>{title}</p></div>
-                <div className="card-premium" style={{ padding: '20px 18px', textAlign: 'center' }}>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>No stations yet</p>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Long-press any song, then <strong style={{ color: 'var(--accent-primary)' }}>Save as Station</strong></p>
-                </div>
-              </section>
-            )
-          }
-
-          const preview = list.slice(0, 3)
-          const overflow = list.length - 3
-          return (
-            <section key={title} style={{ marginBottom: 26 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <p className="section-label" style={{ margin: 0 }}>My Stations</p>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-pill)', padding: '2px 8px' }}>{list.length}</span>
-                </div>
-                {list.length > 3 && <button onClick={() => setMyStationsExpanded(!myStationsExpanded)} style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent-primary)' }}>{myStationsExpanded ? 'Show less up' : 'View all down'}</button>}
-              </div>
-
-              {!myStationsExpanded && (
-                <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-                  {preview.map(station => (
-                    <button key={station.id ?? station.name} onClick={() => void play(station)} disabled={!!busy} className="card-premium" style={{ flexShrink: 0, width: 130, padding: '12px 14px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--text-primary)' }}>
-                      <Artwork label={station.name} kind="station" size={36} variant="rounded" />
-                      <div style={{ minWidth: 0, width: '100%' }}>
-                        <div style={{ fontWeight: 600, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toStationDisplayName(station.name)}</div>
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{station.type === 'song' ? 'Song radio' : 'Radio mix'}</div>
-                      </div>
-                    </button>
-                  ))}
-                  {overflow > 0 && <button onClick={() => setMyStationsExpanded(true)} style={{ flexShrink: 0, width: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: 'var(--text-muted)', fontSize: 12 }}><div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', display: 'grid', placeItems: 'center', fontSize: 16, color: 'var(--accent-primary)' }}>+{overflow}</div>more</button>}
-                </div>
-              )}
-
-              {myStationsExpanded && <div style={{ display: 'grid', gap: 9 }}>{list.map(station => renderStationRow(station, true))}</div>}
-            </section>
-          )
-        }
-
-        if (!list.length) return null
-        return (
-          <section key={title} style={{ marginBottom: 26 }}>
-            <p className="section-label">{title}</p>
-            <div style={{ display: 'grid', gap: 9 }}>{list.map(station => renderStationRow(station))}</div>
-          </section>
-        )
-      })}
+      {!!artistStations.length && (
+        <section style={{ marginBottom: 26 }}>
+          <p className="section-label">Artists</p>
+          <div style={{ display: 'grid', gap: 9 }}>{artistStations.map(station => renderStationRow(station))}</div>
+        </section>
+      )}
     </div>
   )
 }
