@@ -34,7 +34,7 @@ export default function BottomSheet({ open, title, children, onClose }: BottomSh
         <div className="bottom-sheet-handle" />
         <div className="bottom-sheet-header">
           <h2>{title}</h2>
-          <button onClick={onClose} aria-label="Close" className="bottom-sheet-close">Ã—</button>
+          <button onClick={onClose} aria-label="Close" className="bottom-sheet-close">X</button>
         </div>
         <div className="bottom-sheet-body">{children}</div>
       </section>

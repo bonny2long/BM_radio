@@ -10,6 +10,17 @@ from .music_scanner import read_metadata
 from .path_safety import safe_media_files
 AUDIOBOOK_EXTENSIONS={'.mp3','.m4b','.m4a','.flac','.aac','.ogg','.opus'}
 def key(path):return [int(x) if x.isdigit() else x.lower() for x in re.split(r'(\d+)',path.name)]
+def explicit_book_index(path:Path)->int|None:
+ stem=path.stem
+ patterns=[r'\bbook\s*(\d{1,3})\b',r'\bpart\s*(\d{1,3})\b',r'\bvol(?:ume)?\.?\s*(\d{1,3})\b',r'#\s*(\d{1,3})\b',r'\((\d{1,3})\)']
+ for pattern in patterns:
+  match=re.search(pattern,stem,re.I)
+  if match:return int(match.group(1))
+ return None
+def audiobook_chapter_sort_key(path:Path):
+ book_index=explicit_book_index(path)
+ if book_index is not None:return (0,book_index,key(path))
+ return (1,key(path))
 def _read_json(path:Path)->dict:
  try:
   if path.exists():return json.loads(path.read_text(encoding='utf-8'))
@@ -78,7 +89,7 @@ def scan_audiobooks(db:Session):
   parts=path.relative_to(root).parts;book=root/parts[0]/parts[1] if len(parts)>1 else root/parts[0];groups.setdefault(book,[]).append(path)
  for book,chapters in groups.items():
   try:
-   chapters.sort(key=key);meta=load_audiobook_sidecar(book,[root],manifest_cache);title=meta.get('title') or re.sub(r'^\d{4}\s*-\s*','',book.name);author=meta.get('author') or book.parent.name;contained=meta.get('contained_books',[]);data={'relative_path':str(book.relative_to(root)),'title':title,'author':author,'narrator':meta.get('narrator'),'series':meta.get('series'),'year':meta.get('year'),'duration_seconds':0.0,'metadata_source':meta.get('metadata_source') or 'path_inference','source_manifest_path':meta.get('source_manifest_path'),'source_manifest_version':meta.get('source_manifest_version'),'source_metadata_version':meta.get('source_metadata_version'),'last_indexed_at':datetime.now(timezone.utc)};rows=[]
+   chapters.sort(key=audiobook_chapter_sort_key);meta=load_audiobook_sidecar(book,[root],manifest_cache);title=meta.get('title') or re.sub(r'^\d{4}\s*-\s*','',book.name);author=meta.get('author') or book.parent.name;contained=meta.get('contained_books',[]);data={'relative_path':str(book.relative_to(root)),'title':title,'author':author,'narrator':meta.get('narrator'),'series':meta.get('series'),'year':meta.get('year'),'duration_seconds':0.0,'metadata_source':meta.get('metadata_source') or 'path_inference','source_manifest_path':meta.get('source_manifest_path'),'source_manifest_version':meta.get('source_manifest_version'),'source_metadata_version':meta.get('source_metadata_version'),'last_indexed_at':datetime.now(timezone.utc)};rows=[]
    for order,path in enumerate(chapters,1):
     duration=read_metadata(path).get('duration_seconds') or 0;data['duration_seconds']+=duration;rows.append((path,duration,order))
    chapter_count=len(rows)

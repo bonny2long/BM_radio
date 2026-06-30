@@ -63,7 +63,8 @@ export const searchAll=(q:string)=>request<SearchResults>(`/search?q=${encodeURI
 export const getArtistQueue=(artist:string,limit=1000,shuffle=false)=>request<{queue:Track[]}>('/queue/artist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({artist,limit,shuffle})})
 export const getAlbumQueue=(artist:string,album:string,limit=2000,shuffle=false)=>request<{queue:Track[]}>('/queue/album',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({artist,album,limit,shuffle})})
 export const finishAudiobook=(id:number)=>request<{book_status:string}>(`/audiobooks/${id}/finished`,{method:'POST'})
-export const resetAudiobook=(id:number)=>request<{book_status:string}>(`/audiobooks/${id}/not-started`,{method:'POST'})
+export const resetAudiobookProgress=(id:number)=>request<{book_status:string;progress_deleted:number;latest_progress:null}>(`/audiobooks/${id}/not-started`,{method:'POST'}).then(r=>{invalidateCache('audiobooks-summary');invalidateCache('recent-or-progress-audiobooks');return r})
+export const resetAudiobook=resetAudiobookProgress
 export const setTrackFeedback=(trackId:number,value:'thumbs_up'|'thumbs_down'|'neutral')=>request<{value:string}>(`/playback/tracks/${trackId}/feedback`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({value})}).then(r=>{invalidateStationCaches();return r})
 export const getTrackFeedback=(trackId:number)=>request<{value:string}>(`/playback/tracks/${trackId}/feedback`)
 export const setTrackFavorite=(trackId:number,favorite?:boolean)=>request<{favorite:boolean}>(`/playback/tracks/${trackId}/favorite`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({favorite})}).then(r=>{invalidateStationCaches();return r})
