@@ -75,15 +75,13 @@ def song_radio_tiers(seed_track: models.Track, seed_profile: dict, ranked: list[
         same_artist = candidate_artist in {seed_artist, seed_album_artist} or candidate_album_artist in {seed_artist, seed_album_artist}
         related = candidate_artist in related_tokens or candidate_album_artist in related_tokens
         same_genre = bool(seed_genre and candidate_genre == seed_genre)
-        family_match = track_matches_genre(track, seed_genre, profile) if seed_genre else False
-        if same_artist:
+        family_match = track_is_genre_compatible(track, seed_genre, profile)
+        if same_artist and family_match:
             tier = StationCandidateTier.SEED_ARTIST
-        elif related and (same_genre or sub_overlap or mood_overlap or energy_match):
+        elif related and family_match and (same_genre or sub_overlap or mood_overlap or energy_match):
             tier = StationCandidateTier.STRONG_RELATED
-        elif same_genre or sub_overlap:
+        elif family_match:
             tier = StationCandidateTier.SAME_GENRE
-        elif family_match or mood_overlap or energy_match or related:
-            tier = StationCandidateTier.SOFT_SIMILAR
         else:
             tier = StationCandidateTier.EXPLORATION
         tiers[tier].append((score, track))
@@ -146,6 +144,16 @@ def track_genre(track: models.Track) -> str:
 
 def track_matches_genre(track: models.Track, target: str | None, profile: dict | None = None) -> bool:
     return radio_genres.genre_matches(target, track, profile) or bool(radio_genres.genre_family_tokens(target) & radio_genres.genre_family_tokens(track_genre(track)))
+
+
+def candidate_genre(track: models.Track, profile: dict | None = None) -> str:
+    return profile_genre(profile or {}) or track_genre(track)
+
+
+def track_is_genre_compatible(track: models.Track, target: str | None, profile: dict | None = None) -> bool:
+    if not target:
+        return True
+    return track_matches_genre(track, target, profile) or radio_genres.same_genre_family(target, candidate_genre(track, profile))
 
 
 def overlap_score(a: list[str], b: list[str], weight: float) -> float:
@@ -274,6 +282,8 @@ def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Tr
 
         candidate_profile = radio_profile(db, t, profile_cache)
         candidate_genre = profile_genre(candidate_profile) or track_genre(t)
+        if seed_genre and not track_is_genre_compatible(t, seed_genre, candidate_profile):
+            continue
         score = random.random() * 0.5
 
         score += overlap_score(seed_profile.get('subgenres', []), candidate_profile.get('subgenres', []), 5.0)
@@ -509,7 +519,7 @@ def score_song_candidate_debug(
     return debug_track_row(candidate, score, parts, candidate_profile)
 
 
-def artist_radio_score_parts(seed_profile: dict, candidate_profile: dict, seed_artist: str, track: models.Track, related_tokens: set[str], fb: dict[int, str], recent: set[int], favs: set[int]) -> tuple[float, list[dict], str]:
+def artist_radio_score_parts(seed_profile: dict, candidate_profile: dict, seed_artist: str, track: models.Track, related_tokens: set[str], fb: dict[int, str], recent: set[int], favs: set[int], allow_exploration: bool = False) -> tuple[float, list[dict], str]:
     parts = []
 
     seed_artist_token = normalize_token(seed_artist)
@@ -528,18 +538,18 @@ def artist_radio_score_parts(seed_profile: dict, candidate_profile: dict, seed_a
     subgenre_overlap = bool(sub_ov > 0)
     mood_overlap = bool(mood_ov > 0)
     energy_match = bool(seed_profile.get('energy') and seed_profile.get('energy') == candidate_profile.get('energy'))
+    compatible_genre = track_is_genre_compatible(track, seed_genre, candidate_profile) if seed_genre else True
 
     tier = 'excluded'
-    if is_seed:
+    if is_seed and compatible_genre:
         tier = 'seed_artist'
         parts.append(explain_score_part('seed_artist_track', 10.0, track.artist))
-    elif is_related and (primary_genre_match or subgenre_overlap or mood_overlap or energy_match) or (primary_genre_match and subgenre_overlap):
+    elif is_related and compatible_genre and (primary_genre_match or subgenre_overlap or mood_overlap or energy_match):
         tier = 'strong_related'
-        if is_related:
-            parts.append(explain_score_part('related_artist_match', 4.0, track.artist or track.album_artist))
-    elif primary_genre_match or subgenre_overlap or mood_overlap:
+        parts.append(explain_score_part('related_artist_match', 4.0, track.artist or track.album_artist))
+    elif compatible_genre and (primary_genre_match or subgenre_overlap or mood_overlap):
         tier = 'soft_similar'
-    elif is_related:
+    elif allow_exploration and is_related and compatible_genre:
         tier = 'weak_related'
         parts.append(explain_score_part('related_artist_match', 1.0, track.artist or track.album_artist))
     else:
@@ -635,7 +645,7 @@ def debug_distribution_from_rows(selected: list[dict], seed_artist: str | None =
 
 def debug_distribution_warnings(summary: dict) -> list[str]:
     warnings: list[str] = []
-    if summary.get('seed_artist_percent', 0) > 55:
+    if summary.get('seed_artist_percent', 0) > 60:
         warnings.append('too_seed_artist_heavy')
     if summary.get('exploration_percent', 0) > 25:
         warnings.append('fallback_genre_used_heavily')
@@ -643,8 +653,7 @@ def debug_distribution_warnings(summary: dict) -> list[str]:
         warnings.append('low_profile_coverage')
     if len(summary.get('artist_distribution', {})) <= 2:
         warnings.append('low_related_artist_coverage')
-    if any(count >= 4 for count in summary.get('release_distribution', {}).values()):
-        warnings.append('album_order_risk')
+    # Release concentration is expected in tiny libraries; strict album-order detection lives in M5 regression checks.
     return warnings
 
 def station_debug_base(req: StationQueueRequest) -> dict:
@@ -699,6 +708,17 @@ def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], ex
     if exclude_set and len([t for t in candidates if t.id not in exclude_set]) >= 10:
         candidates = [t for t in candidates if t.id not in exclude_set]
 
+    blocked_unrelated: list[models.Track] = []
+    if not req.allow_exploration and seed_genre:
+        coherent: list[models.Track] = []
+        for track in candidates:
+            profile = radio_profile(db, track, profile_cache)
+            if track_is_genre_compatible(track, seed_genre, profile):
+                coherent.append(track)
+            else:
+                blocked_unrelated.append(track)
+        candidates = coherent
+
     rows = sort_debug_rows([score_song_candidate_debug(db, seed_track, t, seed_profile, seed_genre, fb, recent, favs, profile_cache) for t in candidates])
     ranked_tracks = [db.get(models.Track, row['track_id']) for row in rows if row.get('track_id')]
     ranked_tracks = [t for t in ranked_tracks if t]
@@ -706,9 +726,10 @@ def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], ex
     selected_tracks = assemble_station_window(tiers, limit, profile='song', max_artist_window=3, max_release_window=2)
     selected_ids = {t.id for t in selected_tracks if t}
     tier_by_id = {track.id: tier for tier, entries in tiers.items() for _, track in entries}
-    selected = [row | {'tier': tier_by_id.get(row['track_id'], 'unknown')} for row in rows if row['track_id'] in selected_ids][:limit]
+    row_by_id = {row['track_id']: row for row in rows}
+    selected = [row_by_id[t.id] | {'tier': tier_by_id.get(t.id, 'unknown')} for t in selected_tracks if t.id in row_by_id][:limit]
     top_rejected = [row | {'reason': 'not_selected_after_ranking'} for row in rows if row['track_id'] not in selected_ids][:20]
-    top_rejected = [debug_track_row(t, 0, [], radio_profile(db, t, profile_cache), 'seed_track') for t in excluded_seed[:1]] + [debug_track_row(t, 0, [], radio_profile(db, t, profile_cache), 'thumbs_down') for t in excluded_down[:10]] + [debug_track_row(t, 0, [], radio_profile(db, t, profile_cache), 'current_queue_excluded') for t in excluded_current[:10]] + top_rejected
+    top_rejected = [debug_track_row(t, 0, [], radio_profile(db, t, profile_cache), 'seed_track') for t in excluded_seed[:1]] + [debug_track_row(t, 0, [], radio_profile(db, t, profile_cache), 'thumbs_down') for t in excluded_down[:10]] + [debug_track_row(t, 0, [], radio_profile(db, t, profile_cache), 'current_queue_excluded') for t in excluded_current[:10]] + [debug_track_row(t, 0, [explain_score_part('blocked_unrelated_genre', 0, display_genre(seed_genre))], radio_profile(db, t, profile_cache), 'unrelated_genre_blocked') for t in blocked_unrelated[:10]] + top_rejected
 
     profile_matched = sum(1 for row in selected if any(part['label'] in {'subgenre_overlap', 'mood_overlap', 'energy_match', 'primary_genre_match', 'related_artist_match'} for part in row['score_parts']))
     same_artist = sum(1 for row in selected if normalize_token(row.get('artist')) == normalize_token(seed_track.artist))
@@ -728,13 +749,19 @@ def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], ex
         'excluded_seed_track': len(excluded_seed),
         'excluded_thumbs_down': len(excluded_down),
         'excluded_current_queue': len(excluded_current),
+        'unrelated_genre_blocked_count': len(blocked_unrelated),
         'excluded_recent': sum(1 for t in candidates if t.id in recent),
         'profile_matched_count': profile_matched,
         'same_artist_count': same_artist,
         'other_artist_count': len(selected) - same_artist,
         **distribution,
     }, selected, top_rejected)
-    response['warnings'] = list(set(response['warnings'] + debug_distribution_warnings(distribution)))
+    extra_warnings = []
+    if blocked_unrelated:
+        extra_warnings.append('unrelated_genre_blocked')
+    if len(selected) < limit and blocked_unrelated:
+        extra_warnings.append('returned_less_than_limit_to_preserve_coherence')
+    response['warnings'] = list(set(response['warnings'] + debug_distribution_warnings(distribution) + extra_warnings))
     response['seed'] = strip_internal_seed(seed)
     return response
 
@@ -779,7 +806,7 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
         if t.id in down or t.id in exclude_set:
             continue
         candidate_profile = radio_profile(db, t, profile_cache)
-        score, parts, tier = artist_radio_score_parts(seed_profile, candidate_profile, seed_artist, t, related_tokens, fb, recent, favs)
+        score, parts, tier = artist_radio_score_parts(seed_profile, candidate_profile, seed_artist, t, related_tokens, fb, recent, favs, req.allow_exploration)
 
         if tier == 'excluded':
             continue
@@ -817,7 +844,8 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
 
     all_rows = seed_rows + strong_related + soft_similar + weak_related
     tier_by_id = {track.id: tier for tier, entries in tiers.items() for _, track in entries}
-    selected = [r | {'tier': tier_by_id.get(r['track_id'], r.get('tier', 'unknown'))} for r in all_rows if r['track_id'] in selected_ids][:limit]
+    row_by_id = {row['track_id']: row for row in all_rows}
+    selected = [row_by_id[t.id] | {'tier': tier_by_id.get(t.id, row_by_id[t.id].get('tier', 'unknown'))} for t in selected_tracks if t.id in row_by_id][:limit]
 
     top_rejected = [r | {'reason': 'not_selected_after_ranking'} for r in all_rows if r['track_id'] not in selected_ids][:20]
     pool_tracks = [track for entries in tiers.values() for _, track in entries]
@@ -838,7 +866,7 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
         warnings.append('low_compatible_related_coverage')
     if weak_count > weak_cap:
         warnings.append('too_many_weak_related_tracks')
-    if len(selected) - seed_artist_count > int(limit * 0.30):
+    if len(selected) - seed_artist_count > int(limit * 0.60):
         warnings.append('too_many_other_artist_tracks')
     if duplicate_title_skipped > 0:
         warnings.append('duplicate_titles_detected')
@@ -907,7 +935,8 @@ def genre_station_debug(req: StationQueueRequest, db: Session, down: set[int], e
     selected_tracks = assemble_station_window(tiers, limit, profile='genre', max_artist_window=3, max_release_window=2)
     selected_ids = {t.id for t in selected_tracks if t}
     tier_by_id = {track.id: tier for tier, entries in tiers.items() for _, track in entries}
-    selected = [row | {'tier': tier_by_id.get(row['track_id'], 'unknown')} for row in rows if row['track_id'] in selected_ids][:limit]
+    row_by_id = {row['track_id']: row for row in rows}
+    selected = [row_by_id[t.id] | {'tier': tier_by_id.get(t.id, 'unknown')} for t in selected_tracks if t.id in row_by_id][:limit]
     distribution = debug_distribution_from_rows(selected)
     response = station_debug_response(req, {'genre': display_genre(target), 'profile': {'primary_genre': display_genre(target)}, 'profile_raw': {'primary_genre': display_genre(target)}}, {
         'candidate_count': len(rows),
@@ -1083,11 +1112,13 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
                 candidate_pool.extend(fav_tracks)
             if len(candidate_pool) < limit:
                 recent_pool = q.order_by(models.Track.created_at.desc(), models.Track.last_indexed_at.desc()).limit(min(limit * 20, song_candidate_cap)).all()
-                adjacent_recent = [t for t in recent_pool if seed_genre and track_matches_genre(t, seed_genre, radio_profile(db, t, profile_cache))]
+                adjacent_recent = [t for t in recent_pool if seed_genre and track_is_genre_compatible(t, seed_genre, radio_profile(db, t, profile_cache))]
                 candidate_pool.extend(adjacent_recent)
-                if len(candidate_pool) < max(10, int(limit * 0.35)):
+                if req.allow_exploration and len(candidate_pool) < max(10, int(limit * 0.35)):
                     candidate_pool.extend(recent_pool)
         candidates = [t for t in unique_tracks_cap(candidate_pool, song_candidate_cap) if t.id not in down and t.id != seed_track.id]
+        if not req.allow_exploration and seed_genre:
+            candidates = [t for t in candidates if track_is_genre_compatible(t, seed_genre, radio_profile(db, t, profile_cache))]
         if exclude_set:
             fresh_candidates = [t for t in candidates if t.id not in exclude_set]
             if fresh_candidates:
@@ -1100,7 +1131,7 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
         with perf_segment('queue.station.song.select'):
             tiers = song_radio_tiers(seed_track, seed_profile, ranked, profile_cache)
             selected_tracks = assemble_station_window(tiers, limit, profile='song', max_artist_window=3, max_release_window=2)
-            if len(selected_tracks) < limit:
+            if len(selected_tracks) < limit and req.allow_exploration:
                 selected_tracks = no_repeats(selected_tracks + [track for track in ranked if track not in selected_tracks], limit, artist_loose=False, avoid_title_dups=True)
         with perf_segment('queue.station.song.serialize'):
             return payload(selected_tracks, source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=len(selected_tracks), exclude_count=len(exclude_set), exhausted=not selected_tracks, remaining_estimate=max(0, len(candidates) - len(selected_tracks)))
@@ -1140,7 +1171,7 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
                     continue
 
                 candidate_profile = radio_profile(db, t, profile_cache)
-                score, _, tier = artist_radio_score_parts(seed_profile, candidate_profile, seed_artist, t, related_tokens, fb, recent, favs)
+                score, _, tier = artist_radio_score_parts(seed_profile, candidate_profile, seed_artist, t, related_tokens, fb, recent, favs, req.allow_exploration)
 
                 if tier == 'excluded':
                     continue

@@ -8,6 +8,7 @@ class StationQueueRequest(BaseModel):
     limit: int = 50
     shuffle: bool = True
     exclude_track_ids: list[int] = []
+    allow_exploration: bool = False
 
 
 class AlbumQueueRequest(BaseModel):

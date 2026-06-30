@@ -21,6 +21,12 @@ GENRE_ALIASES = {
     'hip-hop': 'hip-hop',
     'hiphop': 'hip-hop',
     'rap': 'rap',
+    'southern hip hop': 'southern hip-hop',
+    'southern hip-hop': 'southern hip-hop',
+    'alternative hip hop': 'alternative hip-hop',
+    'alternative hip-hop': 'alternative hip-hop',
+    'jazz rap': 'jazz rap',
+    'mixtape': 'mixtape',
     'rnb': 'r&b',
     'r&b': 'r&b',
     'rhythm and blues': 'r&b',
@@ -37,11 +43,32 @@ GENRE_ALIASES = {
     'edm': 'electronic',
     'dance': 'dance',
     'pop': 'pop',
+    'dance pop': 'dance pop',
+    'synth pop': 'synth-pop',
+    'synth-pop': 'synth-pop',
+    'synthpop': 'synth-pop',
+    'electropop': 'electropop',
+    'idm': 'idm',
+    'house': 'house',
+    'techno': 'techno',
+    'ambient': 'ambient',
+    'rock': 'rock',
+    'progressive rock': 'progressive rock',
+    'classic rock': 'classic rock',
+    'psychedelic rock': 'psychedelic rock',
+    'jazz': 'jazz',
+    'bebop': 'bebop',
+    'hard bop': 'hard bop',
+    'post-bop': 'post-bop',
 }
 
 DISPLAY_GENRES = {
     'hip-hop': 'Hip-Hop',
     'rap': 'Rap',
+    'southern hip-hop': 'Southern Hip-Hop',
+    'alternative hip-hop': 'Alternative Hip-Hop',
+    'jazz rap': 'Jazz Rap',
+    'mixtape': 'Mixtape',
     'r&b': 'R&B',
     'alternative r&b': 'Alternative R&B',
     'indie pop': 'Indie Pop',
@@ -51,20 +78,39 @@ DISPLAY_GENRES = {
     'electronic': 'Electronic',
     'dance': 'Dance',
     'pop': 'Pop',
+    'dance pop': 'Dance Pop',
+    'synth-pop': 'Synth-Pop',
+    'electropop': 'Electropop',
+    'idm': 'IDM',
+    'house': 'House',
+    'techno': 'Techno',
+    'ambient': 'Ambient',
+    'rock': 'Rock',
+    'progressive rock': 'Progressive Rock',
+    'classic rock': 'Classic Rock',
+    'psychedelic rock': 'Psychedelic Rock',
+    'jazz': 'Jazz',
+    'bebop': 'Bebop',
+    'hard bop': 'Hard Bop',
+    'post-bop': 'Post-Bop',
 }
 
+HIP_HOP_FAMILY = {'hip-hop', 'rap', 'southern hip-hop', 'alternative hip-hop', 'jazz rap', 'mixtape'}
+POP_FAMILY = {'pop', 'dance pop', 'synth-pop', 'electropop'}
+ELECTRONIC_FAMILY = {'electronic', 'idm', 'house', 'dance', 'techno', 'ambient'}
+ROCK_FAMILY = {'rock', 'progressive rock', 'classic rock', 'psychedelic rock', 'alternative rock', 'indie rock'}
+JAZZ_FAMILY = {'jazz', 'bebop', 'hard bop', 'post-bop'}
+RNB_FAMILY = {'r&b', 'alternative r&b'}
+ALTERNATIVE_FAMILY = {'alternative', 'indie pop', 'alternative rock', 'indie rock'}
+
 FAMILY_TOKENS = {
-    'hip-hop': {'hip-hop', 'rap'},
-    'rap': {'hip-hop', 'rap'},
-    'r&b': {'r&b', 'alternative r&b'},
-    'alternative r&b': {'r&b', 'alternative r&b', 'pop'},
-    'indie pop': {'indie pop', 'alternative', 'pop'},
-    'alternative': {'alternative', 'alternative rock', 'indie rock', 'indie pop'},
-    'alternative rock': {'alternative', 'alternative rock', 'indie rock'},
-    'indie rock': {'alternative', 'alternative rock', 'indie rock'},
-    'electronic': {'electronic', 'dance'},
-    'dance': {'electronic', 'dance'},
-    'pop': {'pop'},
+    **{token: HIP_HOP_FAMILY for token in HIP_HOP_FAMILY},
+    **{token: POP_FAMILY for token in POP_FAMILY},
+    **{token: ELECTRONIC_FAMILY for token in ELECTRONIC_FAMILY},
+    **{token: ROCK_FAMILY for token in ROCK_FAMILY},
+    **{token: JAZZ_FAMILY for token in JAZZ_FAMILY},
+    **{token: RNB_FAMILY for token in RNB_FAMILY},
+    **{token: ALTERNATIVE_FAMILY for token in ALTERNATIVE_FAMILY},
 }
 
 
@@ -152,6 +198,12 @@ def radio_genre_tokens(track: Any, profile: dict[str, Any] | None = None) -> set
         tokens |= genre_family_tokens(value)
 
     return {token for token in tokens if token}
+
+
+def same_genre_family(seed_genre: str | None, candidate_genre: str | None) -> bool:
+    seed_tokens = genre_family_tokens(seed_genre)
+    candidate_tokens = genre_family_tokens(candidate_genre)
+    return bool(seed_tokens and candidate_tokens and seed_tokens & candidate_tokens)
 
 
 def genre_matches(target: str | None, track: Any, profile: dict[str, Any] | None = None) -> bool:
