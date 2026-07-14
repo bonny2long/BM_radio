@@ -1,12 +1,15 @@
 from fastapi import FastAPI, Depends
-from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from . import models, db
 from .config import settings
 from .radio_profiles import seed_default_radio_profiles
 from .perf import ensure_performance_indexes, install_performance_tools
 from .schema_maintenance import ensure_manifest_ingestion_columns
+from .runtime_security import configure_cors, fastapi_docs_config, validate_runtime_safety
 from .routes import health, library, stations, audiobooks, queue, playback, media, search, playlists, radio_profiles, library_integrity
+
+# Validate private runtime invariants before startup side effects.
+validate_runtime_safety(settings)
 
 # Create database tables
 models.Base.metadata.create_all(bind=db.engine)
@@ -15,17 +18,9 @@ ensure_performance_indexes()
 with db.SessionLocal() as seed_db:
     seed_default_radio_profiles(seed_db)
 
-app = FastAPI(title=settings.APP_NAME)
+app = FastAPI(title=settings.APP_NAME, **fastapi_docs_config(settings))
 install_performance_tools(app)
-
-# CORS setup
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], # Adjust for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+configure_cors(app, settings)
 
 # Include routers
 app.include_router(health.router, prefix="/api", tags=["Health"])

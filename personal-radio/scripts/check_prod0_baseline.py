@@ -125,6 +125,7 @@ def main() -> int:
         ("AA music manifest import", [sys.executable, "scripts/check_aa_manifest_music_import.py"], BACKEND),
         ("canonical music scan roots", [sys.executable, "scripts/check_prod1_1_canonical_music_roots.py"], BACKEND),
         ("production config contract", [sys.executable, "scripts/check_prod1_2a_config_contract.py"], BACKEND),
+        ("runtime API safety", [sys.executable, "scripts/check_prod1_2b_runtime_safety.py"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),

@@ -106,7 +106,7 @@ def base_env(base: Path) -> dict[str, str]:
         "BM_RADIO_ARTWORK_CACHE_ROOT": str(base / "app-cache" / "artwork"),
         "BM_RADIO_API_HOST": "127.0.0.9",
         "BM_RADIO_API_PORT": "8194",
-        "BM_RADIO_CORS_ORIGINS": '["http://127.0.0.1:5174", " http://localhost:5174 ", ""]',
+        "BM_RADIO_CORS_ORIGINS": '["http://127.0.0.1:5174", " http://localhost:5174 "]',
     }
 
 
@@ -211,7 +211,7 @@ def case_g_cors_parsing(base: Path) -> None:
         BM_RADIO_MUSIC_ROOT=str(base / "Music"),
         BM_RADIO_CACHE_ROOT=str(base / "cache"),
         BM_RADIO_ARTWORK_CACHE_ROOT=str(base / "cache" / "artwork"),
-        BM_RADIO_CORS_ORIGINS="http://127.0.0.1:5174, http://localhost:5174, ,",
+        BM_RADIO_CORS_ORIGINS="http://127.0.0.1:5174, http://localhost:5174",
     )
     assert resolved.BM_RADIO_CORS_ORIGINS == ["http://127.0.0.1:5174", "http://localhost:5174"]
     assert "*" not in resolved.BM_RADIO_CORS_ORIGINS

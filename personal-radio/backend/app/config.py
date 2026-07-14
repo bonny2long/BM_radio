@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 from typing import Any
 
 from pydantic import Field, field_validator, model_validator
@@ -55,6 +56,7 @@ class Settings(BaseSettings):
     BM_RADIO_ARTWORK_CACHE_ROOT: str = DEFAULT_ARTWORK_CACHE_ROOT
     BM_RADIO_API_HOST: str = DEFAULT_API_HOST
     BM_RADIO_API_PORT: int = DEFAULT_API_PORT
+    BM_RADIO_API_DOCS_ENABLED: bool = False
     BM_RADIO_CORS_ORIGINS: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
     BM_RADIO_ENABLE_LEGACY_DISCOGRAPHY_SCAN: bool = False
 
@@ -124,7 +126,9 @@ class Settings(BaseSettings):
             else:
                 value = text.split(",")
         if isinstance(value, (list, tuple)):
-            origins = [str(item).strip() for item in value if str(item).strip()]
+            origins = [str(item).strip() for item in value]
+            if any(not origin for origin in origins):
+                raise ValueError("BM_RADIO_CORS_ORIGINS must not contain empty origin entries")
             return origins
         raise ValueError("BM_RADIO_CORS_ORIGINS must be a JSON list or comma-separated string")
 
@@ -158,12 +162,26 @@ class Settings(BaseSettings):
         if not self.BM_RADIO_CORS_ORIGINS:
             object.__setattr__(self, "BM_RADIO_CORS_ORIGINS", [])
         else:
-            origins = [origin for origin in self.BM_RADIO_CORS_ORIGINS if origin]
+            origins = [self._validate_cors_origin(origin) for origin in self.BM_RADIO_CORS_ORIGINS]
             object.__setattr__(self, "BM_RADIO_CORS_ORIGINS", origins)
 
         self._validate_media_roots()
         self._validate_cache_roots()
         return self
+
+    @staticmethod
+    def _validate_cors_origin(origin: str) -> str:
+        value = str(origin).strip()
+        if value in {"*", "null"}:
+            raise ValueError("BM_RADIO_CORS_ORIGINS must contain explicit http/https origins only")
+        if "*" in value:
+            raise ValueError("BM_RADIO_CORS_ORIGINS must not contain wildcard origins")
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("BM_RADIO_CORS_ORIGINS entries must use http or https and include a host")
+        if parsed.path or parsed.query or parsed.fragment:
+            raise ValueError("BM_RADIO_CORS_ORIGINS entries must not include path, query, or fragment")
+        return value
 
     def _validate_media_roots(self) -> None:
         media_roots = {
