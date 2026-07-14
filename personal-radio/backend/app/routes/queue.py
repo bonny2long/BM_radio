@@ -5,6 +5,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from .. import models
+from ..availability import active_track_ids, active_tracks, active_tracks_by_ids, available_track_filter
 from ..db import get_db
 from ..queue_contracts import (
     AlbumQueueRequest,
@@ -36,6 +37,8 @@ def smart_track_ids(db: Session, key: str, limit: int = 1000) -> list[int]:
         return [
             r[0]
             for r in db.query(models.TrackFavorite.track_id)
+            .join(models.Track, models.Track.id == models.TrackFavorite.track_id)
+            .filter(available_track_filter())
             .order_by(models.TrackFavorite.created_at.desc())
             .limit(limit)
             .all()
@@ -43,11 +46,14 @@ def smart_track_ids(db: Session, key: str, limit: int = 1000) -> list[int]:
     if key == 'thumbs_up':
         rows = db.query(models.TrackThumb).order_by(models.TrackThumb.created_at.asc()).all()
         latest = {r.track_id: r.value.value for r in rows}
-        return [tid for tid, value in latest.items() if value == 'up'][:limit]
+        up_ids = [tid for tid, value in latest.items() if value == 'up']
+        available = active_track_ids(db, up_ids)
+        return [tid for tid in up_ids if tid in available][:limit]
     if key == 'most_played':
         rows = (
             db.query(models.PlaybackEvent.track_id, func.count(models.PlaybackEvent.id))
-            .filter(models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == 'qualified_play')
+            .join(models.Track, models.Track.id == models.PlaybackEvent.track_id)
+            .filter(available_track_filter(), models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == 'qualified_play')
             .group_by(models.PlaybackEvent.track_id)
             .order_by(func.count(models.PlaybackEvent.id).desc())
             .limit(limit)
@@ -57,9 +63,10 @@ def smart_track_ids(db: Session, key: str, limit: int = 1000) -> list[int]:
     if key == 'recently_played':
         rows = (
             db.query(models.PlaybackEvent.track_id)
-            .filter(models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == 'qualified_play')
+            .join(models.Track, models.Track.id == models.PlaybackEvent.track_id)
+            .filter(available_track_filter(), models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == 'qualified_play')
             .order_by(models.PlaybackEvent.created_at.desc())
-            .limit(limit * 4)
+            .limit(limit * 6)
             .all()
         )
         out = []
@@ -74,14 +81,14 @@ def smart_track_ids(db: Session, key: str, limit: int = 1000) -> list[int]:
     if key == 'recently_added':
         return [
             r[0]
-            for r in db.query(models.Track.id)
+            for r in active_tracks(db).with_entities(models.Track.id)
             .order_by(models.Track.created_at.desc(), models.Track.last_indexed_at.desc())
             .limit(limit)
             .all()
         ]
     if key == 'never_played':
         rows = (
-            db.query(models.Track.id)
+            active_tracks(db).with_entities(models.Track.id)
             .outerjoin(models.PlaybackEvent, (models.PlaybackEvent.track_id == models.Track.id) & (models.PlaybackEvent.event_type == 'qualified_play'))
             .group_by(models.Track.id)
             .having(func.count(models.PlaybackEvent.id) == 0)
@@ -92,10 +99,11 @@ def smart_track_ids(db: Session, key: str, limit: int = 1000) -> list[int]:
         return [r[0] for r in rows]
     return []
 
+
 @router.post('/album')
 def album_queue(req: AlbumQueueRequest, db: Session = Depends(get_db)):
     tracks = (
-        db.query(models.Track)
+        active_tracks(db)
         .filter_by(artist=req.artist, album=req.album)
         .order_by(models.Track.relative_path, models.Track.title)
         .limit(min(max(req.limit, 1), 2000))
@@ -110,7 +118,7 @@ def album_queue(req: AlbumQueueRequest, db: Session = Depends(get_db)):
 def artist_queue(req: ArtistQueueRequest, db: Session = Depends(get_db)):
     max_tracks = min(max(req.limit, 1), 5000)
     tracks = (
-        db.query(models.Track)
+        active_tracks(db)
         .filter(or_(models.Track.artist == req.artist, models.Track.album_artist == req.artist))
         .order_by(models.Track.album, models.Track.relative_path, models.Track.title)
         .limit(max_tracks)
@@ -123,13 +131,13 @@ def artist_queue(req: ArtistQueueRequest, db: Session = Depends(get_db)):
 
 @router.post('/playlist')
 def playlist_queue(req: PlaylistQueueRequest, db: Session = Depends(get_db)):
-    rows = (
-        db.query(models.PlaylistTrack)
-        .filter_by(playlist_id=req.playlist_id)
+    tracks = (
+        db.query(models.Track)
+        .join(models.PlaylistTrack, models.PlaylistTrack.track_id == models.Track.id)
+        .filter(models.PlaylistTrack.playlist_id == req.playlist_id, available_track_filter())
         .order_by(models.PlaylistTrack.position, models.PlaylistTrack.id)
         .all()
     )
-    tracks = [r.track for r in rows if r.track]
     if req.shuffle:
         random.shuffle(tracks)
     return payload(tracks)
@@ -140,8 +148,7 @@ def smart_playlist_queue(req: SmartPlaylistQueueRequest, db: Session = Depends(g
     ids = smart_track_ids(db, req.key, req.limit)
     if not ids:
         return {'queue': []}
-    tracks = [db.get(models.Track, tid) for tid in ids]
-    tracks = [t for t in tracks if t]
+    tracks = active_tracks_by_ids(db, ids)
     if req.shuffle:
         random.shuffle(tracks)
     return payload(choose_preferred_tracks(tracks, mode="smart_playlist"))
@@ -150,4 +157,3 @@ def smart_playlist_queue(req: SmartPlaylistQueueRequest, db: Session = Depends(g
 @router.get('/current')
 def get_current_queue():
     return {'queue': []}
-

@@ -4,6 +4,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from .. import models, radio_genres
+from ..availability import active_track_ids, active_tracks, available_track_filter
 from ..db import get_db
 from ..perf import perf_segment
 from ..radio_profiles import load_radio_profile_cache, profile_for_track_cached
@@ -29,7 +30,7 @@ def build_station_count_maps(db: Session) -> dict:
     with perf_segment('stations.count_maps'):
         artist_counts = {
             artist: count
-            for artist, count in db.query(models.Track.artist, func.count(models.Track.id))
+            for artist, count in active_tracks(db).with_entities(models.Track.artist, func.count(models.Track.id))
             .filter(models.Track.artist.isnot(None))
             .group_by(models.Track.artist)
             .all()
@@ -37,7 +38,7 @@ def build_station_count_maps(db: Session) -> dict:
         }
         album_artist_counts = {
             artist: count
-            for artist, count in db.query(models.Track.album_artist, func.count(models.Track.id))
+            for artist, count in active_tracks(db).with_entities(models.Track.album_artist, func.count(models.Track.id))
             .filter(models.Track.album_artist.isnot(None))
             .group_by(models.Track.album_artist)
             .all()
@@ -46,7 +47,7 @@ def build_station_count_maps(db: Session) -> dict:
         genre_counts: dict[str, int] = {}
         family_counts: dict[str, int] = {}
         profile_cache = load_radio_profile_cache(db)
-        for track in db.query(models.Track).limit(5000).all():
+        for track in active_tracks(db).limit(5000).all():
             profile = profile_for_track_cached(track, profile_cache)
             tokens = {token for token in radio_genres.radio_genre_tokens(track, profile) if token and not radio_genres.is_generic_genre(token)}
             families = {radio_genres.genre_family(token) for token in tokens}
@@ -56,13 +57,19 @@ def build_station_count_maps(db: Session) -> dict:
             for family in families:
                 if family and family != 'unknown':
                     family_counts[family] = family_counts.get(family, 0) + 1
-        total = db.query(func.count(models.Track.id)).scalar() or 0
-    return {'artist': artist_counts, 'album_artist': album_artist_counts, 'genre': genre_counts, 'genre_family': family_counts, 'total': total}
+        artist_union_ids: dict[str, set[int]] = {}
+        for track_id, artist, album_artist in active_tracks(db).with_entities(models.Track.id, models.Track.artist, models.Track.album_artist).all():
+            for name in {artist, album_artist}:
+                if name:
+                    artist_union_ids.setdefault(name, set()).add(track_id)
+        artist_union_counts = {name: len(ids) for name, ids in artist_union_ids.items()}
+        total = active_tracks(db).with_entities(func.count(models.Track.id)).scalar() or 0
+    return {'artist': artist_counts, 'album_artist': album_artist_counts, 'artist_union': artist_union_counts, 'genre': genre_counts, 'genre_family': family_counts, 'total': total}
 
 
 def station_track_count_from_maps(station: models.Station, counts: dict) -> int:
     if station.type == 'artist' and station.seed_value:
-        return int(counts['artist'].get(station.seed_value, 0) or 0) + int(counts['album_artist'].get(station.seed_value, 0) or 0)
+        return int(counts.get('artist_union', {}).get(station.seed_value, 0) or 0)
     if station.type == 'genre' and station.seed_value:
         seed = norm_genre(station.seed_value)
         if radio_genres.is_family_genre(seed):
@@ -86,15 +93,15 @@ def station_to_dict_fast(station: models.Station, counts: dict) -> dict:
 
 def station_track_count(station: models.Station, db: Session) -> int:
     if station.type == 'artist' and station.seed_value:
-        return db.query(func.count(models.Track.id)).filter(
+        return active_tracks(db).with_entities(func.count(models.Track.id)).filter(
             or_(models.Track.artist == station.seed_value, models.Track.album_artist == station.seed_value)
         ).scalar() or 0
     if station.type == 'genre' and station.seed_value:
         target = norm_genre(station.seed_value)
         profile_cache = load_radio_profile_cache(db)
-        all_tracks = db.query(models.Track).limit(5000).all()
+        all_tracks = active_tracks(db).limit(5000).all()
         return sum(1 for track in all_tracks if track_matches_genre(track, target, profile_for_track_cached(track, profile_cache)))
-    return db.query(func.count(models.Track.id)).scalar() or 0
+    return active_tracks(db).with_entities(func.count(models.Track.id)).scalar() or 0
 
 
 def station_to_dict(station: models.Station, db: Session) -> dict:
@@ -154,22 +161,23 @@ def useful_genre_station_rows(counts: dict) -> list[dict]:
 async def get_stations(db: Session = Depends(get_db)):
     counts = build_station_count_maps(db)
     total = counts['total']
-    if not total:
-        return []
 
     with perf_segment('stations.feedback_counts'):
         fav_ids = {r[0] for r in db.query(models.TrackFavorite.track_id).all()}
         latest: dict[int, str] = {}
         for row in db.query(models.TrackThumb.track_id, models.TrackThumb.value).order_by(models.TrackThumb.created_at.asc()).all():
             latest[row.track_id] = row.value.value
-        favorite_count = len(fav_ids | {tid for tid, value in latest.items() if value == 'up'})
+        favorite_ids = fav_ids | {tid for tid, value in latest.items() if value == 'up'}
+        favorite_count = len(active_track_ids(db, favorite_ids))
 
     with perf_segment('stations.system_station_build'):
-        stations: list[dict] = [
-            {'name': 'Favorites Radio', 'type': 'favorites', 'track_count': favorite_count, 'source': 'system'},
-            {'name': 'Recently Added', 'type': 'recently_added', 'track_count': total, 'source': 'system'},
-            {'name': 'Deep Cuts', 'type': 'deep_cuts', 'track_count': total, 'source': 'system'},
-        ]
+        stations: list[dict] = []
+        if total:
+            stations.extend([
+                {'name': 'Favorites Radio', 'type': 'favorites', 'track_count': favorite_count, 'source': 'system'},
+                {'name': 'Recently Added', 'type': 'recently_added', 'track_count': total, 'source': 'system'},
+                {'name': 'Deep Cuts', 'type': 'deep_cuts', 'track_count': total, 'source': 'system'},
+            ])
         stations.extend(useful_genre_station_rows(counts))
         for artist, count in sorted(counts['artist'].items(), key=lambda item: item[1], reverse=True)[:5]:
             if not artist:

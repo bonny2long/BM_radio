@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 import random
 import re
 
@@ -5,6 +6,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from . import models, radio_genres
+from .availability import TRACK_UNAVAILABLE_MESSAGE, active_tracks, is_track_available
 from .perf import perf_segment
 from .queue_contracts import StationQueueRequest
 from .queue_payloads import payload
@@ -702,8 +704,10 @@ def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], ex
             seed_track = None
     if seed_track is None:
         return station_debug_response(req, None, {'candidate_count': 0, 'selected_count': 0}, [], [])
+    if not is_track_available(seed_track):
+        raise HTTPException(409, TRACK_UNAVAILABLE_MESSAGE)
 
-    all_tracks = db.query(models.Track).limit(5000).all()
+    all_tracks = active_tracks(db).limit(5000).all()
     profile_cache = load_radio_profile_cache(db)
     seed_profile = radio_profile(db, seed_track, profile_cache)
     seed_genre = profile_genre(seed_profile) or track_genre(seed_track)
@@ -794,7 +798,7 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
     limit = station_limit(req.limit)
     seed_artist = req.seed_value or ''
     seed_token = normalize_token(seed_artist)
-    all_tracks = db.query(models.Track).limit(5000).all()
+    all_tracks = active_tracks(db).limit(5000).all()
     profile_cache = load_radio_profile_cache(db)
     primary = [t for t in all_tracks if normalize_token(t.artist) == seed_token or normalize_token(t.album_artist) == seed_token]
     primary = [t for t in primary if t.id not in down and t.id not in exclude_set]
@@ -908,7 +912,7 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
 def genre_station_debug(req: StationQueueRequest, db: Session, down: set[int], exclude_set: set[int]) -> dict:
     limit = station_limit(req.limit)
     target = norm_genre(req.seed_value)
-    all_tracks = db.query(models.Track).limit(5000).all()
+    all_tracks = active_tracks(db).limit(5000).all()
     profile_cache = load_radio_profile_cache(db)
     fb = latest_feedback(db)
     recent = recent_ids(db)
@@ -989,7 +993,7 @@ def tracks_by_artist_names(db: Session, names: set[str], limit: int = 2000) -> l
     if not clean:
         return []
     return (
-        db.query(models.Track)
+        active_tracks(db)
         .filter(or_(models.Track.artist.in_(clean), models.Track.album_artist.in_(clean)))
         .limit(limit)
         .all()
@@ -1030,7 +1034,7 @@ def build_station_queue(req: StationQueueRequest, db: Session) -> dict:
 
 def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
     limit = station_limit(req.limit)
-    q = db.query(models.Track)
+    q = active_tracks(db)
     with perf_segment('queue.station.feedback'):
         fb = latest_feedback(db)
         down = {tid for tid, value in fb.items() if value == 'down'}
@@ -1039,16 +1043,15 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
     profile_cache = load_radio_profile_cache(db)
 
     if req.type == 'favorites':
-        fav_tracks = [
-            f.track
-            for f in db.query(models.TrackFavorite)
+        fav_tracks = (
+            active_tracks(db)
+            .join(models.TrackFavorite, models.TrackFavorite.track_id == models.Track.id)
             .order_by(models.TrackFavorite.created_at.desc())
             .limit(limit * 6)
             .all()
-            if f.track
-        ]
+        )
         up_ids = [tid for tid, value in fb.items() if value == 'up']
-        up_tracks = db.query(models.Track).filter(models.Track.id.in_(up_ids)).all() if up_ids else []
+        up_tracks = active_tracks(db).filter(models.Track.id.in_(up_ids)).all() if up_ids else []
         tracks = [t for t in fav_tracks + up_tracks if t.id not in down]
     elif req.type == 'recently_added':
         tracks = (
@@ -1098,6 +1101,8 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
                 pass
         if seed_track is None:
             return payload([], source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=0, exclude_count=len(exclude_set), exhausted=True, remaining_estimate=0)
+        if not is_track_available(seed_track):
+            raise HTTPException(409, TRACK_UNAVAILABLE_MESSAGE)
 
         with perf_segment('queue.station.song.load_seed'):
             seed_profile = radio_profile(db, seed_track, profile_cache)
