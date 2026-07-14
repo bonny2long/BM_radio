@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..config import settings
 from ..media_identity import duration_bucket, music_recording_key, music_track_release_key
+from ..scan_runs import MEDIA_KIND_MUSIC, complete_scan_run, fail_scan_run, mark_track_seen, reconcile_unseen_tracks, start_scan_run
 from .archive_assistant_manifest import extract_music_manifest_metadata, load_aa_manifest_context
 from .path_safety import is_approved_path, safe_media_files
 
@@ -719,15 +720,40 @@ def find_cover(album_dir: Path, roots: list[Path]) -> str | None:
     return None
 
 
+def _existing_track_identity(track: models.Track) -> tuple[str, str, int | None]:
+    try:
+        _, track_number, _ = parse_track_number_title(Path(track.relative_path or track.path or '').stem)
+    except Exception:
+        track_number = None
+    release_key = music_track_release_key(track.album_artist or track.artist, track.album, track.title, track.year, track_number)
+    recording_key = music_recording_key(track.artist, track.title, track.duration_seconds)
+    duration = duration_bucket(track.duration_seconds, tolerance=5)
+    return release_key, recording_key, duration
+
+
+def _set_scan_failed(db: Session, scan_run: models.ScanRun, result: dict[str, Any], error_summary: str, error_count: int) -> None:
+    scan_run.items_discovered = result['tracks_scanned']
+    scan_run.items_added = result['tracks_added']
+    scan_run.items_updated = result['tracks_updated']
+    scan_run.items_unavailable = 0
+    fail_scan_run(db, scan_run, error_summary=error_summary, error_count=error_count)
+    result['status'] = 'failed'
+    result['scan_run_status'] = 'failed'
+    result['tracks_unavailable'] = 0
+
+
 def scan_music(db: Session):
     roots = configured_music_scan_roots()
     existing = [r for r in roots if r.is_dir()]
     root = Path(settings.MUSIC_ROOT)
     result = {
-        'status': 'ok',
+        'status': 'running',
+        'scan_run_id': None,
+        'scan_run_status': 'running',
         'tracks_scanned': 0,
         'tracks_added': 0,
         'tracks_updated': 0,
+        'tracks_unavailable': 0,
         'roots_scanned': [str(r) for r in existing],
         'skipped_roots': [str(r) for r in roots if not r.is_dir()],
         'legacy_discography_scan_enabled': settings.BM_RADIO_ENABLE_LEGACY_DISCOGRAPHY_SCAN,
@@ -741,129 +767,177 @@ def scan_music(db: Session):
         'variants_detected': 0,
         'duplicate_warnings': [],
     }
-    release_seen: dict[str, dict[str, Any]] = {}
-    recording_seen: dict[str, dict[str, Any]] = {}
-    manifest_cache: dict[str, Any] = {}
-    for existing_track in db.query(models.Track).all():
-        try:
-            _, existing_track_number, _ = parse_track_number_title(Path(existing_track.relative_path or existing_track.path or '').stem)
-        except Exception:
-            existing_track_number = None
-        existing_release_key = music_track_release_key(existing_track.album_artist or existing_track.artist, existing_track.album, existing_track.title, existing_track.year, existing_track_number)
-        existing_recording_key = music_recording_key(existing_track.artist, existing_track.title, existing_track.duration_seconds)
-        release_seen.setdefault(existing_release_key, {'id': existing_track.id, 'path': existing_track.path, 'duration_bucket': duration_bucket(existing_track.duration_seconds, tolerance=5), 'title': existing_track.title})
-        recording_seen.setdefault(existing_recording_key, {'id': existing_track.id, 'path': existing_track.path, 'release_key': existing_release_key, 'title': existing_track.title})
-    for scan_root in existing:
-        for path in safe_media_files(scan_root, MUSIC_EXTENSIONS, existing):
-            try:
-                tags = read_metadata(path)
-                path_data = infer(path, root)
-                side = flatten_sidecar(sidecar(path, root))
-                aa_context = load_aa_manifest_context(path, existing, manifest_cache)
-                aa_meta = extract_music_manifest_metadata(aa_context, path)
-                is_discography = path_data.get('library_area') == 'Discographies'
 
-                fallback_artist = path_data.get('artist') if is_discography else (pick(side, path_data, tags, 'artist') or path.parent.name)
-                artist = aa_meta.get('artist') or fallback_artist
-                fallback_album_artist = path_data.get('album_artist') if is_discography else (pick(side, path_data, tags, 'album_artist') or artist)
-                album_artist = aa_meta.get('album_artist') or fallback_album_artist or artist
-                fallback_album = path_data.get('album') if is_discography else (pick(side, path_data, tags, 'album') or path_data.get('album') or path.parent.name)
-                album = clean_album(aa_meta.get('album') or fallback_album)
-                year = aa_meta.get('year') or (path_data.get('year') if is_discography else pick(side, path_data, tags, 'year'))
+    scan_run = start_scan_run(db, media_kind=MEDIA_KIND_MUSIC, roots=[str(r) for r in existing])
+    db.commit()
+    scan_run_id = scan_run.id
+    result['scan_run_id'] = scan_run_id
 
-                embedded_title = tags.get('title')
-                raw_title = embedded_title or path.stem
-                path_title = path_data.get('title') or clean_release_title(path.stem, artist, path_data.get('collection_label'), album)
-                path_title = strip_leading_album_year_from_title(path_title, year)
-                cleaned_embedded_title = strip_known_leading_segments(embedded_title or '', artist=artist, album_artist=album_artist, album=album, year=year)
-                weak_title = is_weak_embedded_title(embedded_title, path_title, artist, album, year)
-                metadata_heavy = bool(embedded_title and cleaned_embedded_title and normalize_compare(cleaned_embedded_title) != normalize_compare(embedded_title))
-                if aa_meta.get('title'):
-                    title = str(aa_meta.get('title')).strip()
-                elif is_discography:
-                    title = path_title
-                    if weak_title:
+    if not existing:
+        result['errors'].append('No configured music scan roots exist on disk; failing closed without reconciliation.')
+        _set_scan_failed(db, scan_run, result, result['errors'][0], 1)
+        db.commit()
+        return result
+
+    try:
+        existing_tracks = db.query(models.Track).all()
+        exact_path_tracks = {track.path: track for track in existing_tracks if track.path}
+        release_seen: dict[str, dict[str, Any]] = {}
+        recording_seen: dict[str, dict[str, Any]] = {}
+        for existing_track in existing_tracks:
+            if existing_track.library_availability == 'unavailable':
+                continue
+            release_key, recording_key, duration = _existing_track_identity(existing_track)
+            release_seen.setdefault(release_key, {'id': existing_track.id, 'path': existing_track.path, 'duration_bucket': duration, 'title': existing_track.title})
+            recording_seen.setdefault(recording_key, {'id': existing_track.id, 'path': existing_track.path, 'release_key': release_key, 'title': existing_track.title})
+
+        manifest_cache: dict[str, Any] = {}
+        for scan_root in existing:
+            for path in safe_media_files(scan_root, MUSIC_EXTENSIONS, existing):
+                result['tracks_scanned'] += 1
+                try:
+                    path_text = str(path)
+                    tags = read_metadata(path)
+                    path_data = infer(path, root)
+                    side = flatten_sidecar(sidecar(path, root))
+                    aa_context = load_aa_manifest_context(path, existing, manifest_cache)
+                    aa_meta = extract_music_manifest_metadata(aa_context, path)
+                    is_discography = path_data.get('library_area') == 'Discographies'
+
+                    fallback_artist = path_data.get('artist') if is_discography else (pick(side, path_data, tags, 'artist') or path.parent.name)
+                    artist = aa_meta.get('artist') or fallback_artist
+                    fallback_album_artist = path_data.get('album_artist') if is_discography else (pick(side, path_data, tags, 'album_artist') or artist)
+                    album_artist = aa_meta.get('album_artist') or fallback_album_artist or artist
+                    fallback_album = path_data.get('album') if is_discography else (pick(side, path_data, tags, 'album') or path_data.get('album') or path.parent.name)
+                    album = clean_album(aa_meta.get('album') or fallback_album)
+                    year = aa_meta.get('year') or (path_data.get('year') if is_discography else pick(side, path_data, tags, 'year'))
+
+                    embedded_title = tags.get('title')
+                    raw_title = embedded_title or path.stem
+                    path_title = path_data.get('title') or clean_release_title(path.stem, artist, path_data.get('collection_label'), album)
+                    path_title = strip_leading_album_year_from_title(path_title, year)
+                    cleaned_embedded_title = strip_known_leading_segments(embedded_title or '', artist=artist, album_artist=album_artist, album=album, year=year)
+                    weak_title = is_weak_embedded_title(embedded_title, path_title, artist, album, year)
+                    metadata_heavy = bool(embedded_title and cleaned_embedded_title and normalize_compare(cleaned_embedded_title) != normalize_compare(embedded_title))
+                    if aa_meta.get('title'):
+                        title = str(aa_meta.get('title')).strip()
+                    elif is_discography:
+                        title = path_title
+                        if weak_title:
+                            result['weak_titles_detected'] += 1
+                            result['titles_corrected'] += 1
+                    elif weak_title:
+                        title = path_title
                         result['weak_titles_detected'] += 1
                         result['titles_corrected'] += 1
-                elif weak_title:
-                    title = path_title
-                    result['weak_titles_detected'] += 1
-                    result['titles_corrected'] += 1
-                elif metadata_heavy:
-                    title = cleaned_embedded_title
-                    result['metadata_heavy_titles_cleaned'] += 1
-                    result['titles_corrected'] += 1
-                elif is_dirty_release_title(raw_title, artist):
-                    title = path_title
-                else:
-                    title = clean_title(raw_title)
+                    elif metadata_heavy:
+                        title = cleaned_embedded_title
+                        result['metadata_heavy_titles_cleaned'] += 1
+                        result['titles_corrected'] += 1
+                    elif is_dirty_release_title(raw_title, artist):
+                        title = path_title
+                    else:
+                        title = clean_title(raw_title)
 
-                cover = find_cover(path.parent, existing)
-                data = {
-                    'relative_path': str(path.relative_to(root)),
-                    'title': title,
-                    'artist': artist,
-                    'album': album,
-                    'album_artist': album_artist or artist,
-                    'genre': aa_meta.get('genre') or pick(side, path_data, tags, 'genre'),
-                    'year': year,
-                    'duration_seconds': tags.get('duration_seconds'),
-                    'file_ext': path.suffix.lower(),
-                    'library_area': path_data.get('library_area', 'Library'),
-                    'cover_path': cover,
-                    'metadata_source': aa_meta.get('metadata_source') or ('embedded_tag' if any(tags.get(k) for k in ('title', 'artist', 'album', 'genre', 'year')) else 'path_inference'),
-                    'source_manifest_path': aa_meta.get('source_manifest_path'),
-                    'source_manifest_version': aa_meta.get('source_manifest_version'),
-                    'source_metadata_version': aa_meta.get('source_metadata_version'),
-                    'track_number': aa_meta.get('track_number') or path_data.get('track_number'),
-                    'disc_number': aa_meta.get('disc_number') or path_data.get('disc'),
-                    'primary_genre': aa_meta.get('primary_genre') or aa_meta.get('genre') or pick(side, path_data, tags, 'genre'),
-                    'last_indexed_at': datetime.now(timezone.utc),
-                }
-                track_number = data.get('track_number')
-                release_key = music_track_release_key(data['album_artist'], data['album'], data['title'], data['year'], track_number)
-                recording_key = music_recording_key(data['artist'], data['title'], data['duration_seconds'])
-                file_duration_bucket = duration_bucket(data['duration_seconds'], tolerance=5)
-                seen_release = release_seen.get(release_key)
-                if seen_release and seen_release.get('path') != str(path) and seen_release.get('duration_bucket') == file_duration_bucket:
-                    result['duplicates_skipped'] += 1
-                    result['tracks_scanned'] += 1
-                    result['duplicate_warnings'].append({
-                        'type': 'duplicate_skipped',
-                        'media_kind': 'music',
-                        'title': data['title'],
-                        'existing_id': seen_release.get('id'),
-                        'candidate_path': str(path),
-                        'reason': 'same music release key and duration bucket',
-                    })
-                    continue
-                seen_recording = recording_seen.get(recording_key)
-                if seen_recording and seen_recording.get('path') != str(path) and seen_recording.get('release_key') != release_key:
-                    result['duplicates_suspected'] += 1
-                    result['duplicate_warnings'].append({
-                        'type': 'recording_duplicate_detected',
-                        'media_kind': 'music',
-                        'title': data['title'],
-                        'existing_id': seen_recording.get('id'),
-                        'candidate_path': str(path),
-                        'reason': 'same recording key across different releases; kept as possible variant',
-                    })
+                    cover = find_cover(path.parent, existing)
+                    data = {
+                        'relative_path': str(path.relative_to(root)),
+                        'title': title,
+                        'artist': artist,
+                        'album': album,
+                        'album_artist': album_artist or artist,
+                        'genre': aa_meta.get('genre') or pick(side, path_data, tags, 'genre'),
+                        'year': year,
+                        'duration_seconds': tags.get('duration_seconds'),
+                        'file_ext': path.suffix.lower(),
+                        'library_area': path_data.get('library_area', 'Library'),
+                        'cover_path': cover,
+                        'metadata_source': aa_meta.get('metadata_source') or ('embedded_tag' if any(tags.get(k) for k in ('title', 'artist', 'album', 'genre', 'year')) else 'path_inference'),
+                        'source_manifest_path': aa_meta.get('source_manifest_path'),
+                        'source_manifest_version': aa_meta.get('source_manifest_version'),
+                        'source_metadata_version': aa_meta.get('source_metadata_version'),
+                        'track_number': aa_meta.get('track_number') or path_data.get('track_number'),
+                        'disc_number': aa_meta.get('disc_number') or path_data.get('disc'),
+                        'primary_genre': aa_meta.get('primary_genre') or aa_meta.get('genre') or pick(side, path_data, tags, 'genre'),
+                        'last_indexed_at': datetime.now(timezone.utc),
+                    }
+                    track_number = data.get('track_number')
+                    release_key = music_track_release_key(data['album_artist'], data['album'], data['title'], data['year'], track_number)
+                    recording_key = music_recording_key(data['artist'], data['title'], data['duration_seconds'])
+                    file_duration_bucket = duration_bucket(data['duration_seconds'], tolerance=5)
 
-                track = db.query(models.Track).filter_by(path=str(path)).one_or_none()
-                if track:
-                    for key, value in data.items():
-                        setattr(track, key, value)
-                    result['tracks_updated'] += 1
-                else:
-                    track = models.Track(path=str(path), **data)
-                    db.add(track)
-                    db.flush()
-                    result['tracks_added'] += 1
-                release_seen[release_key] = {'id': getattr(track, 'id', None), 'path': str(path), 'duration_bucket': file_duration_bucket, 'title': data['title']}
-                recording_seen.setdefault(recording_key, {'id': getattr(track, 'id', None), 'path': str(path), 'release_key': release_key, 'title': data['title']})
-                seed_aa_radio_profiles(db, track, aa_meta)
-                result['tracks_scanned'] += 1
-            except Exception as exc:
-                result['errors'].append(f'{path}: {exc}')
-    db.commit()
-    return result
+                    track = exact_path_tracks.get(path_text)
+                    if track:
+                        for key, value in data.items():
+                            setattr(track, key, value)
+                        mark_track_seen(track, scan_run_id=scan_run_id)
+                        result['tracks_updated'] += 1
+                    else:
+                        seen_release = release_seen.get(release_key)
+                        if seen_release and seen_release.get('path') != path_text and seen_release.get('duration_bucket') == file_duration_bucket:
+                            result['duplicates_skipped'] += 1
+                            result['duplicate_warnings'].append({
+                                'type': 'duplicate_skipped',
+                                'media_kind': 'music',
+                                'title': data['title'],
+                                'existing_id': seen_release.get('id'),
+                                'candidate_path': path_text,
+                                'reason': 'same music release key and duration bucket',
+                            })
+                            continue
+                        seen_recording = recording_seen.get(recording_key)
+                        if seen_recording and seen_recording.get('path') != path_text and seen_recording.get('release_key') != release_key:
+                            result['duplicates_suspected'] += 1
+                            result['duplicate_warnings'].append({
+                                'type': 'recording_duplicate_detected',
+                                'media_kind': 'music',
+                                'title': data['title'],
+                                'existing_id': seen_recording.get('id'),
+                                'candidate_path': path_text,
+                                'reason': 'same recording key across different releases; kept as possible variant',
+                            })
+
+                        track = models.Track(path=path_text, **data)
+                        db.add(track)
+                        db.flush()
+                        exact_path_tracks[path_text] = track
+                        mark_track_seen(track, scan_run_id=scan_run_id)
+                        result['tracks_added'] += 1
+
+                    release_seen[release_key] = {'id': getattr(track, 'id', None), 'path': path_text, 'duration_bucket': file_duration_bucket, 'title': data['title']}
+                    recording_seen.setdefault(recording_key, {'id': getattr(track, 'id', None), 'path': path_text, 'release_key': release_key, 'title': data['title']})
+                    seed_aa_radio_profiles(db, track, aa_meta)
+                except Exception as exc:
+                    result['errors'].append(f'{path}: {exc}')
+
+        db.flush()
+        if result['errors']:
+            _set_scan_failed(db, scan_run, result, '\n'.join(result['errors']), len(result['errors']))
+            db.commit()
+            return result
+
+        unavailable = reconcile_unseen_tracks(db, scan_run_id=scan_run_id, scanned_roots=existing)
+        result['tracks_unavailable'] = unavailable
+        complete_scan_run(
+            db,
+            scan_run,
+            items_discovered=result['tracks_scanned'],
+            items_added=result['tracks_added'],
+            items_updated=result['tracks_updated'],
+            items_unavailable=unavailable,
+            error_count=0,
+        )
+        result['status'] = 'ok'
+        result['scan_run_status'] = 'succeeded'
+        db.commit()
+        return result
+    except Exception as exc:
+        db.rollback()
+        scan_run = db.get(models.ScanRun, scan_run_id)
+        if scan_run is None:
+            scan_run = start_scan_run(db, media_kind=MEDIA_KIND_MUSIC, roots=[str(r) for r in existing])
+            result['scan_run_id'] = scan_run.id
+        result['errors'].append(str(exc))
+        _set_scan_failed(db, scan_run, result, str(exc), max(1, len(result['errors'])))
+        db.commit()
+        return result

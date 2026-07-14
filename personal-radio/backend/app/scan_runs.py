@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+from pathlib import Path
+from typing import Iterable
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .models import Audiobook, ScanRun, Track
@@ -13,6 +16,7 @@ SCAN_STATUS_FAILED = "failed"
 SCAN_STATUS_RUNNING = "running"
 SCAN_STATUS_SUCCEEDED = "succeeded"
 LIBRARY_AVAILABLE = "available"
+LIBRARY_UNAVAILABLE = "unavailable"
 ERROR_SUMMARY_MAX_LENGTH = 1000
 
 VALID_MEDIA_KINDS = {MEDIA_KIND_MUSIC, MEDIA_KIND_AUDIOBOOK}
@@ -27,6 +31,25 @@ def _bounded_error_summary(error_summary: str) -> str:
     if len(summary) <= ERROR_SUMMARY_MAX_LENGTH:
         return summary
     return summary[: ERROR_SUMMARY_MAX_LENGTH - 3].rstrip() + "..."
+
+
+def _path_inside_root(path_value: str | None, root: Path) -> bool:
+    if not path_value:
+        return False
+    try:
+        Path(path_value).resolve(strict=False).relative_to(root.resolve(strict=False))
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _path_prefix_filters(roots: Iterable[Path]):
+    filters = []
+    for root in roots:
+        root_text = str(root)
+        if root_text:
+            filters.append(Track.path.like(f"{root_text}%"))
+    return filters
 
 
 def start_scan_run(
@@ -71,6 +94,52 @@ def mark_audiobook_seen(
     audiobook.last_seen_scan_id = scan_run_id
     audiobook.library_availability = LIBRARY_AVAILABLE
     audiobook.unavailable_since = None
+
+
+def reconcile_unseen_tracks(
+    db: Session,
+    *,
+    scan_run_id: int,
+    scanned_roots: list[Path | str],
+    unavailable_at: datetime | None = None,
+) -> int:
+    roots = [Path(root) for root in scanned_roots]
+    if not roots:
+        return 0
+
+    prefix_filters = _path_prefix_filters(roots)
+    if not prefix_filters:
+        return 0
+
+    candidates = (
+        db.query(Track.id, Track.path)
+        .filter(Track.library_availability == LIBRARY_AVAILABLE)
+        .filter(or_(Track.last_seen_scan_id.is_(None), Track.last_seen_scan_id != scan_run_id))
+        .filter(or_(*prefix_filters))
+        .all()
+    )
+    track_ids = [
+        track_id
+        for track_id, path_value in candidates
+        if any(_path_inside_root(path_value, root) for root in roots)
+    ]
+    if not track_ids:
+        return 0
+
+    timestamp = unavailable_at or _utc_now()
+    updated = (
+        db.query(Track)
+        .filter(Track.id.in_(track_ids))
+        .update(
+            {
+                Track.library_availability: LIBRARY_UNAVAILABLE,
+                Track.unavailable_since: timestamp,
+            },
+            synchronize_session=False,
+        )
+    )
+    db.flush()
+    return int(updated or 0)
 
 
 def complete_scan_run(
