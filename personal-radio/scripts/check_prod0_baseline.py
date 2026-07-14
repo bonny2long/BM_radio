@@ -132,6 +132,8 @@ def main() -> int:
         ("audiobook availability reconciliation", [sys.executable, "scripts/check_prod1_3c2_audiobook_reconciliation.py"], BACKEND),
         ("core active-library availability policy", [sys.executable, "scripts/check_prod1_3d1_core_availability_policy.py"], BACKEND),
         ("active queues stations playlists playback policy", [sys.executable, "scripts/check_prod1_3d2_active_playback_candidates.py"], BACKEND),
+        ("integrity reporting and scan history", [sys.executable, "scripts/check_prod1_3d3_integrity_reporting.py"], BACKEND),
+        ("integrity UI contract", ["node", "scripts/check_prod1_3d3_integrity_ui.mjs"], FRONTEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),
