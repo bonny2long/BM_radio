@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..config import settings
 from ..media_identity import audiobook_edition_key, audiobook_work_key, duration_bucket, normalize_text
-from ..scan_runs import MEDIA_KIND_AUDIOBOOK, complete_scan_run, fail_scan_run, mark_audiobook_seen, start_scan_run
+from ..scan_runs import MEDIA_KIND_AUDIOBOOK, complete_scan_run, fail_scan_run, mark_audiobook_chapter_seen, mark_audiobook_seen, reconcile_unseen_audiobook_chapters, reconcile_unseen_audiobooks, start_scan_run
 from .archive_assistant_manifest import extract_audiobook_manifest_metadata, load_aa_manifest_context
 from .music_scanner import read_metadata
 from .path_safety import safe_media_files
@@ -137,9 +137,10 @@ def _set_scan_failed(db: Session, scan_run: models.ScanRun, result: dict, error_
     result['status'] = 'failed'
     result['scan_run_status'] = 'failed'
     result['audiobooks_unavailable'] = 0
+    result['chapters_unavailable'] = 0
 
 
-def _upsert_chapters(db: Session, audiobook: models.Audiobook, rows: list[tuple[Path, float, int]], root: Path, contained: list[dict]) -> tuple[int, int]:
+def _upsert_chapters(db: Session, audiobook: models.Audiobook, rows: list[tuple[Path, float, int]], root: Path, contained: list[dict], scan_run_id: int) -> tuple[int, int]:
     existing_by_path = {chapter.path: chapter for chapter in audiobook.chapters or [] if chapter.path}
     chapters_added = 0
     chapters_updated = 0
@@ -158,9 +159,12 @@ def _upsert_chapters(db: Session, audiobook: models.Audiobook, rows: list[tuple[
         if chapter:
             for key_name, value in data.items():
                 setattr(chapter, key_name, value)
+            mark_audiobook_chapter_seen(chapter, scan_run_id=scan_run_id)
             chapters_updated += 1
         else:
-            db.add(models.AudiobookChapter(**data))
+            chapter = models.AudiobookChapter(**data)
+            db.add(chapter)
+            mark_audiobook_chapter_seen(chapter, scan_run_id=scan_run_id)
             chapters_added += 1
     return chapters_added, chapters_updated
 
@@ -191,6 +195,7 @@ def scan_audiobooks(db: Session):
         'chapters_scanned': 0,
         'chapters_added': 0,
         'chapters_updated': 0,
+        'chapters_unavailable': 0,
         'roots_scanned': [str(root)] if existing_roots else [],
         'skipped_roots': [] if existing_roots else [str(root)],
         'errors': [],
@@ -226,6 +231,7 @@ def scan_audiobooks(db: Session):
             edition_seen.setdefault(ekey, info)
             work_seen.setdefault(wkey, info)
 
+        seen_audiobook_ids: list[int] = []
         groups = {}
         for path in safe_media_files(root, AUDIOBOOK_EXTENSIONS, [root]):
             parts = path.relative_to(root).parts
@@ -267,7 +273,7 @@ def scan_audiobooks(db: Session):
                     for key_name, value in data.items():
                         setattr(found, key_name, value)
                     mark_audiobook_seen(found, scan_run_id=scan_run_id)
-                    added, updated = _upsert_chapters(db, found, rows, root, contained)
+                    added, updated = _upsert_chapters(db, found, rows, root, contained, scan_run_id)
                     result['chapters_added'] += added
                     result['chapters_updated'] += updated
                     result['audiobooks_updated'] += 1
@@ -295,7 +301,7 @@ def scan_audiobooks(db: Session):
                     db.flush()
                     exact_path_books[str(book)] = found
                     mark_audiobook_seen(found, scan_run_id=scan_run_id)
-                    added, updated = _upsert_chapters(db, found, rows, root, contained)
+                    added, updated = _upsert_chapters(db, found, rows, root, contained, scan_run_id)
                     result['chapters_added'] += added
                     result['chapters_updated'] += updated
                     result['audiobooks_added'] += 1
@@ -303,6 +309,7 @@ def scan_audiobooks(db: Session):
                 info = _audiobook_info(found, chapter_count)
                 edition_seen[edition_key] = info
                 work_seen.setdefault(work_key, info)
+                seen_audiobook_ids.append(found.id)
                 result['audiobooks_scanned'] += 1
                 result['chapters_scanned'] += len(rows)
             except Exception as exc:
@@ -314,13 +321,28 @@ def scan_audiobooks(db: Session):
             db.commit()
             return result
 
+        unavailable_at = datetime.now(timezone.utc)
+        chapters_unavailable = reconcile_unseen_audiobook_chapters(
+            db,
+            scan_run_id=scan_run_id,
+            audiobook_ids=seen_audiobook_ids,
+            unavailable_at=unavailable_at,
+        )
+        audiobooks_unavailable, whole_book_chapters_unavailable = reconcile_unseen_audiobooks(
+            db,
+            scan_run_id=scan_run_id,
+            scanned_root=root,
+            unavailable_at=unavailable_at,
+        )
+        result['chapters_unavailable'] = chapters_unavailable + whole_book_chapters_unavailable
+        result['audiobooks_unavailable'] = audiobooks_unavailable
         complete_scan_run(
             db,
             scan_run,
             items_discovered=result['audiobooks_scanned'],
             items_added=result['audiobooks_added'],
             items_updated=result['audiobooks_updated'],
-            items_unavailable=0,
+            items_unavailable=audiobooks_unavailable,
             error_count=0,
         )
         result['status'] = 'ok'

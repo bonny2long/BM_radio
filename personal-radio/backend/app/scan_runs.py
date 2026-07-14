@@ -8,7 +8,7 @@ from typing import Iterable
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from .models import Audiobook, ScanRun, Track
+from .models import Audiobook, AudiobookChapter, ScanRun, Track
 
 MEDIA_KIND_AUDIOBOOK = "audiobook"
 MEDIA_KIND_MUSIC = "music"
@@ -43,12 +43,12 @@ def _path_inside_root(path_value: str | None, root: Path) -> bool:
         return False
 
 
-def _path_prefix_filters(roots: Iterable[Path]):
+def _path_prefix_filters(column, roots: Iterable[Path]):
     filters = []
     for root in roots:
         root_text = str(root)
         if root_text:
-            filters.append(Track.path.like(f"{root_text}%"))
+            filters.append(column.like(f"{root_text}%"))
     return filters
 
 
@@ -96,6 +96,16 @@ def mark_audiobook_seen(
     audiobook.unavailable_since = None
 
 
+def mark_audiobook_chapter_seen(
+    chapter: AudiobookChapter,
+    *,
+    scan_run_id: int,
+) -> None:
+    chapter.last_seen_scan_id = scan_run_id
+    chapter.library_availability = LIBRARY_AVAILABLE
+    chapter.unavailable_since = None
+
+
 def reconcile_unseen_tracks(
     db: Session,
     *,
@@ -107,7 +117,7 @@ def reconcile_unseen_tracks(
     if not roots:
         return 0
 
-    prefix_filters = _path_prefix_filters(roots)
+    prefix_filters = _path_prefix_filters(Track.path, roots)
     if not prefix_filters:
         return 0
 
@@ -140,6 +150,101 @@ def reconcile_unseen_tracks(
     )
     db.flush()
     return int(updated or 0)
+
+
+def reconcile_unseen_audiobook_chapters(
+    db: Session,
+    *,
+    scan_run_id: int,
+    audiobook_ids: list[int],
+    unavailable_at: datetime | None = None,
+) -> int:
+    if not audiobook_ids:
+        return 0
+    timestamp = unavailable_at or _utc_now()
+    updated = (
+        db.query(AudiobookChapter)
+        .filter(AudiobookChapter.audiobook_id.in_(audiobook_ids))
+        .filter(AudiobookChapter.library_availability == LIBRARY_AVAILABLE)
+        .filter(or_(AudiobookChapter.last_seen_scan_id.is_(None), AudiobookChapter.last_seen_scan_id != scan_run_id))
+        .update(
+            {
+                AudiobookChapter.library_availability: LIBRARY_UNAVAILABLE,
+                AudiobookChapter.unavailable_since: timestamp,
+            },
+            synchronize_session=False,
+        )
+    )
+    db.flush()
+    return int(updated or 0)
+
+
+def mark_audiobook_chapters_unavailable(
+    db: Session,
+    *,
+    audiobook_ids: list[int],
+    unavailable_at: datetime,
+) -> int:
+    if not audiobook_ids:
+        return 0
+    updated = (
+        db.query(AudiobookChapter)
+        .filter(AudiobookChapter.audiobook_id.in_(audiobook_ids))
+        .filter(AudiobookChapter.library_availability == LIBRARY_AVAILABLE)
+        .update(
+            {
+                AudiobookChapter.library_availability: LIBRARY_UNAVAILABLE,
+                AudiobookChapter.unavailable_since: unavailable_at,
+            },
+            synchronize_session=False,
+        )
+    )
+    db.flush()
+    return int(updated or 0)
+
+
+def reconcile_unseen_audiobooks(
+    db: Session,
+    *,
+    scan_run_id: int,
+    scanned_root: Path | str,
+    unavailable_at: datetime | None = None,
+) -> tuple[int, int]:
+    root = Path(scanned_root)
+    prefix_filters = _path_prefix_filters(Audiobook.path, [root])
+    if not prefix_filters:
+        return (0, 0)
+
+    candidates = (
+        db.query(Audiobook.id, Audiobook.path)
+        .filter(Audiobook.library_availability == LIBRARY_AVAILABLE)
+        .filter(or_(Audiobook.last_seen_scan_id.is_(None), Audiobook.last_seen_scan_id != scan_run_id))
+        .filter(or_(*prefix_filters))
+        .all()
+    )
+    audiobook_ids = [
+        audiobook_id
+        for audiobook_id, path_value in candidates
+        if _path_inside_root(path_value, root)
+    ]
+    if not audiobook_ids:
+        return (0, 0)
+
+    timestamp = unavailable_at or _utc_now()
+    books_updated = (
+        db.query(Audiobook)
+        .filter(Audiobook.id.in_(audiobook_ids))
+        .update(
+            {
+                Audiobook.library_availability: LIBRARY_UNAVAILABLE,
+                Audiobook.unavailable_since: timestamp,
+            },
+            synchronize_session=False,
+        )
+    )
+    chapters_updated = mark_audiobook_chapters_unavailable(db, audiobook_ids=audiobook_ids, unavailable_at=timestamp)
+    db.flush()
+    return (int(books_updated or 0), chapters_updated)
 
 
 def complete_scan_run(

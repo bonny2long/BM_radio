@@ -145,6 +145,9 @@ class AudiobookChapter(Base):
     chapter_number = Column(Integer, nullable=True)
     duration_seconds = Column(Float, nullable=True)
     sort_order = Column(Integer)
+    library_availability = Column(String, default="available", server_default="available", index=True)
+    last_seen_scan_id = Column(Integer, nullable=True, index=True)
+    unavailable_since = Column(DateTime(timezone=True), nullable=True)
 
     audiobook = relationship("Audiobook", back_populates="chapters")
 

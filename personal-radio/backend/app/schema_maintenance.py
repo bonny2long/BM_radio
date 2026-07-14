@@ -15,6 +15,11 @@ SCAN_RECONCILIATION_COLUMNS = {
         "last_seen_scan_id": "INTEGER",
         "unavailable_since": "DATETIME",
     },
+    "audiobook_chapters": {
+        "library_availability": "VARCHAR DEFAULT 'available'",
+        "last_seen_scan_id": "INTEGER",
+        "unavailable_since": "DATETIME",
+    },
 }
 
 SCAN_RECONCILIATION_INDEXES = [
@@ -22,6 +27,8 @@ SCAN_RECONCILIATION_INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_tracks_last_seen_scan_id ON tracks (last_seen_scan_id)",
     "CREATE INDEX IF NOT EXISTS ix_audiobooks_library_availability ON audiobooks (library_availability)",
     "CREATE INDEX IF NOT EXISTS ix_audiobooks_last_seen_scan_id ON audiobooks (last_seen_scan_id)",
+    "CREATE INDEX IF NOT EXISTS ix_audiobook_chapters_library_availability ON audiobook_chapters (library_availability)",
+    "CREATE INDEX IF NOT EXISTS ix_audiobook_chapters_last_seen_scan_id ON audiobook_chapters (last_seen_scan_id)",
     "CREATE INDEX IF NOT EXISTS ix_scan_runs_media_kind ON scan_runs (media_kind)",
     "CREATE INDEX IF NOT EXISTS ix_scan_runs_status ON scan_runs (status)",
     "CREATE INDEX IF NOT EXISTS ix_scan_runs_started_at ON scan_runs (started_at)",
@@ -98,9 +105,9 @@ def ensure_manifest_ingestion_columns(engine: Engine) -> None:
 def ensure_scan_reconciliation_columns(engine: Engine) -> None:
     """Add scan-run reconciliation fields for existing SQLite databases.
 
-    BM-PROD1.3A is additive only: it preserves existing rows, backfills their
-    library availability as available, and creates the narrow indexes needed for
-    later reconciliation queries.
+    BM Radio is additive here: preserve existing rows, backfill library
+    availability as available, and create the narrow indexes needed for later
+    reconciliation queries.
     """
     if engine.dialect.name != "sqlite":
         return
