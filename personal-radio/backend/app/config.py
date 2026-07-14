@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     MUSIC_FLAC_ROOT: str = r"C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data\Music\Library\FLAC"
     MUSIC_MP3_ROOT: str = r"C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data\Music\Library\MP3"
     MUSIC_DISCOGRAPHIES_ROOT: str = r"C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data\Music\Discographies"
+    BM_RADIO_ENABLE_LEGACY_DISCOGRAPHY_SCAN: bool = False
     MUSIC_PLAYLISTS_ROOT: str = r"C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data\Music\Playlists"
     MUSIC_METADATA_ROOT: str = r"C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data\Music\Metadata"
     AUDIOBOOKS_ROOT: str = r"C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data\Audiobooks\Library"

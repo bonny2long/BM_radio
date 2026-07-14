@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+import os
 import json
 import re
 
@@ -22,6 +23,25 @@ COLLECTION_DESCRIPTOR_SUFFIXES = [
 ]
 TITLE_WORD_EXCEPTIONS = {'a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'from', 'into', 'nor', 'of', 'on', 'or', 'out', 'over', 'the', 'up', 'with'}
 ARTIST_PREFIX_CONNECTORS = {'and', 'feat', 'ft', 'featuring', 'x', 'vs'}
+
+def _dedupe_root_key(path: Path) -> str:
+    return os.path.normcase(os.path.abspath(os.fspath(path)))
+
+
+def configured_music_scan_roots() -> list[Path]:
+    roots = [Path(settings.MUSIC_FLAC_ROOT), Path(settings.MUSIC_MP3_ROOT)]
+    if settings.BM_RADIO_ENABLE_LEGACY_DISCOGRAPHY_SCAN:
+        roots.append(Path(settings.MUSIC_DISCOGRAPHIES_ROOT))
+
+    seen: set[str] = set()
+    unique_roots: list[Path] = []
+    for root in roots:
+        key = _dedupe_root_key(root)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_roots.append(root)
+    return unique_roots
 
 
 def _tag_value(tags: Any, *keys: str):
@@ -700,7 +720,7 @@ def find_cover(album_dir: Path, roots: list[Path]) -> str | None:
 
 
 def scan_music(db: Session):
-    roots = [Path(settings.MUSIC_MP3_ROOT), Path(settings.MUSIC_FLAC_ROOT), Path(settings.MUSIC_DISCOGRAPHIES_ROOT)]
+    roots = configured_music_scan_roots()
     existing = [r for r in roots if r.is_dir()]
     root = Path(settings.MUSIC_ROOT)
     result = {
@@ -710,6 +730,7 @@ def scan_music(db: Session):
         'tracks_updated': 0,
         'roots_scanned': [str(r) for r in existing],
         'skipped_roots': [str(r) for r in roots if not r.is_dir()],
+        'legacy_discography_scan_enabled': settings.BM_RADIO_ENABLE_LEGACY_DISCOGRAPHY_SCAN,
         'errors': [],
         'weak_titles_detected': 0,
         'titles_corrected': 0,
