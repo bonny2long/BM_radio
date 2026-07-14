@@ -16,7 +16,7 @@ Private premium radio, music player, and audiobook bookshelf built from NAS medi
 
 ## Getting Started
 
-1. **Environment** - Copy `.env.example` to `.env` in the project root and adjust your media paths.
+1. **Environment** - Copy `backend/.env.example` to `backend/.env` and adjust your media, database, and cache paths.
 
 2. **Backend**:
    ```bash
