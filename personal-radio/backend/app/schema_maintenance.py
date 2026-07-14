@@ -4,6 +4,37 @@ from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
 
+SCAN_RECONCILIATION_COLUMNS = {
+    "tracks": {
+        "library_availability": "VARCHAR DEFAULT 'available'",
+        "last_seen_scan_id": "INTEGER",
+        "unavailable_since": "DATETIME",
+    },
+    "audiobooks": {
+        "library_availability": "VARCHAR DEFAULT 'available'",
+        "last_seen_scan_id": "INTEGER",
+        "unavailable_since": "DATETIME",
+    },
+}
+
+SCAN_RECONCILIATION_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS ix_tracks_library_availability ON tracks (library_availability)",
+    "CREATE INDEX IF NOT EXISTS ix_tracks_last_seen_scan_id ON tracks (last_seen_scan_id)",
+    "CREATE INDEX IF NOT EXISTS ix_audiobooks_library_availability ON audiobooks (library_availability)",
+    "CREATE INDEX IF NOT EXISTS ix_audiobooks_last_seen_scan_id ON audiobooks (last_seen_scan_id)",
+    "CREATE INDEX IF NOT EXISTS ix_scan_runs_media_kind ON scan_runs (media_kind)",
+    "CREATE INDEX IF NOT EXISTS ix_scan_runs_status ON scan_runs (status)",
+    "CREATE INDEX IF NOT EXISTS ix_scan_runs_started_at ON scan_runs (started_at)",
+]
+
+
+def _existing_tables(engine: Engine) -> set[str]:
+    try:
+        return set(inspect(engine).get_table_names())
+    except Exception:
+        return set()
+
+
 def _existing_columns(engine: Engine, table_name: str) -> set[str]:
     try:
         return {column["name"] for column in inspect(engine).get_columns(table_name)}
@@ -19,6 +50,22 @@ def _add_missing_columns(engine: Engine, table_name: str, columns: dict[str, str
     with engine.begin() as conn:
         for name, ddl in missing:
             conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {name} {ddl}"))
+
+
+def _backfill_available(engine: Engine, table_name: str) -> None:
+    if "library_availability" not in _existing_columns(engine, table_name):
+        return
+    with engine.begin() as conn:
+        conn.execute(text(f"UPDATE {table_name} SET library_availability = 'available' WHERE library_availability IS NULL"))
+
+
+def _create_indexes(engine: Engine, statements: list[str]) -> None:
+    existing_tables = _existing_tables(engine)
+    with engine.begin() as conn:
+        for statement in statements:
+            table_name = statement.split(" ON ", 1)[1].split(" ", 1)[0]
+            if table_name in existing_tables:
+                conn.execute(text(statement))
 
 
 def ensure_manifest_ingestion_columns(engine: Engine) -> None:
@@ -46,3 +93,23 @@ def ensure_manifest_ingestion_columns(engine: Engine) -> None:
         "source_manifest_version": "VARCHAR",
         "source_metadata_version": "VARCHAR",
     })
+
+
+def ensure_scan_reconciliation_columns(engine: Engine) -> None:
+    """Add scan-run reconciliation fields for existing SQLite databases.
+
+    BM-PROD1.3A is additive only: it preserves existing rows, backfills their
+    library availability as available, and creates the narrow indexes needed for
+    later reconciliation queries.
+    """
+    if engine.dialect.name != "sqlite":
+        return
+
+    existing_tables = _existing_tables(engine)
+    for table_name, columns in SCAN_RECONCILIATION_COLUMNS.items():
+        if table_name not in existing_tables:
+            continue
+        _add_missing_columns(engine, table_name, columns)
+        _backfill_available(engine, table_name)
+
+    _create_indexes(engine, SCAN_RECONCILIATION_INDEXES)

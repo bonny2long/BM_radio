@@ -34,6 +34,9 @@ class Track(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     last_indexed_at = Column(DateTime(timezone=True), index=True)
+    library_availability = Column(String, default="available", server_default="available", index=True)
+    last_seen_scan_id = Column(Integer, nullable=True, index=True)
+    unavailable_since = Column(DateTime(timezone=True), nullable=True)
 
     thumbs = relationship("TrackThumb", back_populates="track")
     favorites = relationship("TrackFavorite", back_populates="track")
@@ -84,6 +87,25 @@ class TrackRadioProfile(Base):
     source = Column(String, default="manual")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class ScanRun(Base):
+    __tablename__ = "scan_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    media_kind = Column(String, nullable=False, index=True)
+    status = Column(String, default="running", server_default="running", nullable=False, index=True)
+    started_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    roots_json = Column(Text, default="[]", server_default="[]", nullable=False)
+    items_discovered = Column(Integer, default=0, server_default="0", nullable=False)
+    items_added = Column(Integer, default=0, server_default="0", nullable=False)
+    items_updated = Column(Integer, default=0, server_default="0", nullable=False)
+    items_unavailable = Column(Integer, default=0, server_default="0", nullable=False)
+    error_count = Column(Integer, default=0, server_default="0", nullable=False)
+    error_summary = Column(String(1000), nullable=True)
+
+
 class Audiobook(Base):
     __tablename__ = "audiobooks"
 
@@ -105,6 +127,9 @@ class Audiobook(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), index=True)
     last_indexed_at = Column(DateTime(timezone=True), index=True)
+    library_availability = Column(String, default="available", server_default="available", index=True)
+    last_seen_scan_id = Column(Integer, nullable=True, index=True)
+    unavailable_since = Column(DateTime(timezone=True), nullable=True)
 
     chapters = relationship("AudiobookChapter", back_populates="audiobook")
     progress = relationship("AudiobookProgress", back_populates="audiobook")
