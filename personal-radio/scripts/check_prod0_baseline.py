@@ -130,6 +130,7 @@ def main() -> int:
         ("music scan reconciliation", [sys.executable, "scripts/check_prod1_3b_music_scan_reconciliation.py"], BACKEND),
         ("audiobook scan progress safety", [sys.executable, "scripts/check_prod1_3c1_audiobook_scan_progress_safety.py"], BACKEND),
         ("audiobook availability reconciliation", [sys.executable, "scripts/check_prod1_3c2_audiobook_reconciliation.py"], BACKEND),
+        ("core active-library availability policy", [sys.executable, "scripts/check_prod1_3d1_core_availability_policy.py"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),

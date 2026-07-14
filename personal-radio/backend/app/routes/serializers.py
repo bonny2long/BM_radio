@@ -1,5 +1,10 @@
 from .. import models
 
+
+def _iso(value):
+    return value.isoformat() if value else None
+
+
 def track_item(track: models.Track) -> dict:
     return {
         'id': track.id,
@@ -18,9 +23,12 @@ def track_item(track: models.Track) -> dict:
         'source_metadata_version': getattr(track, 'source_metadata_version', None),
         'track_number': getattr(track, 'track_number', None),
         'disc_number': getattr(track, 'disc_number', None),
+        'library_availability': getattr(track, 'library_availability', 'available'),
+        'unavailable_since': _iso(getattr(track, 'unavailable_since', None)),
         'stream_url': f'/api/media/tracks/{track.id}/stream',
         'cover_url': f'/api/media/tracks/{track.id}/cover',
     }
+
 
 def chapter_item(chapter: models.AudiobookChapter) -> dict:
     return {
@@ -28,8 +36,11 @@ def chapter_item(chapter: models.AudiobookChapter) -> dict:
         'title': chapter.title,
         'sort_order': chapter.sort_order,
         'duration_seconds': chapter.duration_seconds,
+        'library_availability': getattr(chapter, 'library_availability', 'available'),
+        'unavailable_since': _iso(getattr(chapter, 'unavailable_since', None)),
         'stream_url': f'/api/media/audiobooks/{chapter.audiobook_id}/chapters/{chapter.id}/stream',
     }
+
 
 def audiobook_item(book: models.Audiobook) -> dict:
     return {
@@ -44,5 +55,7 @@ def audiobook_item(book: models.Audiobook) -> dict:
         'source_manifest_path': getattr(book, 'source_manifest_path', None),
         'source_manifest_version': getattr(book, 'source_manifest_version', None),
         'source_metadata_version': getattr(book, 'source_metadata_version', None),
+        'library_availability': getattr(book, 'library_availability', 'available'),
+        'unavailable_since': _iso(getattr(book, 'unavailable_since', None)),
         'cover_url': f'/api/media/audiobooks/{book.id}/cover',
     }
