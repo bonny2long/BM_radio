@@ -84,6 +84,13 @@ def _diagnostic_rows_for_track_ids(db: Session, track_ids: list[int]) -> list[Di
     return rows
 
 
+def _canonical_pair_payload_rows(first: DiagnosticRow, second: DiagnosticRow) -> tuple[DiagnosticRow, DiagnosticRow, int, int]:
+    low_track_id, high_track_id = sorted([first.track_id, second.track_id])
+    low_row = first if first.track_id == low_track_id else second
+    high_row = second if second.track_id == high_track_id else first
+    return low_row, high_row, low_track_id, high_track_id
+
+
 def collect_music_scan_identity_diagnostics(
     db: Session,
     *,
@@ -94,13 +101,16 @@ def collect_music_scan_identity_diagnostics(
 
     Scope starts from tracks affected by the current scan, expands to their
     recording IDs, then reads only sibling links for those recordings.
+    Public counters are affected-Track counts; warning rows are a bounded sample
+    of unique canonical diagnostic relationships.
     """
-    affected_ids = [int(value) for value in dict.fromkeys(track_ids) if value is not None]
+    affected_ids = sorted({int(value) for value in track_ids if value is not None})
     result: dict[str, object] = {
         "physical_sources_preserved": 0,
         "duplicates_suspected": 0,
         "duplicate_warnings": [],
         "duplicate_warnings_truncated": False,
+        "duplicate_warning_relationships": 0,
         "identity_diagnostic_recordings": 0,
         "identity_diagnostic_tracks": 0,
     }
@@ -146,8 +156,7 @@ def collect_music_scan_identity_diagnostics(
     for row in sibling_rows:
         siblings_by_recording.setdefault(row.recording_id, []).append(row)
 
-    warnings: list[dict[str, object]] = []
-    seen_warning_keys: set[tuple[object, ...]] = set()
+    warnings_by_key: dict[tuple[object, ...], dict[str, object]] = {}
     physical_count = 0
     duplicate_count = 0
 
@@ -155,44 +164,51 @@ def collect_music_scan_identity_diagnostics(
         current = affected_by_id.get(track_id)
         if current is None:
             continue
-        siblings = [row for row in siblings_by_recording.get(current.recording_id, []) if row.track_id != current.track_id]
+        siblings = sorted(
+            [row for row in siblings_by_recording.get(current.recording_id, []) if row.track_id != current.track_id],
+            key=lambda row: (row.release_id, row.track_id),
+        )
         same_release = next((row for row in siblings if row.release_id == current.release_id), None)
         cross_release = next((row for row in siblings if row.release_id != current.release_id), None)
         if same_release is not None:
             physical_count += 1
-            key = ("physical_source_preserved", current.track_id, same_release.track_id, current.recording_id, current.release_id)
-            if key not in seen_warning_keys:
-                seen_warning_keys.add(key)
-                if len(warnings) < warning_sample_limit:
-                    warnings.append({
-                        "type": "physical_source_preserved",
-                        "media_kind": "music",
-                        "title": current.title,
-                        "existing_id": same_release.track_id,
-                        "candidate_path": current.path,
-                        "reason": "same first-class recording and release; distinct physical path retained for identity/preference resolution",
-                        "recording_id": current.recording_id,
-                        "release_id": current.release_id,
-                    })
+            low_row, high_row, low_track_id, high_track_id = _canonical_pair_payload_rows(current, same_release)
+            key = ("physical_source_preserved", low_track_id, high_track_id, current.recording_id, current.release_id)
+            warnings_by_key.setdefault(key, {
+                "type": "physical_source_preserved",
+                "media_kind": "music",
+                "title": low_row.title,
+                "existing_id": high_row.track_id,
+                "candidate_path": low_row.path,
+                "reason": "same first-class recording and release; distinct physical path retained for identity/preference resolution",
+                "recording_id": current.recording_id,
+                "release_id": current.release_id,
+                "track_ids": [low_track_id, high_track_id],
+                "release_ids": [current.release_id],
+            })
         if cross_release is not None:
             duplicate_count += 1
-            key = ("recording_duplicate_detected", current.track_id, cross_release.track_id, current.recording_id, cross_release.release_id)
-            if key not in seen_warning_keys:
-                seen_warning_keys.add(key)
-                if len(warnings) < warning_sample_limit:
-                    warnings.append({
-                        "type": "recording_duplicate_detected",
-                        "media_kind": "music",
-                        "title": current.title,
-                        "existing_id": cross_release.track_id,
-                        "candidate_path": current.path,
-                        "reason": "same first-class recording across different releases; kept as possible variant",
-                        "recording_id": current.recording_id,
-                        "release_id": cross_release.release_id,
-                    })
+            low_row, high_row, low_track_id, high_track_id = _canonical_pair_payload_rows(current, cross_release)
+            low_release_id, high_release_id = sorted([current.release_id, cross_release.release_id])
+            key = ("recording_duplicate_detected", low_track_id, high_track_id, current.recording_id, low_release_id, high_release_id)
+            warnings_by_key.setdefault(key, {
+                "type": "recording_duplicate_detected",
+                "media_kind": "music",
+                "title": low_row.title,
+                "existing_id": high_row.track_id,
+                "candidate_path": low_row.path,
+                "reason": "same first-class recording across different releases; kept as possible variant",
+                "recording_id": current.recording_id,
+                "release_id": high_release_id,
+                "track_ids": [low_track_id, high_track_id],
+                "release_ids": [low_release_id, high_release_id],
+            })
 
+    warning_keys = sorted(warnings_by_key)
+    warnings = [warnings_by_key[key] for key in warning_keys[:warning_sample_limit]]
     result["physical_sources_preserved"] = physical_count
     result["duplicates_suspected"] = duplicate_count
     result["duplicate_warnings"] = warnings
-    result["duplicate_warnings_truncated"] = (physical_count + duplicate_count) > len(warnings)
+    result["duplicate_warning_relationships"] = len(warning_keys)
+    result["duplicate_warnings_truncated"] = len(warning_keys) > len(warnings)
     return result
