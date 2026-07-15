@@ -145,6 +145,7 @@ def main() -> int:
         ("listener queue and playlist source resolution", [sys.executable, "scripts/check_prod1_4d3a_listener_queue_and_playlist_projection.py"], BACKEND),
         ("playback safety and recording-aware history", [sys.executable, "scripts/check_prod1_4d3b_playback_recording_identity.py"], BACKEND),
         ("recording-level favorites feedback and smart collections", [sys.executable, "scripts/check_prod1_4d3c_recording_feedback_and_smart_collections.py"], BACKEND),
+        ("recording-first station candidate foundation", [sys.executable, "scripts/check_prod1_5a_recording_first_station_candidates.py"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),

@@ -9,6 +9,7 @@ from ..db import get_db
 from ..perf import perf_segment
 from ..radio_profiles import load_radio_profile_cache, profile_for_track_cached
 from ..station_engine import display_genre, norm_genre, track_genre, track_matches_genre
+from ..station_candidates import current_feedback_by_station_track, favorite_ids_by_station_track, load_station_candidate_tracks, logical_station_count
 
 router = APIRouter()
 
@@ -28,26 +29,21 @@ class StationPatch(BaseModel):
 
 def build_station_count_maps(db: Session) -> dict:
     with perf_segment('stations.count_maps'):
-        artist_counts = {
-            artist: count
-            for artist, count in active_tracks(db).with_entities(models.Track.artist, func.count(models.Track.id))
-            .filter(models.Track.artist.isnot(None))
-            .group_by(models.Track.artist)
-            .all()
-            if artist
-        }
-        album_artist_counts = {
-            artist: count
-            for artist, count in active_tracks(db).with_entities(models.Track.album_artist, func.count(models.Track.id))
-            .filter(models.Track.album_artist.isnot(None))
-            .group_by(models.Track.album_artist)
-            .all()
-            if artist
-        }
+        tracks = load_station_candidate_tracks(db, limit=5000)
+        artist_counts: dict[str, int] = {}
+        album_artist_counts: dict[str, int] = {}
+        artist_union_ids: dict[str, set[int]] = {}
         genre_counts: dict[str, int] = {}
         family_counts: dict[str, int] = {}
         profile_cache = load_radio_profile_cache(db)
-        for track in active_tracks(db).limit(5000).all():
+        for track in tracks:
+            if track.artist:
+                artist_counts[track.artist] = artist_counts.get(track.artist, 0) + 1
+            if track.album_artist:
+                album_artist_counts[track.album_artist] = album_artist_counts.get(track.album_artist, 0) + 1
+            for name in {track.artist, track.album_artist}:
+                if name:
+                    artist_union_ids.setdefault(name, set()).add(track.id)
             profile = profile_for_track_cached(track, profile_cache)
             tokens = {token for token in radio_genres.radio_genre_tokens(track, profile) if token and not radio_genres.is_generic_genre(token)}
             families = {radio_genres.genre_family(token) for token in tokens}
@@ -57,13 +53,8 @@ def build_station_count_maps(db: Session) -> dict:
             for family in families:
                 if family and family != 'unknown':
                     family_counts[family] = family_counts.get(family, 0) + 1
-        artist_union_ids: dict[str, set[int]] = {}
-        for track_id, artist, album_artist in active_tracks(db).with_entities(models.Track.id, models.Track.artist, models.Track.album_artist).all():
-            for name in {artist, album_artist}:
-                if name:
-                    artist_union_ids.setdefault(name, set()).add(track_id)
         artist_union_counts = {name: len(ids) for name, ids in artist_union_ids.items()}
-        total = active_tracks(db).with_entities(func.count(models.Track.id)).scalar() or 0
+        total = len(tracks)
     return {'artist': artist_counts, 'album_artist': album_artist_counts, 'artist_union': artist_union_counts, 'genre': genre_counts, 'genre_family': family_counts, 'total': total}
 
 
@@ -92,16 +83,7 @@ def station_to_dict_fast(station: models.Station, counts: dict) -> dict:
     }
 
 def station_track_count(station: models.Station, db: Session) -> int:
-    if station.type == 'artist' and station.seed_value:
-        return active_tracks(db).with_entities(func.count(models.Track.id)).filter(
-            or_(models.Track.artist == station.seed_value, models.Track.album_artist == station.seed_value)
-        ).scalar() or 0
-    if station.type == 'genre' and station.seed_value:
-        target = norm_genre(station.seed_value)
-        profile_cache = load_radio_profile_cache(db)
-        all_tracks = active_tracks(db).limit(5000).all()
-        return sum(1 for track in all_tracks if track_matches_genre(track, target, profile_for_track_cached(track, profile_cache)))
-    return active_tracks(db).with_entities(func.count(models.Track.id)).scalar() or 0
+    return logical_station_count(db, station_type=station.type, seed_value=station.seed_value)
 
 
 def station_to_dict(station: models.Station, db: Session) -> dict:
@@ -163,12 +145,10 @@ async def get_stations(db: Session = Depends(get_db)):
     total = counts['total']
 
     with perf_segment('stations.feedback_counts'):
-        fav_ids = {r[0] for r in db.query(models.TrackFavorite.track_id).all()}
-        latest: dict[int, str] = {}
-        for row in db.query(models.TrackThumb.track_id, models.TrackThumb.value).order_by(models.TrackThumb.created_at.asc()).all():
-            latest[row.track_id] = row.value.value
-        favorite_ids = fav_ids | {tid for tid, value in latest.items() if value == 'up'}
-        favorite_count = len(active_track_ids(db, favorite_ids))
+        candidate_tracks = load_station_candidate_tracks(db, limit=5000)
+        feedback = current_feedback_by_station_track(db, candidate_tracks)
+        favorites = favorite_ids_by_station_track(db, candidate_tracks)
+        favorite_count = len([track for track in candidate_tracks if track.id in favorites or feedback.get(track.id) == 'up'])
 
     with perf_segment('stations.system_station_build'):
         stations: list[dict] = []
