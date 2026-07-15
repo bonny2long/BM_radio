@@ -40,6 +40,75 @@ class Track(Base):
 
     thumbs = relationship("TrackThumb", back_populates="track")
     favorites = relationship("TrackFavorite", back_populates="track")
+    music_identity = relationship("MusicTrackIdentity", back_populates="track", uselist=False)
+
+
+class MusicRelease(Base):
+    __tablename__ = "music_releases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    identity_key = Column(String, unique=True, index=True, nullable=False)
+    album_artist = Column(String, index=True, nullable=True)
+    title = Column(String, index=True, nullable=True)
+    normalized_album_artist = Column(String, nullable=False, default="", server_default="")
+    normalized_title = Column(String, nullable=False, default="", server_default="")
+    release_type = Column(String, nullable=False, default="unknown", server_default="unknown")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    editions = relationship("MusicEdition", back_populates="release")
+
+
+class MusicEdition(Base):
+    __tablename__ = "music_editions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    identity_key = Column(String, unique=True, index=True, nullable=False)
+    release_id = Column(Integer, ForeignKey("music_releases.id"), index=True, nullable=False)
+    display_title = Column(String, nullable=True)
+    year = Column(Integer, nullable=True)
+    edition_type = Column(String, nullable=False, default="unknown", server_default="unknown")
+    source_scope = Column(String, index=True, nullable=False)
+    source_format_family = Column(String, nullable=False, default="UNKNOWN", server_default="UNKNOWN")
+    source_manifest_path = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    release = relationship("MusicRelease", back_populates="editions")
+    track_links = relationship("MusicTrackIdentity", back_populates="edition")
+
+
+class MusicRecording(Base):
+    __tablename__ = "music_recordings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    identity_key = Column(String, unique=True, index=True, nullable=False)
+    artist = Column(String, index=True, nullable=True)
+    title = Column(String, index=True, nullable=True)
+    normalized_artist = Column(String, nullable=False, default="", server_default="")
+    normalized_title = Column(String, nullable=False, default="", server_default="")
+    recording_type = Column(String, index=True, nullable=False, default="unknown", server_default="unknown")
+    version_hint = Column(String, nullable=True)
+    duration_bucket = Column(String, nullable=False, default="", server_default="")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    track_links = relationship("MusicTrackIdentity", back_populates="recording")
+
+
+class MusicTrackIdentity(Base):
+    __tablename__ = "music_track_identities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    track_id = Column(Integer, ForeignKey("tracks.id"), unique=True, index=True, nullable=False)
+    edition_id = Column(Integer, ForeignKey("music_editions.id"), index=True, nullable=False)
+    recording_id = Column(Integer, ForeignKey("music_recordings.id"), index=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    track = relationship("Track", back_populates="music_identity")
+    edition = relationship("MusicEdition", back_populates="track_links")
+    recording = relationship("MusicRecording", back_populates="track_links")
 
 
 class ArtistRadioProfile(Base):
