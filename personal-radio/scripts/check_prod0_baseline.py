@@ -141,6 +141,7 @@ def main() -> int:
         ("scanner-driven preference re-evaluation", [sys.executable, "scripts/check_prod1_4c2_scanner_preference_reevaluation.py"], BACKEND),
         ("recording curation and preference control API", [sys.executable, "scripts/check_prod1_4d1_recording_control_api.py"], BACKEND),
         ("listener library and search projection", [sys.executable, "scripts/check_prod1_4d2_listener_library_projection.py"], BACKEND),
+        ("listener projection scale stabilization", [sys.executable, "scripts/check_prod1_4d2_1_listener_projection_scale.py"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),

@@ -103,7 +103,7 @@ def _legacy_summary(db: Session) -> dict:
     }
 
 
-def _legacy_artists(db: Session, *, limit: int | None = None, offset: int = 0) -> list[dict]:
+def _legacy_artists(db: Session, *, limit: int | None = None, offset: int = 0, q: str | None = None) -> list[dict]:
     query = (
         db.query(models.Track.artist, func.count(models.Track.id), func.count(func.distinct(models.Track.album)))
         .filter(models.Track.library_availability == LIBRARY_AVAILABLE)
@@ -117,7 +117,7 @@ def _legacy_artists(db: Session, *, limit: int | None = None, offset: int = 0) -
     return [{"name": name, "track_count": count, "album_count": albums} for name, count, albums in query.all() if name]
 
 
-def _legacy_albums(db: Session, *, limit: int | None = None, offset: int = 0, q: str | None = None, recent: bool = False) -> list[dict]:
+def _legacy_albums(db: Session, *, limit: int | None = None, offset: int = 0, q: str | None = None, recent: bool = False, artist: str | None = None) -> list[dict]:
     query = (
         db.query(models.Track.album, models.Track.artist, func.min(models.Track.year), func.count(models.Track.id), func.min(models.Track.id))
         .filter(models.Track.library_availability == LIBRARY_AVAILABLE)
@@ -136,7 +136,7 @@ def _legacy_albums(db: Session, *, limit: int | None = None, offset: int = 0, q:
 
 def _legacy_global_music_search(db: Session, *, q: str) -> dict:
     term = q.strip().lower()
-    artists = [row for row in _legacy_artists(db) if term in row["name"].lower()][:20]
+    artists = _legacy_artists(db, q=q, limit=20)
     albums = _legacy_albums(db, q=q, limit=30)
     tracks = _legacy_tracks(db, q=q, limit=80)
     stations = [{"name": item["name"] + " Radio", "type": "artist", "seed_value": item["name"], "track_count": item["track_count"]} for item in artists[:5]]
@@ -285,6 +285,84 @@ def occurrence_count(db: Session, **filters) -> int:
     query = occurrence_query(db, **filters)
     return int(query.order_by(None).count() or 0)
 
+
+
+def _occurrence_subquery(
+    db: Session,
+    *,
+    artist: str | None = None,
+    album: str | None = None,
+    q: str | None = None,
+    release_id: int | None = None,
+):
+    return occurrence_query(db, artist=artist, album=album, q=q, release_id=release_id).order_by(None).subquery()
+
+
+def _artist_aggregate_query(db: Session, *, q: str | None = None):
+    occ = _occurrence_subquery(db)
+    query = (
+        db.query(
+            occ.c.artist_sort.label("name"),
+            func.count().label("track_count"),
+            func.count(func.distinct(occ.c.release_id)).label("album_count"),
+        )
+        .filter(func.trim(occ.c.artist_sort) != "")
+        .group_by(occ.c.artist_sort)
+    )
+    if q:
+        query = query.filter(occ.c.artist_sort.ilike(f"%{q.strip()}%"))
+    return query.order_by(occ.c.artist_sort.asc())
+
+
+def _release_aggregate_query(
+    db: Session,
+    *,
+    artist: str | None = None,
+    q: str | None = None,
+    recent: bool = False,
+):
+    occ = _occurrence_subquery(db, artist=artist, q=q)
+    title_expr = func.coalesce(_nonempty(models.MusicRelease.title), occ.c.album_sort, "")
+    artist_expr = func.coalesce(_nonempty(models.MusicRelease.album_artist), occ.c.artist_sort, "")
+    recent_created = func.max(occ.c.created_sort)
+    recent_indexed = func.max(occ.c.indexed_sort)
+    query = (
+        db.query(
+            occ.c.release_id.label("release_id"),
+            models.MusicRelease.release_type.label("release_type"),
+            title_expr.label("title"),
+            artist_expr.label("artist"),
+            func.min(models.Track.year).label("year"),
+            func.count().label("track_count"),
+            func.min(occ.c.presentation_track_id).label("presentation_track_id"),
+            recent_created.label("recent_created"),
+            recent_indexed.label("recent_indexed"),
+        )
+        .join(models.MusicRelease, models.MusicRelease.id == occ.c.release_id)
+        .join(models.Track, models.Track.id == occ.c.presentation_track_id)
+        .group_by(occ.c.release_id, models.MusicRelease.release_type, title_expr, artist_expr)
+    )
+    if q:
+        term = f"%{q.strip()}%"
+        query = query.filter(or_(title_expr.ilike(term), artist_expr.ilike(term)))
+    if recent:
+        query = query.order_by(recent_created.desc(), recent_indexed.desc(), occ.c.release_id.desc())
+    else:
+        query = query.order_by(artist_expr.asc(), title_expr.asc(), occ.c.release_id.asc())
+    return query
+
+
+def _release_row_item(row) -> dict:
+    presentation_track_id = int(row.presentation_track_id) if row.presentation_track_id is not None else 0
+    return {
+        "release_id": int(row.release_id),
+        "release_type": row.release_type,
+        "title": row.title,
+        "artist": row.artist,
+        "year": row.year,
+        "track_count": int(row.track_count or 0),
+        "cover_url": f"/api/media/tracks/{presentation_track_id}/cover",
+    }
 
 def _track_rows_by_ids(db: Session, track_ids: Iterable[int]) -> dict[int, models.Track]:
     ids = list(dict.fromkeys(int(track_id) for track_id in track_ids if track_id is not None))
@@ -441,33 +519,27 @@ def listener_tracks_page(
 def listener_summary(db: Session) -> dict:
     if not _identity_graph_present(db):
         return _legacy_summary(db)
-    keys = occurrence_keys(db)
-    artist_names = {key.artist_sort for key in keys if key.artist_sort}
-    release_ids = {key.release_id for key in keys}
-    return {"tracks": len(keys), "artists": len(artist_names), "albums": len(release_ids)}
+    occ = _occurrence_subquery(db)
+    row = db.query(
+        func.count().label("tracks"),
+        func.count(func.distinct(case((func.trim(occ.c.artist_sort) != "", occ.c.artist_sort)))).label("artists"),
+        func.count(func.distinct(occ.c.release_id)).label("albums"),
+    ).one()
+    return {"tracks": int(row.tracks or 0), "artists": int(row.artists or 0), "albums": int(row.albums or 0)}
 
-
-def listener_artists(db: Session, *, limit: int | None = None, offset: int = 0) -> list[dict]:
+def listener_artists(db: Session, *, limit: int | None = None, offset: int = 0, q: str | None = None) -> list[dict]:
     if not _identity_graph_present(db):
-        return _legacy_artists(db, limit=limit, offset=offset)
-    rows: dict[str, dict] = {}
-    for key in occurrence_keys(db):
-        if not key.artist_sort:
-            continue
-        item = rows.setdefault(key.artist_sort, {"name": key.artist_sort, "track_count": 0, "release_ids": set()})
-        item["track_count"] += 1
-        item["release_ids"].add(key.release_id)
-    items = [
-        {"name": item["name"], "track_count": item["track_count"], "album_count": len(item["release_ids"])}
-        for item in rows.values()
-    ]
-    items.sort(key=lambda item: item["name"])
+        return _legacy_artists(db, limit=limit, offset=offset, q=q)
+    query = _artist_aggregate_query(db, q=q)
     if offset:
-        items = items[max(offset, 0):]
+        query = query.offset(max(offset, 0))
     if limit is not None:
-        items = items[:min(max(limit, 1), MAX_PAGE_LIMIT)]
-    return items
-
+        query = query.limit(min(max(limit, 1), MAX_PAGE_LIMIT))
+    return [
+        {"name": row.name, "track_count": int(row.track_count or 0), "album_count": int(row.album_count or 0)}
+        for row in query.all()
+        if row.name
+    ]
 
 def listener_artist_detail(db: Session, artist: str) -> dict:
     tracks_page = listener_tracks_page(db, artist=artist, limit=50, offset=0)
@@ -476,52 +548,20 @@ def listener_artist_detail(db: Session, artist: str) -> dict:
 
 
 def _album_groups(db: Session, *, q: str | None = None) -> list[dict]:
-    items = serialize_occurrences(db, occurrence_keys(db, q=q, sort="created_desc" if q is None else "album"))
-    grouped: dict[int, dict] = {}
-    for item in items:
-        release_id = item["release_id"]
-        group = grouped.setdefault(release_id, {
-            "release_id": release_id,
-            "release_type": item.get("release_type"),
-            "title": item["album"],
-            "artist": item.get("album_artist") or item["artist"],
-            "year": item.get("year"),
-            "track_count": 0,
-            "cover_url": item["cover_url"],
-            "_max_track_id": 0,
-        })
-        group["track_count"] += 1
-        group["_max_track_id"] = max(group["_max_track_id"], item["presentation_track_id"])
-        if group["year"] is None or (item.get("year") is not None and item.get("year") < group["year"]):
-            group["year"] = item.get("year")
-    result = []
-    for group in grouped.values():
-        group.pop("_max_track_id", None)
-        result.append(group)
-    result.sort(key=lambda item: (str(item.get("artist") or ""), str(item.get("title") or ""), int(item.get("release_id") or 0)))
-    return result
+    return listener_albums(db, q=q)
 
-
-def listener_albums(db: Session, *, limit: int | None = None, offset: int = 0, q: str | None = None, recent: bool = False) -> list[dict]:
+def listener_albums(db: Session, *, limit: int | None = None, offset: int = 0, q: str | None = None, recent: bool = False, artist: str | None = None) -> list[dict]:
     if not _identity_graph_present(db):
-        return _legacy_albums(db, limit=limit, offset=offset, q=q, recent=recent)
-    rows = _album_groups(db, q=q)
-    if q:
-        term = q.strip().lower()
-        rows = [row for row in rows if term in str(row.get("title") or "").lower() or term in str(row.get("artist") or "").lower()]
-    if recent:
-        rows.sort(key=lambda item: int(item.get("release_id") or 0), reverse=True)
+        return _legacy_albums(db, limit=limit, offset=offset, q=q, recent=recent, artist=artist)
+    query = _release_aggregate_query(db, artist=artist, q=q, recent=recent)
     if offset:
-        rows = rows[max(offset, 0):]
+        query = query.offset(max(offset, 0))
     if limit is not None:
-        rows = rows[:min(max(limit, 1), MAX_PAGE_LIMIT)]
-    return rows
-
+        query = query.limit(min(max(limit, 1), MAX_PAGE_LIMIT))
+    return [_release_row_item(row) for row in query.all()]
 
 def listener_artist_albums(db: Session, artist: str) -> list[dict]:
-    release_ids = {key.release_id for key in occurrence_keys(db, artist=artist)}
-    return [row for row in listener_albums(db) if row["release_id"] in release_ids]
-
+    return listener_albums(db, artist=artist)
 
 def listener_album_tracks(
     db: Session,
@@ -553,8 +593,7 @@ def library_search(db: Session, *, q: str) -> list[dict]:
 def global_music_search(db: Session, *, q: str) -> dict:
     if not _identity_graph_present(db):
         return _legacy_global_music_search(db, q=q)
-    term = q.strip().lower()
-    artists = [row for row in listener_artists(db) if term in row["name"].lower()][:20]
+    artists = listener_artists(db, q=q, limit=20)
     albums = listener_albums(db, q=q, limit=30)
     tracks = listener_tracks(db, q=q, limit=80)
     stations = [{"name": item["name"] + " Radio", "type": "artist", "seed_value": item["name"], "track_count": item["track_count"]} for item in artists[:5]]
