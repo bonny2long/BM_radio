@@ -22,6 +22,14 @@ from .station_candidates import (
     station_identity_keys_for_track_ids,
     validate_song_seed_track,
 )
+from .station_version_affinity import (
+    VersionAffinityIntent,
+    affinity_summary,
+    affinity_warnings,
+    apply_affinity_to_tiers,
+    apply_version_affinity,
+    derive_version_affinity_intent,
+)
 from .station_intelligence import (
     StationCandidateTier,
     assemble_station_window,
@@ -288,8 +296,9 @@ def score_tracks(db: Session, tracks: list[models.Track], station_type: str) -> 
     return [t for _, t in scored]
 
 
-def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Track], profile_cache: dict | None = None) -> list[models.Track]:
+def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Track], profile_cache: dict | None = None, version_intent: VersionAffinityIntent | None = None) -> list[models.Track]:
     seed_profile = radio_profile(db, seed, profile_cache)
+    version_intent = version_intent or derive_version_affinity_intent(db, seed)
     seed_genre = profile_genre(seed_profile) or track_genre(seed)
     seed_year = seed.year or 0
     seed_artist = (seed.artist or '').strip().lower()
@@ -351,6 +360,8 @@ def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Tr
             score += 0.3
         if t.id in recent:
             score -= 1.0
+
+        score += float(apply_version_affinity(t, version_intent)['value'])
         if t_album and t_album == seed_album:
             score -= 2.0
 
@@ -473,6 +484,8 @@ def debug_track_row(track: models.Track, score: float, score_parts: list[dict], 
             'source_resolution': getattr(track, '_station_source_resolution', None),
             'source_confidence': getattr(track, '_station_source_confidence', None),
             'source_reason_code': getattr(track, '_station_source_reason_code', None),
+            'version_affinity_mode': getattr(track, '_station_version_affinity_mode', None),
+            'version_affinity_tier': getattr(track, '_station_version_affinity_tier', None),
         })
     if reason:
         row['reason'] = reason
@@ -498,8 +511,10 @@ def score_song_candidate_debug(
     recent: set[int],
     favs: set[int],
     profile_cache: dict | None = None,
+    version_intent: VersionAffinityIntent | None = None,
 ) -> dict:
     candidate_profile = radio_profile(db, candidate, profile_cache)
+    version_intent = version_intent or derive_version_affinity_intent(db, seed)
     candidate_genre = profile_genre(candidate_profile) or track_genre(candidate)
     seed_artist = (seed.artist or '').strip().lower()
     seed_album = (seed.album or '').strip().lower()
@@ -553,6 +568,8 @@ def score_song_candidate_debug(
         parts.append(explain_score_part('favorite_boost', 0.3))
     if candidate.id in recent:
         parts.append(explain_score_part('recent_penalty', -1.0))
+
+    parts.append(apply_version_affinity(candidate, version_intent))
     if candidate_album and candidate_album == seed_album:
         parts.append(explain_score_part('same_album_penalty', -2.0, candidate.album))
 
@@ -734,6 +751,7 @@ def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], ex
     if seed_track is None:
         return station_debug_response(req, None, {'candidate_count': 0, 'selected_count': 0}, [], [])
     validate_song_seed_track(db, seed_track)
+    version_intent = derive_version_affinity_intent(db, seed_track)
 
     all_tracks = load_station_candidate_tracks(db, limit=5000, exclude_track_ids=req.exclude_track_ids, seed_track_id=seed_track.id)
     profile_cache = load_radio_profile_cache(db)
@@ -762,10 +780,11 @@ def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], ex
                 blocked_unrelated.append(track)
         candidates = coherent
 
-    rows = sort_debug_rows([score_song_candidate_debug(db, seed_track, t, seed_profile, seed_genre, fb, recent, favs, profile_cache) for t in candidates])
-    ranked_tracks = [db.get(models.Track, row['track_id']) for row in rows if row.get('track_id')]
-    ranked_tracks = [t for t in ranked_tracks if t]
+    rows = sort_debug_rows([score_song_candidate_debug(db, seed_track, t, seed_profile, seed_genre, fb, recent, favs, profile_cache, version_intent) for t in candidates])
+    track_by_id = {track.id: track for track in candidates}
+    ranked_tracks = [track_by_id[row['track_id']] for row in rows if row.get('track_id') in track_by_id]
     tiers = song_radio_tiers(seed_track, seed_profile, ranked_tracks, profile_cache)
+    tiers = apply_affinity_to_tiers(tiers, version_intent)
     selected_tracks = assemble_station_window(tiers, limit, profile='song', max_artist_window=3, max_release_window=2)
     selected_ids = {t.id for t in selected_tracks if t}
     tier_by_id = {track.id: tier for tier, entries in tiers.items() for _, track in entries}
@@ -786,6 +805,7 @@ def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], ex
         'track': seed_track,
     }
     distribution = debug_distribution_from_rows(selected, seed_track.artist)
+    version_summary = affinity_summary(version_intent, candidates, selected_tracks)
     response = station_debug_response(req, seed, {
         'candidate_count': len(candidates),
         'selected_count': len(selected),
@@ -798,13 +818,15 @@ def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], ex
         'same_artist_count': same_artist,
         'other_artist_count': len(selected) - same_artist,
         **distribution,
+        'version_affinity': version_summary,
     }, selected, top_rejected)
     extra_warnings = []
     if blocked_unrelated:
         extra_warnings.append('unrelated_genre_blocked')
     if len(selected) < limit and blocked_unrelated:
         extra_warnings.append('returned_less_than_limit_to_preserve_coherence')
-    response['warnings'] = list(set(response['warnings'] + debug_distribution_warnings(distribution) + extra_warnings))
+    response['version_affinity'] = version_summary
+    response['warnings'] = list(set(response['warnings'] + debug_distribution_warnings(distribution) + affinity_warnings(version_summary) + extra_warnings))
     response['seed'] = strip_internal_seed(seed)
     return response
 
@@ -1078,6 +1100,7 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
         if seed_track is None:
             return payload([], source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=0, exclude_count=len(exclude_set), exhausted=True, remaining_estimate=0)
         validate_song_seed_track(db, seed_track)
+        version_intent = derive_version_affinity_intent(db, seed_track)
 
     station_pool = load_station_candidate_tracks(db, limit=5000, exclude_track_ids=exclude_set, seed_track_id=seed_track.id if seed_track is not None else None)
     fb = latest_feedback(db, station_pool)
@@ -1106,8 +1129,9 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
         candidates = [track for track in station_pool if track.id not in down]
         if not req.allow_exploration and seed_genre:
             candidates = [track for track in candidates if track_is_genre_compatible(track, seed_genre, radio_profile(db, track, profile_cache))]
-        ranked = score_song_radio(db, seed_track, candidates, profile_cache)
+        ranked = score_song_radio(db, seed_track, candidates, profile_cache, version_intent)
         tiers = song_radio_tiers(seed_track, seed_profile, ranked, profile_cache)
+        tiers = apply_affinity_to_tiers(tiers, version_intent)
         selected_tracks = assemble_station_window(tiers, limit, profile='song', max_artist_window=3, max_release_window=2)
         if len(selected_tracks) < limit and req.allow_exploration:
             selected_tracks = no_repeats(selected_tracks + [track for track in ranked if track not in selected_tracks], limit, artist_loose=False, avoid_title_dups=True)

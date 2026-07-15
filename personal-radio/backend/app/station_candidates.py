@@ -87,6 +87,9 @@ def _deterministic_profile_track_ids(db: Session, recording_ids: list[int]) -> d
 
 
 def _attach_candidate_metadata(track: models.Track, candidate: StationRecordingCandidate) -> models.Track:
+    for attr in ("_station_version_affinity_mode", "_station_version_affinity_tier", "_station_version_affinity_score"):
+        if hasattr(track, attr):
+            delattr(track, attr)
     setattr(track, "_station_candidate", candidate)
     setattr(track, "_station_recording_id", candidate.recording_id)
     setattr(track, "_station_effective_track_id", candidate.effective_track.id)

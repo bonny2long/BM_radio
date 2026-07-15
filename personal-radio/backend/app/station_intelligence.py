@@ -56,6 +56,9 @@ def release_key(track: Any) -> tuple[str, str]:
 
 
 def normalized_title_key(track: Any) -> str:
+    recording_id = getattr(track, '_station_recording_id', None)
+    if recording_id is not None:
+        return f'recording:{recording_id}'
     title = str(getattr(track, 'title', '') or '').lower()
     title = re.sub(r'\(.*?\)', '', title)
     title = re.sub(r'\[.*?\]', '', title)

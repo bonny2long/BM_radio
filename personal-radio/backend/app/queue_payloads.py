@@ -16,6 +16,8 @@ def _station_identity_fields(track):
             "source_resolution": getattr(track, "_station_source_resolution", None),
             "source_confidence": getattr(track, "_station_source_confidence", None),
             "source_reason_code": getattr(track, "_station_source_reason_code", None),
+            "version_affinity_mode": getattr(track, "_station_version_affinity_mode", None),
+            "version_affinity_tier": getattr(track, "_station_version_affinity_tier", None),
         })
     elif hasattr(track, "_station_candidate"):
         fields.update({
@@ -26,6 +28,8 @@ def _station_identity_fields(track):
             "source_resolution": getattr(track, "_station_source_resolution", None),
             "source_confidence": getattr(track, "_station_source_confidence", None),
             "source_reason_code": getattr(track, "_station_source_reason_code", None),
+            "version_affinity_mode": getattr(track, "_station_version_affinity_mode", None),
+            "version_affinity_tier": getattr(track, "_station_version_affinity_tier", None),
         })
     return fields
 

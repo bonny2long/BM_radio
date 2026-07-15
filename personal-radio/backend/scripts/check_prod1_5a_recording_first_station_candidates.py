@@ -286,8 +286,10 @@ def case_structural_scope() -> None:
     source = Path("app/station_engine.py").read_text(encoding="utf-8")
     assert "choose_preferred_tracks" not in source
     assert "quality_rank" not in source and "rank_recording_variant" not in source
-    assert "version_affinity" not in source and "recording_mode" not in source
+    assert "recording_mode" not in source
     assert "seed_recording_id" not in source
+    request_source = Path("app/queue_contracts.py").read_text(encoding="utf-8")
+    assert "version_affinity" not in request_source and "recording_mode" not in request_source
     assert "frontend" not in source.lower()
     assert "write_bytes" not in source
     assert "avoid_title_dups=True" in source
