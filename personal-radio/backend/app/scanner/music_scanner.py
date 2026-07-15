@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..config import settings
 from ..media_identity import duration_bucket, music_recording_key, music_track_release_key
+from ..music_identity_graph import materialize_music_identity_graph
 from ..scan_runs import MEDIA_KIND_MUSIC, complete_scan_run, fail_scan_run, mark_track_seen, reconcile_unseen_tracks, start_scan_run
 from .archive_assistant_manifest import extract_music_manifest_metadata, load_aa_manifest_context
 from .path_safety import is_approved_path, safe_media_files
@@ -766,6 +767,8 @@ def scan_music(db: Session):
         'duplicates_suspected': 0,
         'variants_detected': 0,
         'duplicate_warnings': [],
+        'identity_tracks_materialized': 0,
+        'physical_sources_preserved': 0,
     }
 
     scan_run = start_scan_run(db, media_kind=MEDIA_KIND_MUSIC, roots=[str(r) for r in existing])
@@ -784,6 +787,7 @@ def scan_music(db: Session):
         exact_path_tracks = {track.path: track for track in existing_tracks if track.path}
         release_seen: dict[str, dict[str, Any]] = {}
         recording_seen: dict[str, dict[str, Any]] = {}
+        identity_track_ids: set[int] = set()
         for existing_track in existing_tracks:
             if existing_track.library_availability == 'unavailable':
                 continue
@@ -875,16 +879,15 @@ def scan_music(db: Session):
                     else:
                         seen_release = release_seen.get(release_key)
                         if seen_release and seen_release.get('path') != path_text and seen_release.get('duration_bucket') == file_duration_bucket:
-                            result['duplicates_skipped'] += 1
+                            result['physical_sources_preserved'] += 1
                             result['duplicate_warnings'].append({
-                                'type': 'duplicate_skipped',
+                                'type': 'physical_source_preserved',
                                 'media_kind': 'music',
                                 'title': data['title'],
                                 'existing_id': seen_release.get('id'),
                                 'candidate_path': path_text,
-                                'reason': 'same music release key and duration bucket',
+                                'reason': 'similar release identity and duration; distinct physical path retained for identity/preference resolution',
                             })
-                            continue
                         seen_recording = recording_seen.get(recording_key)
                         if seen_recording and seen_recording.get('path') != path_text and seen_recording.get('release_key') != release_key:
                             result['duplicates_suspected'] += 1
@@ -904,6 +907,8 @@ def scan_music(db: Session):
                         mark_track_seen(track, scan_run_id=scan_run_id)
                         result['tracks_added'] += 1
 
+                    if getattr(track, 'id', None) is not None:
+                        identity_track_ids.add(track.id)
                     release_seen[release_key] = {'id': getattr(track, 'id', None), 'path': path_text, 'duration_bucket': file_duration_bucket, 'title': data['title']}
                     recording_seen.setdefault(recording_key, {'id': getattr(track, 'id', None), 'path': path_text, 'release_key': release_key, 'title': data['title']})
                     seed_aa_radio_profiles(db, track, aa_meta)
@@ -913,6 +918,17 @@ def scan_music(db: Session):
         db.flush()
         if result['errors']:
             _set_scan_failed(db, scan_run, result, '\n'.join(result['errors']), len(result['errors']))
+            db.commit()
+            return result
+
+        try:
+            identity_result = materialize_music_identity_graph(db, track_ids=sorted(identity_track_ids))
+            result['identity_tracks_materialized'] = identity_result['tracks_seen']
+        except Exception as exc:
+            db.rollback()
+            scan_run = db.get(models.ScanRun, scan_run_id)
+            result['errors'].append(f'identity materialization failed: {exc}')
+            _set_scan_failed(db, scan_run, result, str(exc), max(1, len(result['errors'])))
             db.commit()
             return result
 
