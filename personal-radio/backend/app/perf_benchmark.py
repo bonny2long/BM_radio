@@ -14,12 +14,12 @@ from typing import Any, Callable
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
-from . import models
 from .listener_library import global_music_search, library_search, listener_albums, listener_artists, listener_summary, listener_tracks_page
 from .music_recording_feedback import smart_music_candidate_track_ids
 from .perf_fixtures import SyntheticLibrarySummary
 from .scanner import music_scanner
-from .scanner.music_scanner import _existing_track_identity, scan_music
+from .music_scan_index import EXACT_PATH_LOOKUP_CHUNK_SIZE, tracks_by_exact_paths
+from .scanner.music_scanner import scan_music
 from .station_engine import build_station_queue
 from .queue_contracts import StationQueueRequest
 
@@ -177,23 +177,15 @@ def listener_operations(ctx: BenchmarkContext) -> list[tuple[str, Callable[[Sess
     ]
 
 
-def scanner_startup_state(db: Session) -> dict[str, Any]:
-    tracks = db.query(models.Track).all()
-    exact_path_tracks = {track.path: track.id for track in tracks if track.path}
-    release_seen: dict[str, int] = {}
-    recording_seen: dict[str, int] = {}
-    for track in tracks:
-        if track.library_availability == "unavailable":
-            continue
-        release_key, recording_key, _duration = _existing_track_identity(track)
-        release_seen.setdefault(release_key, track.id)
-        recording_seen.setdefault(recording_key, track.id)
+def scanner_startup_state(db: Session, candidate_paths: list[str]) -> dict[str, Any]:
+    exact_path_tracks = tracks_by_exact_paths(db, paths=candidate_paths)
+    unique_paths = list(dict.fromkeys(candidate_paths))
+    lookup_queries = (len(unique_paths) + EXACT_PATH_LOOKUP_CHUNK_SIZE - 1) // EXACT_PATH_LOOKUP_CHUNK_SIZE if unique_paths else 0
     return {
-        "tracks_loaded": len(tracks),
-        "exact_path_tracks": len(exact_path_tracks),
-        "release_seen": len(release_seen),
-        "recording_seen": len(recording_seen),
-        "checksum": stable_checksum({"paths": sorted(exact_path_tracks)[:25], "release_seen": len(release_seen), "recording_seen": len(recording_seen)}),
+        "candidate_paths": len(unique_paths),
+        "lookup_queries": lookup_queries,
+        "exact_path_tracks_loaded": len(exact_path_tracks),
+        "checksum": stable_checksum({"paths": sorted(exact_path_tracks)[:25], "candidate_paths": len(unique_paths)}),
     }
 
 
@@ -287,7 +279,8 @@ def run_benchmarks(
     for name, operation, notes in listener_operations(ctx):
         metrics.append(measure_operation(ctx, name=name, operation=operation, iterations=iterations, warmups=warmups, notes=notes))
     if include_scanner:
-        metrics.append(measure_operation(ctx, name="scanner.startup_state", operation=scanner_startup_state, iterations=iterations, warmups=warmups, notes="S1 existing-index startup state"))
+        startup_paths = [str(ctx.temp_root / "scanner_startup_root" / f"{index + 1:02d} Incremental Track {index + 1:02d}.mp3") for index in range(50)]
+        metrics.append(measure_operation(ctx, name="scanner.startup_state", operation=lambda db: scanner_startup_state(db, startup_paths), iterations=iterations, warmups=warmups, notes="S1 candidate-scoped exact-path startup lookup"))
         metrics.append(measure_operation(ctx, name="scanner.incremental.50", operation=lambda db: scanner_incremental_50(ctx, db), iterations=1, warmups=0, notes="S2 temp-root deterministic 50-file incremental scan"))
     if include_station_observation and ctx.summary.physical_tracks <= 10000:
         for name, operation, notes in station_observation_operations(ctx):

@@ -11,6 +11,7 @@ from .. import models
 from ..config import settings
 from ..media_identity import duration_bucket, music_recording_key, music_track_release_key
 from ..music_identity_graph import materialize_music_identity_graph
+from ..music_scan_index import SCAN_PATH_BATCH_SIZE, chunked, collect_music_scan_identity_diagnostics, tracks_by_exact_paths
 from ..music_source_preference import evaluate_music_recording_preferences, music_recording_ids_for_track_ids
 from ..music_technical_profile import technical_profile_from_media, upsert_music_technical_profiles
 from ..scan_runs import MEDIA_KIND_MUSIC, complete_scan_run, fail_scan_run, find_unseen_track_ids, mark_track_seen, reconcile_unseen_tracks, start_scan_run
@@ -773,6 +774,12 @@ def scan_music(db: Session):
         'duplicates_suspected': 0,
         'variants_detected': 0,
         'duplicate_warnings': [],
+        'duplicate_warnings_truncated': False,
+        'identity_diagnostic_recordings': 0,
+        'identity_diagnostic_tracks': 0,
+        'scan_path_batches': 0,
+        'exact_path_lookup_queries': 0,
+        'exact_path_tracks_loaded': 0,
         'identity_tracks_materialized': 0,
         'physical_sources_preserved': 0,
         'technical_profiles_updated': 0,
@@ -797,22 +804,20 @@ def scan_music(db: Session):
         return result
 
     try:
-        existing_tracks = db.query(models.Track).all()
-        exact_path_tracks = {track.path: track for track in existing_tracks if track.path}
-        release_seen: dict[str, dict[str, Any]] = {}
-        recording_seen: dict[str, dict[str, Any]] = {}
         identity_track_ids: set[int] = set()
         technical_profiles_by_track_id: dict[int, dict[str, Any]] = {}
-        for existing_track in existing_tracks:
-            if existing_track.library_availability == 'unavailable':
-                continue
-            release_key, recording_key, duration = _existing_track_identity(existing_track)
-            release_seen.setdefault(release_key, {'id': existing_track.id, 'path': existing_track.path, 'duration_bucket': duration, 'title': existing_track.title})
-            recording_seen.setdefault(recording_key, {'id': existing_track.id, 'path': existing_track.path, 'release_key': release_key, 'title': existing_track.title})
+        candidate_paths = [path for scan_root in existing for path in safe_media_files(scan_root, MUSIC_EXTENSIONS, existing)]
+        result['scan_path_batches'] = 0
+        result['exact_path_lookup_queries'] = 0
+        result['exact_path_tracks_loaded'] = 0
 
         manifest_cache: dict[str, Any] = {}
-        for scan_root in existing:
-            for path in safe_media_files(scan_root, MUSIC_EXTENSIONS, existing):
+        for path_batch in chunked(candidate_paths, SCAN_PATH_BATCH_SIZE):
+            result['scan_path_batches'] += 1
+            exact_path_tracks = tracks_by_exact_paths(db, paths=[str(path) for path in path_batch])
+            result['exact_path_lookup_queries'] += 1
+            result['exact_path_tracks_loaded'] += len(exact_path_tracks)
+            for path in path_batch:
                 result['tracks_scanned'] += 1
                 try:
                     path_text = str(path)
@@ -880,11 +885,6 @@ def scan_music(db: Session):
                         'primary_genre': aa_meta.get('primary_genre') or aa_meta.get('genre') or pick(side, path_data, tags, 'genre'),
                         'last_indexed_at': datetime.now(timezone.utc),
                     }
-                    track_number = data.get('track_number')
-                    release_key = music_track_release_key(data['album_artist'], data['album'], data['title'], data['year'], track_number)
-                    recording_key = music_recording_key(data['artist'], data['title'], data['duration_seconds'])
-                    file_duration_bucket = duration_bucket(data['duration_seconds'], tolerance=5)
-
                     track = exact_path_tracks.get(path_text)
                     if track:
                         for key, value in data.items():
@@ -892,29 +892,6 @@ def scan_music(db: Session):
                         mark_track_seen(track, scan_run_id=scan_run_id)
                         result['tracks_updated'] += 1
                     else:
-                        seen_release = release_seen.get(release_key)
-                        if seen_release and seen_release.get('path') != path_text and seen_release.get('duration_bucket') == file_duration_bucket:
-                            result['physical_sources_preserved'] += 1
-                            result['duplicate_warnings'].append({
-                                'type': 'physical_source_preserved',
-                                'media_kind': 'music',
-                                'title': data['title'],
-                                'existing_id': seen_release.get('id'),
-                                'candidate_path': path_text,
-                                'reason': 'similar release identity and duration; distinct physical path retained for identity/preference resolution',
-                            })
-                        seen_recording = recording_seen.get(recording_key)
-                        if seen_recording and seen_recording.get('path') != path_text and seen_recording.get('release_key') != release_key:
-                            result['duplicates_suspected'] += 1
-                            result['duplicate_warnings'].append({
-                                'type': 'recording_duplicate_detected',
-                                'media_kind': 'music',
-                                'title': data['title'],
-                                'existing_id': seen_recording.get('id'),
-                                'candidate_path': path_text,
-                                'reason': 'same recording key across different releases; kept as possible variant',
-                            })
-
                         track = models.Track(path=path_text, **data)
                         db.add(track)
                         db.flush()
@@ -925,8 +902,7 @@ def scan_music(db: Session):
                     if getattr(track, 'id', None) is not None:
                         identity_track_ids.add(track.id)
                         technical_profiles_by_track_id[track.id] = tags.get('technical') or technical_profile_from_media(path, None, error='UnsupportedFormat')
-                    release_seen[release_key] = {'id': getattr(track, 'id', None), 'path': path_text, 'duration_bucket': file_duration_bucket, 'title': data['title']}
-                    recording_seen.setdefault(recording_key, {'id': getattr(track, 'id', None), 'path': path_text, 'release_key': release_key, 'title': data['title']})
+
                     seed_aa_radio_profiles(db, track, aa_meta)
                 except Exception as exc:
                     result['errors'].append(f'{path}: {exc}')
@@ -956,6 +932,13 @@ def scan_music(db: Session):
         try:
             identity_result = materialize_music_identity_graph(db, track_ids=sorted(identity_track_ids))
             result['identity_tracks_materialized'] = identity_result['tracks_seen']
+            diagnostic_result = collect_music_scan_identity_diagnostics(db, track_ids=sorted(identity_track_ids))
+            result['physical_sources_preserved'] = diagnostic_result['physical_sources_preserved']
+            result['duplicates_suspected'] = diagnostic_result['duplicates_suspected']
+            result['duplicate_warnings'] = diagnostic_result['duplicate_warnings']
+            result['duplicate_warnings_truncated'] = diagnostic_result['duplicate_warnings_truncated']
+            result['identity_diagnostic_recordings'] = diagnostic_result['identity_diagnostic_recordings']
+            result['identity_diagnostic_tracks'] = diagnostic_result['identity_diagnostic_tracks']
         except Exception as exc:
             db.rollback()
             scan_run = db.get(models.ScanRun, scan_run_id)
