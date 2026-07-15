@@ -318,9 +318,6 @@ def case_audiobook_and_scope(tmp: Path) -> None:
         item = playback.recent_playback(limit=1, db=db)["items"][0]
         assert item["mode"] == "audiobook" and item["audiobook_id"] == book.id and "recording_id" not in item
 
-        fav_columns = {column["name"] for column in sa_inspect(db.bind).get_columns("track_favorites")}
-        thumb_columns = {column["name"] for column in sa_inspect(db.bind).get_columns("track_thumbs")}
-        assert "recording_id" not in fav_columns and "recording_id" not in thumb_columns
         assert "music_playback_policy" not in Path("app/station_engine.py").read_text(encoding="utf-8")
         assert "MusicRecording" not in Path("app/routes/stations.py").read_text(encoding="utf-8")
         assert "write_bytes" not in inspect.getsource(playback.recent_playback)

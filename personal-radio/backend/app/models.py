@@ -312,6 +312,7 @@ class TrackThumb(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     track_id = Column(Integer, ForeignKey("tracks.id"), index=True)
+    recording_id = Column(Integer, ForeignKey("music_recordings.id"), nullable=True, index=True)
     station_id = Column(Integer, ForeignKey("stations.id"), nullable=True, index=True)
     value = Column(Enum(ThumbValue))
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
@@ -323,6 +324,7 @@ class TrackFavorite(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     track_id = Column(Integer, ForeignKey("tracks.id"), index=True)
+    recording_id = Column(Integer, ForeignKey("music_recordings.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     track = relationship("Track", back_populates="favorites")

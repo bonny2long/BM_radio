@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..availability import TRACK_UNAVAILABLE_MESSAGE, active_track_ids, active_tracks, available_track_filter, is_track_available
 from ..db import get_db
+from ..music_recording_feedback import smart_music_candidate_count, smart_music_candidate_track_ids
 from ..listener_queue import (
     playlist_active_count,
     playlist_has_occurrence,
@@ -42,44 +43,12 @@ class TrackListPlaylistCreate(BaseModel):
     track_ids: list[int]
 
 
-def latest_thumb_values(db: Session):
-    rows = db.query(models.TrackThumb).order_by(models.TrackThumb.created_at.asc()).all()
-    return {r.track_id: r.value.value for r in rows}
-
-
 def smart_track_ids(db: Session, key: str, limit: int = 1000):
-    limit = max(1, min(limit, 100000))
-    if key == 'favorites':
-        return [r[0] for r in db.query(models.TrackFavorite.track_id).join(models.Track, models.Track.id == models.TrackFavorite.track_id).filter(available_track_filter()).order_by(models.TrackFavorite.created_at.desc()).limit(limit).all()]
-    if key == 'thumbs_up':
-        latest = latest_thumb_values(db)
-        up_ids = [tid for tid, value in latest.items() if value == 'up']
-        available = active_track_ids(db, up_ids)
-        return [tid for tid in up_ids if tid in available][:limit]
-    if key == 'most_played':
-        rows = db.query(models.PlaybackEvent.track_id, func.count(models.PlaybackEvent.id).label('plays')).join(models.Track, models.Track.id == models.PlaybackEvent.track_id).filter(available_track_filter(), models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == 'qualified_play').group_by(models.PlaybackEvent.track_id).order_by(func.count(models.PlaybackEvent.id).desc()).limit(limit).all()
-        return [r[0] for r in rows]
-    if key == 'recently_played':
-        rows = db.query(models.PlaybackEvent.track_id).join(models.Track, models.Track.id == models.PlaybackEvent.track_id).filter(available_track_filter(), models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == 'qualified_play').order_by(models.PlaybackEvent.created_at.desc()).limit(limit * 6).all()
-        out = []
-        seen = set()
-        for (tid,) in rows:
-            if tid and tid not in seen:
-                seen.add(tid)
-                out.append(tid)
-            if len(out) >= limit:
-                break
-        return out
-    if key == 'recently_added':
-        return [r[0] for r in active_tracks(db).with_entities(models.Track.id).order_by(models.Track.created_at.desc(), models.Track.last_indexed_at.desc()).limit(limit).all()]
-    if key == 'never_played':
-        rows = active_tracks(db).with_entities(models.Track.id).outerjoin(models.PlaybackEvent, (models.PlaybackEvent.track_id == models.Track.id) & (models.PlaybackEvent.event_type == 'qualified_play')).group_by(models.Track.id).having(func.count(models.PlaybackEvent.id) == 0).order_by(models.Track.created_at.desc()).limit(limit).all()
-        return [r[0] for r in rows]
-    return []
+    return smart_music_candidate_track_ids(db, key=key, limit=limit)
 
 
 def smart_count(db: Session, key: str):
-    return len(smart_track_ids(db, key, 100000))
+    return smart_music_candidate_count(db, key=key)
 
 
 def smart_summary(db: Session, key: str, name: str, description: str):

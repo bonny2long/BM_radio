@@ -33,6 +33,21 @@ PLAYBACK_IDENTITY_INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_playback_events_recording_id ON playback_events (recording_id)",
 ]
 
+
+RECORDING_FEEDBACK_COLUMNS = {
+    "track_favorites": {
+        "recording_id": "INTEGER",
+    },
+    "track_thumbs": {
+        "recording_id": "INTEGER",
+    },
+}
+
+RECORDING_FEEDBACK_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS ix_track_favorites_recording_id ON track_favorites (recording_id)",
+    "CREATE INDEX IF NOT EXISTS ix_track_thumbs_recording_id ON track_thumbs (recording_id)",
+]
+
 SCAN_RECONCILIATION_INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_tracks_library_availability ON tracks (library_availability)",
     "CREATE INDEX IF NOT EXISTS ix_tracks_last_seen_scan_id ON tracks (last_seen_scan_id)",
@@ -144,3 +159,16 @@ def ensure_playback_identity_columns(engine: Engine) -> None:
         _add_missing_columns(engine, table_name, columns)
 
     _create_indexes(engine, PLAYBACK_IDENTITY_INDEXES)
+
+def ensure_recording_feedback_columns(engine: Engine) -> None:
+    """Add recording identity to existing SQLite favorite/thumb tables."""
+    if engine.dialect.name != "sqlite":
+        return
+
+    existing_tables = _existing_tables(engine)
+    for table_name, columns in RECORDING_FEEDBACK_COLUMNS.items():
+        if table_name not in existing_tables:
+            continue
+        _add_missing_columns(engine, table_name, columns)
+
+    _create_indexes(engine, RECORDING_FEEDBACK_INDEXES)

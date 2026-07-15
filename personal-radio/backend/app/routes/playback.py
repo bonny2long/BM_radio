@@ -8,6 +8,7 @@ from .. import models
 from ..availability import AUDIOBOOK_UNAVAILABLE_MESSAGE, CHAPTER_UNAVAILABLE_MESSAGE, TRACK_UNAVAILABLE_MESSAGE, is_audiobook_available, is_chapter_available, is_track_available
 from ..db import get_db
 from ..music_playback_policy import MusicPlaybackContext, project_recent_music_playback, recent_qualified_exists, validate_music_playback_context
+from ..music_recording_feedback import current_feedback, is_favorite, resolve_track_feedback_context, set_feedback, set_favorite, toggle_favorite
 from .serializers import audiobook_item
 
 router = APIRouter()
@@ -166,19 +167,18 @@ def recent_playback(limit: int = 5, db: Session = Depends(get_db)):
 
 @router.post('/tracks/{track_id}/thumb')
 def track_thumb(track_id: int, payload: TrackThumbCreate, db: Session = Depends(get_db)):
-    if not db.get(models.Track, track_id):
+    context = resolve_track_feedback_context(db, track_id)
+    if context is None:
         raise HTTPException(404, 'Track not found')
     value = norm_thumb(payload.value)
-    if value == 'neutral':
-        db.query(models.TrackThumb).filter_by(track_id=track_id).delete()
-        db.commit()
-        return {'track_id': track_id, 'value': 'neutral'}
-    if value not in {'up', 'down'}:
+    if value not in {'up', 'down', 'neutral'}:
         raise HTTPException(422, 'Thumb must be up/down/neutral')
-    thumb = models.TrackThumb(track_id=track_id, station_id=payload.station_id, value=models.ThumbValue(value))
-    db.add(thumb)
+    result = set_feedback(db, context, value, station_id=payload.station_id)
     db.commit()
-    return {'track_id': track_id, 'value': value}
+    response = {'track_id': track_id, 'value': result}
+    if context.recording_id is not None:
+        response['recording_id'] = context.recording_id
+    return response
 
 
 @router.post('/tracks/{track_id}/feedback')
@@ -188,27 +188,37 @@ def track_feedback(track_id: int, payload: TrackThumbCreate, db: Session = Depen
 
 @router.get('/tracks/{track_id}/feedback')
 def get_track_feedback(track_id: int, db: Session = Depends(get_db)):
-    row = db.query(models.TrackThumb).filter_by(track_id=track_id).order_by(models.TrackThumb.created_at.desc()).first()
-    return {'track_id': track_id, 'value': row.value.value if row else 'neutral'}
+    context = resolve_track_feedback_context(db, track_id)
+    if context is None:
+        raise HTTPException(404, 'Track not found')
+    response = {'track_id': track_id, 'value': current_feedback(db, context)}
+    if context.recording_id is not None:
+        response['recording_id'] = context.recording_id
+    return response
 
 
 @router.post('/tracks/{track_id}/favorite')
 def track_favorite(track_id: int, payload: FavoritePayload | None = None, db: Session = Depends(get_db)):
-    if not db.get(models.Track, track_id):
+    context = resolve_track_feedback_context(db, track_id)
+    if context is None:
         raise HTTPException(404, 'Track not found')
-    favorite = db.query(models.TrackFavorite).filter_by(track_id=track_id).first()
-    desired = (not bool(favorite)) if payload is None or payload.favorite is None else payload.favorite
-    if desired and not favorite:
-        db.add(models.TrackFavorite(track_id=track_id))
-    if not desired and favorite:
-        db.delete(favorite)
+    desired = toggle_favorite(db, context) if payload is None or payload.favorite is None else set_favorite(db, context, bool(payload.favorite))
     db.commit()
-    return {'track_id': track_id, 'favorite': desired}
+    response = {'track_id': track_id, 'favorite': desired}
+    if context.recording_id is not None:
+        response['recording_id'] = context.recording_id
+    return response
 
 
 @router.get('/tracks/{track_id}/favorite')
 def get_track_favorite(track_id: int, db: Session = Depends(get_db)):
-    return {'track_id': track_id, 'favorite': db.query(models.TrackFavorite).filter_by(track_id=track_id).first() is not None}
+    context = resolve_track_feedback_context(db, track_id)
+    if context is None:
+        raise HTTPException(404, 'Track not found')
+    response = {'track_id': track_id, 'favorite': is_favorite(db, context)}
+    if context.recording_id is not None:
+        response['recording_id'] = context.recording_id
+    return response
 
 
 @router.post('/stations/favorite')
