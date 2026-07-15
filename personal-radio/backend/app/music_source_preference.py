@@ -150,6 +150,24 @@ def evaluate_candidates(candidates: list[Candidate]) -> PreferenceDecision:
     return PreferenceDecision(DECISION_AMBIGUOUS, None, CONFIDENCE_NONE, REASON_MULTIPLE_EQUIVALENT_AMBIGUOUS, candidate_count, eligible_count)
 
 
+def music_recording_ids_for_track_ids(
+    db: Session,
+    *,
+    track_ids: list[int],
+) -> set[int]:
+    ids = unique_ints(track_ids)
+    if not ids:
+        return set()
+    recording_ids: set[int] = set()
+    for chunk in chunked(ids):
+        rows = (
+            db.query(models.MusicTrackIdentity.recording_id)
+            .filter(models.MusicTrackIdentity.track_id.in_(chunk))
+            .all()
+        )
+        recording_ids.update(row[0] for row in rows if row[0] is not None)
+    return recording_ids
+
 def _target_recording_ids(db: Session, recording_ids: list[int] | None) -> list[int]:
     if recording_ids is not None:
         return unique_ints(recording_ids)

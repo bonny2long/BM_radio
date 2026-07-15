@@ -106,6 +106,35 @@ def mark_audiobook_chapter_seen(
     chapter.unavailable_since = None
 
 
+def find_unseen_track_ids(
+    db: Session,
+    *,
+    scan_run_id: int,
+    scanned_roots: list[Path | str],
+) -> list[int]:
+    roots = [Path(root) for root in scanned_roots]
+    if not roots:
+        return []
+
+    prefix_filters = _path_prefix_filters(Track.path, roots)
+    if not prefix_filters:
+        return []
+
+    candidates = (
+        db.query(Track.id, Track.path)
+        .filter(Track.library_availability == LIBRARY_AVAILABLE)
+        .filter(or_(Track.last_seen_scan_id.is_(None), Track.last_seen_scan_id != scan_run_id))
+        .filter(or_(*prefix_filters))
+        .order_by(Track.id.asc())
+        .all()
+    )
+    return [
+        track_id
+        for track_id, path_value in candidates
+        if any(_path_inside_root(path_value, root) for root in roots)
+    ]
+
+
 def reconcile_unseen_tracks(
     db: Session,
     *,
@@ -113,26 +142,7 @@ def reconcile_unseen_tracks(
     scanned_roots: list[Path | str],
     unavailable_at: datetime | None = None,
 ) -> int:
-    roots = [Path(root) for root in scanned_roots]
-    if not roots:
-        return 0
-
-    prefix_filters = _path_prefix_filters(Track.path, roots)
-    if not prefix_filters:
-        return 0
-
-    candidates = (
-        db.query(Track.id, Track.path)
-        .filter(Track.library_availability == LIBRARY_AVAILABLE)
-        .filter(or_(Track.last_seen_scan_id.is_(None), Track.last_seen_scan_id != scan_run_id))
-        .filter(or_(*prefix_filters))
-        .all()
-    )
-    track_ids = [
-        track_id
-        for track_id, path_value in candidates
-        if any(_path_inside_root(path_value, root) for root in roots)
-    ]
+    track_ids = find_unseen_track_ids(db, scan_run_id=scan_run_id, scanned_roots=scanned_roots)
     if not track_ids:
         return 0
 

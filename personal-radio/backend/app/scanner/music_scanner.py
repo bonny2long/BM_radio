@@ -11,8 +11,9 @@ from .. import models
 from ..config import settings
 from ..media_identity import duration_bucket, music_recording_key, music_track_release_key
 from ..music_identity_graph import materialize_music_identity_graph
+from ..music_source_preference import evaluate_music_recording_preferences, music_recording_ids_for_track_ids
 from ..music_technical_profile import technical_profile_from_media, upsert_music_technical_profiles
-from ..scan_runs import MEDIA_KIND_MUSIC, complete_scan_run, fail_scan_run, mark_track_seen, reconcile_unseen_tracks, start_scan_run
+from ..scan_runs import MEDIA_KIND_MUSIC, complete_scan_run, fail_scan_run, find_unseen_track_ids, mark_track_seen, reconcile_unseen_tracks, start_scan_run
 from .archive_assistant_manifest import extract_music_manifest_metadata, load_aa_manifest_context
 from .path_safety import is_approved_path, safe_media_files
 
@@ -778,6 +779,10 @@ def scan_music(db: Session):
         'technical_probe_ok': 0,
         'technical_probe_partial': 0,
         'technical_probe_failed': 0,
+        'preference_recordings_affected': 0,
+        'preferences_evaluated': 0,
+        'preferences_created': 0,
+        'preferences_updated': 0,
     }
 
     scan_run = start_scan_run(db, media_kind=MEDIA_KIND_MUSIC, roots=[str(r) for r in existing])
@@ -932,6 +937,8 @@ def scan_music(db: Session):
             db.commit()
             return result
 
+        affected_recording_ids = set(music_recording_ids_for_track_ids(db, track_ids=sorted(identity_track_ids)))
+
         try:
             profile_result = upsert_music_technical_profiles(db, technical_profiles_by_track_id)
             result['technical_profiles_updated'] = profile_result['profiles_seen']
@@ -957,8 +964,28 @@ def scan_music(db: Session):
             db.commit()
             return result
 
+        affected_recording_ids.update(music_recording_ids_for_track_ids(db, track_ids=sorted(identity_track_ids)))
+        unseen_track_ids = find_unseen_track_ids(db, scan_run_id=scan_run_id, scanned_roots=existing)
+        affected_recording_ids.update(music_recording_ids_for_track_ids(db, track_ids=unseen_track_ids))
+
         unavailable = reconcile_unseen_tracks(db, scan_run_id=scan_run_id, scanned_roots=existing)
         result['tracks_unavailable'] = unavailable
+
+        try:
+            affected_recording_list = sorted(affected_recording_ids)
+            preference_result = evaluate_music_recording_preferences(db, recording_ids=affected_recording_list)
+            result['preference_recordings_affected'] = len(affected_recording_list)
+            result['preferences_evaluated'] = preference_result['recordings_seen']
+            result['preferences_created'] = preference_result['preferences_created']
+            result['preferences_updated'] = preference_result['preferences_updated']
+        except Exception as exc:
+            db.rollback()
+            scan_run = db.get(models.ScanRun, scan_run_id)
+            result['errors'].append(f'preference evaluation failed: {exc}')
+            _set_scan_failed(db, scan_run, result, str(exc), max(1, len(result['errors'])))
+            db.commit()
+            return result
+
         complete_scan_run(
             db,
             scan_run,
