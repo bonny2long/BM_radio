@@ -35,6 +35,7 @@ class SyntheticLibrarySummary:
     artists: int
     editions: int
     playlists: int
+    stations: int
     favorites: int
     thumbs: int
     playback_events: int
@@ -245,6 +246,13 @@ def build_synthetic_library(db, spec: SyntheticLibrarySpec) -> SyntheticLibraryS
             playback_rows.append({"id": len(playback_rows) + 1, "track_id": track_id, "recording_id": rec_id, "event_type": "qualified_play", "position_seconds": 120.0, "created_at": now + timedelta(minutes=rec_id)})
 
     playlist_rows = [{"id": idx, "name": f"Synthetic Playlist {idx}", "description": "Synthetic benchmark playlist", "kind": "manual", "created_at": now} for idx in range(1, playlist_count + 1)]
+    station_rows = [
+        {"id": 1, "name": "Synthetic Favorites Radio", "type": "favorites", "seed_value": None, "favorite": True, "created_at": now},
+        {"id": 2, "name": "Synthetic Recently Added", "type": "recently_added", "seed_value": None, "favorite": False, "created_at": now},
+        {"id": 3, "name": "Synthetic Deep Cuts", "type": "deep_cuts", "seed_value": None, "favorite": False, "created_at": now},
+        {"id": 4, "name": f"{artists[1]} Radio", "type": "artist", "seed_value": artists[1], "favorite": False, "created_at": now},
+        {"id": 5, "name": "Electronic Radio", "type": "genre", "seed_value": "Electronic", "favorite": False, "created_at": now},
+    ]
     playlist_track_rows = []
     for playlist_id in range(1, playlist_count + 1):
         for pos in range(1, min(100, total) + 1):
@@ -265,6 +273,7 @@ def build_synthetic_library(db, spec: SyntheticLibrarySpec) -> SyntheticLibraryS
         (models.TrackThumb, thumb_rows),
         (models.PlaybackEvent, playback_rows),
         (models.Playlist, playlist_rows),
+        (models.Station, station_rows),
         (models.PlaylistTrack, playlist_track_rows),
     ]
     for model, rows in table_data:
@@ -288,6 +297,7 @@ def build_synthetic_library(db, spec: SyntheticLibrarySpec) -> SyntheticLibraryS
         artists=artist_count,
         editions=len(edition_rows),
         playlists=len(playlist_rows),
+        stations=len(station_rows),
         favorites=len(favorite_rows),
         thumbs=len(thumb_rows),
         playback_events=len(playback_rows),
@@ -301,7 +311,7 @@ def fixture_counts(db) -> dict[str, int]:
     tables = [
         "tracks", "music_releases", "music_editions", "music_recordings", "music_track_identities",
         "music_technical_profiles", "music_recording_preferences", "music_recording_participation",
-        "track_favorites", "track_thumbs", "playback_events", "playlists", "playlist_tracks",
+        "track_favorites", "track_thumbs", "playback_events", "playlists", "playlist_tracks", "stations",
     ]
     return {table: int(db.execute(text(f'select count(*) from "{table}"')).scalar_one() or 0) for table in tables}
 

@@ -199,41 +199,45 @@ def is_related_artist(profile: dict, track: models.Track) -> bool:
     related = {normalize_token(name) for name in profile.get('related_artists', [])}
     return normalize_token(track.artist) in related or normalize_token(track.album_artist) in related
 def latest_feedback(db: Session, tracks: list[models.Track] | None = None) -> dict[int, str]:
-    if tracks is not None:
-        return current_feedback_by_station_track(db, tracks)
-    rows = db.query(models.TrackThumb).order_by(models.TrackThumb.created_at.asc()).all()
-    return {r.track_id: r.value.value for r in rows}
+    with perf_segment('station.listener_signals.feedback'):
+        if tracks is not None:
+            return current_feedback_by_station_track(db, tracks)
+        rows = db.query(models.TrackThumb).order_by(models.TrackThumb.created_at.asc()).all()
+        return {r.track_id: r.value.value for r in rows}
 
 
 def play_counts(db: Session, tracks: list[models.Track] | None = None) -> dict[int, int]:
-    if tracks is not None:
-        return play_counts_by_station_track(db, tracks)
-    rows = (
-        db.query(models.PlaybackEvent.track_id, func.count(models.PlaybackEvent.id))
-        .filter(models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == "qualified_play")
-        .group_by(models.PlaybackEvent.track_id)
-        .all()
-    )
-    return {tid: c for tid, c in rows}
+    with perf_segment('station.listener_signals.play_counts'):
+        if tracks is not None:
+            return play_counts_by_station_track(db, tracks)
+        rows = (
+            db.query(models.PlaybackEvent.track_id, func.count(models.PlaybackEvent.id))
+            .filter(models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == "qualified_play")
+            .group_by(models.PlaybackEvent.track_id)
+            .all()
+        )
+        return {tid: c for tid, c in rows}
 
 
 def recent_ids(db: Session, limit: int = 80, tracks: list[models.Track] | None = None) -> set[int]:
-    if tracks is not None:
-        return recent_ids_by_station_track(db, tracks, limit=limit)
-    rows = (
-        db.query(models.PlaybackEvent.track_id)
-        .filter(models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == "qualified_play")
-        .order_by(models.PlaybackEvent.created_at.desc())
-        .limit(limit)
-        .all()
-    )
-    return {r[0] for r in rows if r[0]}
+    with perf_segment('station.listener_signals.recent'):
+        if tracks is not None:
+            return recent_ids_by_station_track(db, tracks, limit=limit)
+        rows = (
+            db.query(models.PlaybackEvent.track_id)
+            .filter(models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == "qualified_play")
+            .order_by(models.PlaybackEvent.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return {r[0] for r in rows if r[0]}
 
 
 def favorite_ids(db: Session, tracks: list[models.Track] | None = None) -> set[int]:
-    if tracks is not None:
-        return favorite_ids_by_station_track(db, tracks)
-    return {r[0] for r in db.query(models.TrackFavorite.track_id).all()}
+    with perf_segment('station.listener_signals.favorites'):
+        if tracks is not None:
+            return favorite_ids_by_station_track(db, tracks)
+        return {r[0] for r in db.query(models.TrackFavorite.track_id).all()}
 
 
 def album_counts(tracks: list[models.Track]) -> dict[tuple[str, str], int]:
@@ -754,7 +758,8 @@ def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], ex
     version_intent = derive_version_affinity_intent(db, seed_track)
 
     all_tracks = load_station_candidate_tracks(db, limit=5000, exclude_track_ids=req.exclude_track_ids, seed_track_id=seed_track.id)
-    profile_cache = load_radio_profile_cache(db)
+    with perf_segment('station.profile_cache'):
+        profile_cache = load_radio_profile_cache(db)
     seed_profile = radio_profile(db, seed_track, profile_cache)
     seed_genre = profile_genre(seed_profile) or track_genre(seed_track)
     fb = latest_feedback(db, all_tracks)
@@ -850,7 +855,8 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
     seed_artist = req.seed_value or ''
     seed_token = normalize_token(seed_artist)
     all_tracks = load_station_candidate_tracks(db, limit=5000, exclude_track_ids=req.exclude_track_ids)
-    profile_cache = load_radio_profile_cache(db)
+    with perf_segment('station.profile_cache'):
+        profile_cache = load_radio_profile_cache(db)
     fb = latest_feedback(db, all_tracks)
     recent = recent_ids(db, tracks=all_tracks)
     favs = favorite_ids(db, all_tracks)
@@ -964,7 +970,8 @@ def genre_station_debug(req: StationQueueRequest, db: Session, down: set[int], e
     limit = station_limit(req.limit)
     target = norm_genre(req.seed_value)
     all_tracks = load_station_candidate_tracks(db, limit=5000, exclude_track_ids=req.exclude_track_ids)
-    profile_cache = load_radio_profile_cache(db)
+    with perf_segment('station.profile_cache'):
+        profile_cache = load_radio_profile_cache(db)
     fb = latest_feedback(db, all_tracks)
     recent = recent_ids(db, tracks=all_tracks)
     down = {tid for tid, value in fb.items() if value == 'down'}
@@ -1054,7 +1061,7 @@ def tracks_by_artist_names(db: Session, names: set[str], limit: int = 2000) -> l
 
 
 def build_station_debug(req: StationQueueRequest, db: Session) -> dict:
-    segment_name = f"queue.debug.{req.type}.total" if req.type in {'artist', 'song', 'genre'} else 'queue.debug.total'
+    segment_name = f"station.debug.{req.type}.total" if req.type in {'artist', 'song', 'genre'} else 'station.debug.total'
     with perf_segment(segment_name):
         return _station_queue_debug_impl(req, db)
 
@@ -1078,15 +1085,21 @@ def _station_queue_debug_impl(req: StationQueueRequest, db: Session) -> dict:
         'warnings': ['debug_not_available_for_station_type'],
     }
 
+
+def station_payload(tracks, **meta):
+    with perf_segment('station.payload_serialization'):
+        return payload(tracks, **meta)
+
 def build_station_queue(req: StationQueueRequest, db: Session) -> dict:
-    with perf_segment('queue.station.total'):
+    with perf_segment('station.total'):
         return _station_queue_impl(req, db)
 
 
 def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
     limit = station_limit(req.limit)
     exclude_set = station_exclude_set(req)
-    profile_cache = load_radio_profile_cache(db)
+    with perf_segment('station.profile_cache'):
+        profile_cache = load_radio_profile_cache(db)
 
     seed_track = None
     if req.type == 'song':
@@ -1098,11 +1111,12 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
             except (ValueError, TypeError):
                 seed_track = None
         if seed_track is None:
-            return payload([], source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=0, exclude_count=len(exclude_set), exhausted=True, remaining_estimate=0)
+            return station_payload([], source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=0, exclude_count=len(exclude_set), exhausted=True, remaining_estimate=0)
         validate_song_seed_track(db, seed_track)
         version_intent = derive_version_affinity_intent(db, seed_track)
 
-    station_pool = load_station_candidate_tracks(db, limit=5000, exclude_track_ids=exclude_set, seed_track_id=seed_track.id if seed_track is not None else None)
+    with perf_segment('station.candidate_projection'):
+        station_pool = load_station_candidate_tracks(db, limit=5000, exclude_track_ids=exclude_set, seed_track_id=seed_track.id if seed_track is not None else None)
     fb = latest_feedback(db, station_pool)
     down = {tid for tid, value in fb.items() if value == 'down'}
     favs = favorite_ids(db, station_pool)
@@ -1115,7 +1129,7 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
             proxy = candidate.profile_track if candidate is not None else track
             return (proxy.created_at or proxy.last_indexed_at, proxy.id)
         selected = sorted([track for track in station_pool if track.id not in down], key=first_seen_key, reverse=True)[:limit]
-        return payload(selected, source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=len(selected), exclude_count=len(exclude_set), exhausted=not selected, remaining_estimate=max(0, len(station_pool) - len(selected)))
+        return station_payload(selected, source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=len(selected), exclude_count=len(exclude_set), exhausted=not selected, remaining_estimate=max(0, len(station_pool) - len(selected)))
     elif req.type == 'deep_cuts':
         counts = play_counts(db, station_pool)
         tracks = sorted([track for track in station_pool if track.id not in down], key=lambda t: (counts.get(t.id, 0), random.random()))[:limit * 10]
@@ -1129,13 +1143,16 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
         candidates = [track for track in station_pool if track.id not in down]
         if not req.allow_exploration and seed_genre:
             candidates = [track for track in candidates if track_is_genre_compatible(track, seed_genre, radio_profile(db, track, profile_cache))]
-        ranked = score_song_radio(db, seed_track, candidates, profile_cache, version_intent)
-        tiers = song_radio_tiers(seed_track, seed_profile, ranked, profile_cache)
-        tiers = apply_affinity_to_tiers(tiers, version_intent)
-        selected_tracks = assemble_station_window(tiers, limit, profile='song', max_artist_window=3, max_release_window=2)
+        with perf_segment('station.scoring'):
+            ranked = score_song_radio(db, seed_track, candidates, profile_cache, version_intent)
+            tiers = song_radio_tiers(seed_track, seed_profile, ranked, profile_cache)
+        with perf_segment('station.version_affinity'):
+            tiers = apply_affinity_to_tiers(tiers, version_intent)
+        with perf_segment('station.window_assembly'):
+            selected_tracks = assemble_station_window(tiers, limit, profile='song', max_artist_window=3, max_release_window=2)
         if len(selected_tracks) < limit and req.allow_exploration:
             selected_tracks = no_repeats(selected_tracks + [track for track in ranked if track not in selected_tracks], limit, artist_loose=False, avoid_title_dups=True)
-        return payload(selected_tracks, source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=len(selected_tracks), exclude_count=len(exclude_set), exhausted=not selected_tracks, remaining_estimate=max(0, len(candidates) - len(selected_tracks)))
+        return station_payload(selected_tracks, source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=len(selected_tracks), exclude_count=len(exclude_set), exhausted=not selected_tracks, remaining_estimate=max(0, len(candidates) - len(selected_tracks)))
     elif req.type == 'artist':
         seed_artist = req.seed_value or ''
         seed_token = normalize_token(seed_artist)
@@ -1170,20 +1187,22 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
             StationCandidateTier.SAME_GENRE: preferred_scored_entries(soft_similar),
             StationCandidateTier.EXPLORATION: preferred_scored_entries(weak_related),
         }
-        selected_tracks = assemble_station_window(tiers, limit, profile='artist', max_artist_window=3, max_release_window=2)
+        with perf_segment('station.window_assembly'):
+            selected_tracks = assemble_station_window(tiers, limit, profile='artist', max_artist_window=3, max_release_window=2)
         pool_tracks = [track for entries in tiers.values() for _, track in entries]
         if len(selected_tracks) < limit:
             selected_tracks = no_repeats(selected_tracks + [track for track in pool_tracks if track not in selected_tracks], limit, artist_loose=True, avoid_title_dups=True)
-        return payload(selected_tracks, source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=len(selected_tracks), exclude_count=len(exclude_set), exhausted=not selected_tracks, remaining_estimate=max(0, len(pool_tracks) - len(selected_tracks)))
+        return station_payload(selected_tracks, source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=len(selected_tracks), exclude_count=len(exclude_set), exhausted=not selected_tracks, remaining_estimate=max(0, len(pool_tracks) - len(selected_tracks)))
     else:
-        return payload([], source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=0, exclude_count=len(exclude_set), exhausted=True, remaining_estimate=0)
+        return station_payload([], source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=0, exclude_count=len(exclude_set), exhausted=True, remaining_estimate=0)
 
     tracks = score_tracks(db, tracks, req.type)
     if req.type == 'genre':
         tiers = genre_radio_tiers(norm_genre(req.seed_value), tracks, profile_cache)
-        selected = assemble_station_window(tiers, limit, profile='genre', max_artist_window=3, max_release_window=2)
+        with perf_segment('station.window_assembly'):
+            selected = assemble_station_window(tiers, limit, profile='genre', max_artist_window=3, max_release_window=2)
         if len(selected) < limit:
             selected = no_repeats(selected + [track for track in tracks if track not in selected], limit, artist_loose=False, avoid_title_dups=True)
     else:
         selected = no_repeats(tracks, limit, artist_loose=req.type == 'artist', avoid_title_dups=True)
-    return payload(selected, source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=len(selected), exclude_count=len(exclude_set), exhausted=not selected, remaining_estimate=max(0, len(tracks) - len(selected)))
+    return station_payload(selected, source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=len(selected), exclude_count=len(exclude_set), exhausted=not selected, remaining_estimate=max(0, len(tracks) - len(selected)))

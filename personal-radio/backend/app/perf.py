@@ -11,6 +11,7 @@ from .config import settings
 from .db import engine
 
 query_count_var: ContextVar[dict[str, int] | None] = ContextVar('query_count', default=None)
+segment_collector_var: ContextVar[dict[str, list[float]] | None] = ContextVar('segment_collector', default=None)
 _installed = False
 
 
@@ -51,8 +52,21 @@ def perf_segment(name: str, threshold_ms: float = 25.0):
         yield
     finally:
         elapsed_ms = (time.perf_counter() - start) * 1000
-        if elapsed_ms >= threshold_ms:
+        collector = segment_collector_var.get()
+        if collector is not None:
+            collector.setdefault(name, []).append(elapsed_ms)
+        if collector is None and elapsed_ms >= threshold_ms:
             print(f'[PERF:SEGMENT] {name} {elapsed_ms:.1f}ms')
+
+
+@contextmanager
+def collect_perf_segments():
+    collector: dict[str, list[float]] = {}
+    token = segment_collector_var.set(collector)
+    try:
+        yield collector
+    finally:
+        segment_collector_var.reset(token)
 
 
 INDEX_STATEMENTS = [

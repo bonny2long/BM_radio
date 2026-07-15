@@ -12,6 +12,7 @@ from . import models
 from .availability import LIBRARY_AVAILABLE, TRACK_UNAVAILABLE_MESSAGE, is_track_available
 from .music_recording_participation import PARTICIPATION_INCLUDED, PARTICIPATION_LIBRARY_ONLY
 from .music_source_preference import resolve_effective_music_sources_read_only
+from .perf import perf_segment
 
 AUTOMATIC_PARTICIPATION_STATES = {PARTICIPATION_INCLUDED}
 SEED_PARTICIPATION_STATES = {PARTICIPATION_INCLUDED, PARTICIPATION_LIBRARY_ONLY}
@@ -168,22 +169,27 @@ def load_station_recording_candidates(
     exclude = exclude_keys or set()
     if not _has_table(db, "music_track_identities"):
         return _legacy_track_candidates(db, limit=bounded, exclude=exclude)
-    recording_rows = (
-        db.query(models.MusicTrackIdentity.recording_id, func.min(models.Track.created_at).label("first_seen"), func.min(models.Track.id).label("stable_id"))
-        .join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id)
-        .filter(models.Track.library_availability == LIBRARY_AVAILABLE)
-        .group_by(models.MusicTrackIdentity.recording_id)
-        .order_by(func.min(models.Track.created_at).desc(), func.min(models.Track.id).asc())
-        .limit(bounded * 3)
-        .all()
-    )
+    with perf_segment("station.candidate_identity_query"):
+        recording_rows = (
+            db.query(models.MusicTrackIdentity.recording_id, func.min(models.Track.created_at).label("first_seen"), func.min(models.Track.id).label("stable_id"))
+            .join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id)
+            .filter(models.Track.library_availability == LIBRARY_AVAILABLE)
+            .group_by(models.MusicTrackIdentity.recording_id)
+            .order_by(func.min(models.Track.created_at).desc(), func.min(models.Track.id).asc())
+            .limit(bounded * 3)
+            .all()
+        )
     recording_ids = unique_ints([row.recording_id for row in recording_rows])
-    participation = _participation_by_recording_id(db, recording_ids)
+    with perf_segment('station.candidate_participation'):
+        participation = _participation_by_recording_id(db, recording_ids)
     recording_ids = [recording_id for recording_id in recording_ids if participation.get(recording_id, PARTICIPATION_INCLUDED) in AUTOMATIC_PARTICIPATION_STATES and ("recording", recording_id) not in exclude]
-    resolutions = resolve_effective_music_sources_read_only(db, recording_ids=recording_ids)
-    profile_ids = _deterministic_profile_track_ids(db, recording_ids)
-    tracks_by_id = _track_rows_by_id(db, [resolution.track_id for resolution in resolutions.values()] + list(profile_ids.values()))
-    recordings = _recording_rows_by_id(db, recording_ids)
+    with perf_segment('station.source_resolution'):
+        resolutions = resolve_effective_music_sources_read_only(db, recording_ids=recording_ids)
+    with perf_segment('station.profile_track_resolution'):
+        profile_ids = _deterministic_profile_track_ids(db, recording_ids)
+    with perf_segment('station.track_hydration'):
+        tracks_by_id = _track_rows_by_id(db, [resolution.track_id for resolution in resolutions.values()] + list(profile_ids.values()))
+        recordings = _recording_rows_by_id(db, recording_ids)
 
     candidates: list[StationRecordingCandidate] = []
     for recording_id in recording_ids:
