@@ -281,6 +281,64 @@ def _available_linked_track_ids(candidates: list[Candidate]) -> set[int]:
     return {candidate.track_id for candidate in candidates if candidate.available}
 
 
+
+
+def _resolution_from_preference_and_candidates(
+    *,
+    recording_id: int,
+    preference: models.MusicRecordingPreference | None,
+    candidates: list[Candidate],
+) -> MusicSourceResolution:
+    decision = evaluate_candidates(candidates) if preference is None else PreferenceDecision(
+        preference.decision_state,
+        preference.auto_preferred_track_id,
+        preference.confidence,
+        preference.reason_code,
+        preference.candidate_count,
+        preference.eligible_candidate_count,
+    )
+    user_preferred_track_id = preference.user_preferred_track_id if preference is not None else None
+    auto_preferred_track_id = decision.auto_preferred_track_id
+    available_track_ids = _available_linked_track_ids(candidates)
+    linked_track_ids = {candidate.track_id for candidate in candidates}
+
+    user_override_unavailable = False
+    if user_preferred_track_id is not None:
+        if user_preferred_track_id in available_track_ids:
+            return MusicSourceResolution(recording_id, user_preferred_track_id, SOURCE_USER_OVERRIDE, decision.decision_state, CONFIDENCE_HIGH, REASON_USER_OVERRIDE, user_preferred_track_id, auto_preferred_track_id)
+        if user_preferred_track_id in linked_track_ids:
+            user_override_unavailable = True
+
+    if auto_preferred_track_id is not None and auto_preferred_track_id in available_track_ids:
+        reason = REASON_USER_OVERRIDE_UNAVAILABLE_FALLBACK if user_override_unavailable else REASON_AUTOMATIC_PREFERENCE
+        return MusicSourceResolution(recording_id, auto_preferred_track_id, SOURCE_AUTOMATIC_PREFERENCE, decision.decision_state, decision.confidence, reason, user_preferred_track_id, auto_preferred_track_id)
+
+    fallback = deterministic_fallback(candidates)
+    if fallback is not None:
+        reason = REASON_USER_OVERRIDE_UNAVAILABLE_FALLBACK if user_override_unavailable else REASON_DETERMINISTIC_FALLBACK
+        return MusicSourceResolution(recording_id, fallback.track_id, SOURCE_DETERMINISTIC_FALLBACK, decision.decision_state, CONFIDENCE_LOW, reason, user_preferred_track_id, auto_preferred_track_id)
+
+    return MusicSourceResolution(recording_id, None, SOURCE_NO_SOURCE, decision.decision_state, CONFIDENCE_NONE, REASON_NO_AVAILABLE_SOURCE, user_preferred_track_id, auto_preferred_track_id)
+
+
+def resolve_effective_music_sources_read_only(
+    db: Session,
+    *,
+    recording_ids: list[int],
+) -> dict[int, MusicSourceResolution]:
+    ids = unique_ints(recording_ids)
+    if not ids:
+        return {}
+    candidates_by_recording = _load_candidates(db, ids)
+    preferences = _load_preferences(db, ids)
+    return {
+        recording_id: _resolution_from_preference_and_candidates(
+            recording_id=recording_id,
+            preference=preferences.get(recording_id),
+            candidates=candidates_by_recording.get(recording_id, []),
+        )
+        for recording_id in ids
+    }
 def resolve_effective_music_source(
     db: Session,
     *,
