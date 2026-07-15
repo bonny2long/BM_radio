@@ -11,6 +11,7 @@ from .. import models
 from ..config import settings
 from ..media_identity import duration_bucket, music_recording_key, music_track_release_key
 from ..music_identity_graph import materialize_music_identity_graph
+from ..music_technical_profile import technical_profile_from_media, upsert_music_technical_profiles
 from ..scan_runs import MEDIA_KIND_MUSIC, complete_scan_run, fail_scan_run, mark_track_seen, reconcile_unseen_tracks, start_scan_run
 from .archive_assistant_manifest import extract_music_manifest_metadata, load_aa_manifest_context
 from .path_safety import is_approved_path, safe_media_files
@@ -60,6 +61,9 @@ def read_metadata(path: Path) -> dict[str, Any]:
         from mutagen import File
 
         media = File(path, easy=True)
+        if media is None:
+            result['technical'] = technical_profile_from_media(path, None, error='UnsupportedFormat')
+            return result
         tags = media.tags if media else None
         result.update({
             'duration_seconds': getattr(getattr(media, 'info', None), 'length', None),
@@ -69,9 +73,10 @@ def read_metadata(path: Path) -> dict[str, Any]:
             'album_artist': _tag_value(tags, 'albumartist'),
             'genre': _tag_value(tags, 'genre'),
             'year': _tag_value(tags, 'date', 'year'),
+            'technical': technical_profile_from_media(path, media),
         })
-    except Exception:
-        pass
+    except Exception as exc:
+        result['technical'] = technical_profile_from_media(path, None, error=exc)
     try:
         result['year'] = int(str(result.get('year'))[:4])
     except Exception:
@@ -769,6 +774,10 @@ def scan_music(db: Session):
         'duplicate_warnings': [],
         'identity_tracks_materialized': 0,
         'physical_sources_preserved': 0,
+        'technical_profiles_updated': 0,
+        'technical_probe_ok': 0,
+        'technical_probe_partial': 0,
+        'technical_probe_failed': 0,
     }
 
     scan_run = start_scan_run(db, media_kind=MEDIA_KIND_MUSIC, roots=[str(r) for r in existing])
@@ -788,6 +797,7 @@ def scan_music(db: Session):
         release_seen: dict[str, dict[str, Any]] = {}
         recording_seen: dict[str, dict[str, Any]] = {}
         identity_track_ids: set[int] = set()
+        technical_profiles_by_track_id: dict[int, dict[str, Any]] = {}
         for existing_track in existing_tracks:
             if existing_track.library_availability == 'unavailable':
                 continue
@@ -909,6 +919,7 @@ def scan_music(db: Session):
 
                     if getattr(track, 'id', None) is not None:
                         identity_track_ids.add(track.id)
+                        technical_profiles_by_track_id[track.id] = tags.get('technical') or technical_profile_from_media(path, None, error='UnsupportedFormat')
                     release_seen[release_key] = {'id': getattr(track, 'id', None), 'path': path_text, 'duration_bucket': file_duration_bucket, 'title': data['title']}
                     recording_seen.setdefault(recording_key, {'id': getattr(track, 'id', None), 'path': path_text, 'release_key': release_key, 'title': data['title']})
                     seed_aa_radio_profiles(db, track, aa_meta)
@@ -918,6 +929,20 @@ def scan_music(db: Session):
         db.flush()
         if result['errors']:
             _set_scan_failed(db, scan_run, result, '\n'.join(result['errors']), len(result['errors']))
+            db.commit()
+            return result
+
+        try:
+            profile_result = upsert_music_technical_profiles(db, technical_profiles_by_track_id)
+            result['technical_profiles_updated'] = profile_result['profiles_seen']
+            result['technical_probe_ok'] = profile_result['technical_probe_ok']
+            result['technical_probe_partial'] = profile_result['technical_probe_partial']
+            result['technical_probe_failed'] = profile_result['technical_probe_failed']
+        except Exception as exc:
+            db.rollback()
+            scan_run = db.get(models.ScanRun, scan_run_id)
+            result['errors'].append(f'technical profile persistence failed: {exc}')
+            _set_scan_failed(db, scan_run, result, str(exc), max(1, len(result['errors'])))
             db.commit()
             return result
 

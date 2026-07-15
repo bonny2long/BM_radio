@@ -41,6 +41,7 @@ class Track(Base):
     thumbs = relationship("TrackThumb", back_populates="track")
     favorites = relationship("TrackFavorite", back_populates="track")
     music_identity = relationship("MusicTrackIdentity", back_populates="track", uselist=False)
+    technical_profile = relationship("MusicTechnicalProfile", back_populates="track", uselist=False)
 
 
 class MusicRelease(Base):
@@ -109,6 +110,34 @@ class MusicTrackIdentity(Base):
     track = relationship("Track", back_populates="music_identity")
     edition = relationship("MusicEdition", back_populates="track_links")
     recording = relationship("MusicRecording", back_populates="track_links")
+
+
+class MusicTechnicalProfile(Base):
+    __tablename__ = "music_technical_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    track_id = Column(Integer, ForeignKey("tracks.id"), unique=True, index=True, nullable=False)
+    probe_status = Column(String, nullable=False, default="partial", server_default="partial", index=True)
+    probe_source = Column(String, nullable=False, default="mutagen", server_default="mutagen")
+    probe_version = Column(Integer, nullable=False, default=1, server_default="1")
+    codec = Column(String, nullable=True, index=True)
+    container = Column(String, nullable=True)
+    is_lossless = Column(Boolean, nullable=True, index=True)
+    sample_rate_hz = Column(Integer, nullable=True)
+    bit_depth_bits = Column(Integer, nullable=True)
+    bitrate_bps = Column(Integer, nullable=True)
+    channel_count = Column(Integer, nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+    replaygain_track_gain_db = Column(Float, nullable=True)
+    replaygain_album_gain_db = Column(Float, nullable=True)
+    replaygain_track_peak = Column(Float, nullable=True)
+    replaygain_album_peak = Column(Float, nullable=True)
+    probe_error_code = Column(String(100), nullable=True)
+    probed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    track = relationship("Track", back_populates="technical_profile")
 
 
 class ArtistRadioProfile(Base):

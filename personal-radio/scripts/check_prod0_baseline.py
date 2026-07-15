@@ -136,6 +136,7 @@ def main() -> int:
         ("integrity UI contract", ["node", "scripts/check_prod1_3d3_integrity_ui.mjs"], FRONTEND),
         ("music identity graph foundation", [sys.executable, "scripts/check_prod1_4a1_music_identity_graph.py"], BACKEND),
         ("scanner identity integration and physical-source preservation", [sys.executable, "scripts/check_prod1_4a2_scanner_identity_integration.py"], BACKEND),
+        ("objective music technical profile foundation", [sys.executable, "scripts/check_prod1_4b1_music_technical_profile.py"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),
