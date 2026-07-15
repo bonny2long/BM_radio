@@ -95,6 +95,7 @@ class MusicRecording(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     track_links = relationship("MusicTrackIdentity", back_populates="recording")
+    preference = relationship("MusicRecordingPreference", back_populates="recording", uselist=False)
 
 
 class MusicTrackIdentity(Base):
@@ -138,6 +139,28 @@ class MusicTechnicalProfile(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     track = relationship("Track", back_populates="technical_profile")
+
+
+class MusicRecordingPreference(Base):
+    __tablename__ = "music_recording_preferences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    recording_id = Column(Integer, ForeignKey("music_recordings.id"), unique=True, index=True, nullable=False)
+    auto_preferred_track_id = Column(Integer, ForeignKey("tracks.id"), nullable=True, index=True)
+    user_preferred_track_id = Column(Integer, ForeignKey("tracks.id"), nullable=True, index=True)
+    decision_state = Column(String, nullable=False, default="no_eligible_source", server_default="no_eligible_source", index=True)
+    confidence = Column(String, nullable=False, default="none", server_default="none")
+    reason_code = Column(String(100), nullable=False, default="no_available_source", server_default="no_available_source")
+    policy_version = Column(Integer, nullable=False, default=1, server_default="1")
+    candidate_count = Column(Integer, nullable=False, default=0, server_default="0")
+    eligible_candidate_count = Column(Integer, nullable=False, default=0, server_default="0")
+    evaluated_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    recording = relationship("MusicRecording", back_populates="preference")
+    auto_preferred_track = relationship("Track", foreign_keys=[auto_preferred_track_id])
+    user_preferred_track = relationship("Track", foreign_keys=[user_preferred_track_id])
 
 
 class ArtistRadioProfile(Base):
