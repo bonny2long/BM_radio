@@ -150,6 +150,7 @@ def main() -> int:
         ("synthetic large-library benchmark harness", [sys.executable, "scripts/check_prod3_1_scale_benchmark_harness.py"], BACKEND),
         ("scanner candidate-scoped index optimization", [sys.executable, "scripts/check_prod3_2_scanner_index_optimization.py"], BACKEND),
         ("scanner diagnostic pair canonicalization", [sys.executable, "scripts/check_prod3_2_1_scanner_diagnostic_pair_canonicalization.py"], BACKEND),
+        ("listener occurrence query optimization", [sys.executable, "scripts/check_prod3_3_listener_occurrence_query_optimization.py"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),

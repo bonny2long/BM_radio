@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Iterable
 
-from sqlalchemy import case, func, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
 from . import models
@@ -155,7 +155,7 @@ def _display_artist_expr():
     )
 
 
-def _base_occurrence_query(
+def _grouped_occurrence_query(
     db: Session,
     *,
     artist: str | None = None,
@@ -163,36 +163,46 @@ def _base_occurrence_query(
     q: str | None = None,
     release_id: int | None = None,
 ):
-    display_artist = _display_artist_expr().label("artist_sort")
-    album_sort = func.coalesce(_nonempty(models.MusicRelease.title), _nonempty(models.Track.album), "").label("album_sort")
-    title_sort = func.coalesce(_nonempty(models.MusicRecording.title), _nonempty(models.Track.title), "").label("title_sort")
-    disc_null = case((models.Track.disc_number.is_(None), 1), else_=0)
-    track_null = case((models.Track.track_number.is_(None), 1), else_=0)
-    row_number = func.row_number().over(
-        partition_by=(models.MusicEdition.release_id, models.MusicTrackIdentity.recording_id),
-        order_by=(
-            disc_null.asc(),
-            models.Track.disc_number.asc(),
-            track_null.asc(),
-            models.Track.track_number.asc(),
-            models.Track.relative_path.asc(),
-            models.Track.id.asc(),
-        ),
-    ).label("rn")
+    release_id_col = models.MusicEdition.release_id.label("release_id")
+    recording_id_col = models.MusicTrackIdentity.recording_id.label("recording_id")
+    artist_sort = func.coalesce(
+        func.min(_nonempty(models.MusicRelease.album_artist)),
+        func.min(_nonempty(models.MusicRecording.artist)),
+        func.min(_nonempty(models.Track.artist)),
+        "",
+    ).label("artist_sort")
+    album_sort = func.coalesce(
+        func.min(_nonempty(models.MusicRelease.title)),
+        func.min(_nonempty(models.Track.album)),
+        "",
+    ).label("album_sort")
+    title_sort = func.coalesce(
+        func.min(_nonempty(models.MusicRecording.title)),
+        func.min(_nonempty(models.Track.title)),
+        "",
+    ).label("title_sort")
+    disc_null_sort = func.min(case((models.Track.disc_number.is_(None), 1), else_=0)).label("disc_null_sort")
+    track_null_sort = func.min(case((models.Track.track_number.is_(None), 1), else_=0)).label("track_null_sort")
 
     query = (
         db.query(
-            models.MusicEdition.release_id.label("release_id"),
-            models.MusicTrackIdentity.recording_id.label("recording_id"),
-            models.Track.id.label("presentation_track_id"),
-            models.MusicTrackIdentity.edition_id.label("edition_id"),
-            display_artist,
+            release_id_col,
+            recording_id_col,
+            artist_sort,
             album_sort,
             title_sort,
-            models.Track.created_at.label("created_sort"),
-            models.Track.last_indexed_at.label("indexed_sort"),
-            row_number,
+            disc_null_sort,
+            func.min(models.Track.disc_number).label("disc_sort"),
+            track_null_sort,
+            func.min(models.Track.track_number).label("track_sort"),
+            func.min(models.Track.relative_path).label("path_sort"),
+            func.min(models.Track.id).label("presentation_track_id"),
+            func.min(models.MusicTrackIdentity.edition_id).label("edition_id"),
+            func.max(models.Track.created_at).label("created_sort"),
+            func.max(models.Track.last_indexed_at).label("indexed_sort"),
+            func.min(models.Track.year).label("year_sort"),
         )
+        .select_from(models.MusicTrackIdentity)
         .join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id)
         .join(models.MusicEdition, models.MusicEdition.id == models.MusicTrackIdentity.edition_id)
         .join(models.MusicRelease, models.MusicRelease.id == models.MusicEdition.release_id)
@@ -224,7 +234,120 @@ def _base_occurrence_query(
             models.Track.album.ilike(term),
             models.Track.album_artist.ilike(term),
         ))
+    return query.group_by(models.MusicEdition.release_id, models.MusicTrackIdentity.recording_id)
+
+
+def _ordered_occurrence_query(
+    db: Session,
+    *,
+    artist: str | None = None,
+    album: str | None = None,
+    q: str | None = None,
+    release_id: int | None = None,
+    sort: str = "artist_album_track",
+    include_total: bool = False,
+):
+    subq = _grouped_occurrence_query(db, artist=artist, album=album, q=q, release_id=release_id).subquery()
+    columns = [
+        subq.c.release_id,
+        subq.c.recording_id,
+        subq.c.presentation_track_id,
+        subq.c.edition_id,
+        subq.c.artist_sort,
+        subq.c.album_sort,
+        subq.c.title_sort,
+        subq.c.created_sort,
+        subq.c.indexed_sort,
+        subq.c.disc_null_sort,
+        subq.c.disc_sort,
+        subq.c.track_null_sort,
+        subq.c.track_sort,
+        subq.c.path_sort,
+        subq.c.year_sort,
+    ]
+    if include_total:
+        columns.append(func.count().over().label("total_count"))
+    query = db.query(*columns)
+    if sort == "title":
+        query = query.order_by(subq.c.title_sort.asc(), subq.c.artist_sort.asc(), subq.c.album_sort.asc(), subq.c.release_id.asc(), subq.c.recording_id.asc())
+    elif sort == "album":
+        query = query.order_by(subq.c.album_sort.asc(), subq.c.artist_sort.asc(), subq.c.title_sort.asc(), subq.c.release_id.asc(), subq.c.recording_id.asc())
+    elif sort == "created_desc":
+        query = query.order_by(subq.c.created_sort.desc(), subq.c.indexed_sort.desc(), subq.c.release_id.desc(), subq.c.recording_id.desc())
+    else:
+        query = query.order_by(
+            subq.c.artist_sort.asc(),
+            subq.c.album_sort.asc(),
+            subq.c.disc_null_sort.asc(),
+            subq.c.disc_sort.asc(),
+            subq.c.track_null_sort.asc(),
+            subq.c.track_sort.asc(),
+            subq.c.path_sort.asc(),
+            subq.c.release_id.asc(),
+            subq.c.recording_id.asc(),
+        )
     return query
+
+
+def _occurrence_key_from_row(row, presentation: tuple[int, int] | None = None) -> OccurrenceKey:
+    presentation_track_id = int(presentation[0]) if presentation is not None else int(row.presentation_track_id)
+    edition_id = int(presentation[1]) if presentation is not None else int(row.edition_id)
+    return OccurrenceKey(
+        release_id=int(row.release_id),
+        recording_id=int(row.recording_id),
+        presentation_track_id=presentation_track_id,
+        edition_id=edition_id,
+        artist_sort=row.artist_sort or "",
+        album_sort=row.album_sort or "",
+        title_sort=row.title_sort or "",
+        created_sort=row.created_sort,
+        indexed_sort=row.indexed_sort,
+    )
+
+
+def _pair_filters(occurrence_keys: list[tuple[int, int]]):
+    return [and_(models.MusicEdition.release_id == release_id, models.MusicTrackIdentity.recording_id == recording_id) for release_id, recording_id in occurrence_keys]
+
+
+def presentation_tracks_for_occurrences(
+    db: Session,
+    *,
+    occurrence_keys: list[tuple[int, int]],
+) -> dict[tuple[int, int], tuple[int, int]]:
+    pairs = list(dict.fromkeys((int(release_id), int(recording_id)) for release_id, recording_id in occurrence_keys))
+    if not pairs:
+        return {}
+    found: dict[tuple[int, int], tuple[int, int]] = {}
+    for start in range(0, len(pairs), 100):
+        chunk = pairs[start:start + 100]
+        rows = (
+            db.query(
+                models.MusicEdition.release_id,
+                models.MusicTrackIdentity.recording_id,
+                models.Track.id.label("track_id"),
+                models.MusicTrackIdentity.edition_id,
+            )
+            .select_from(models.MusicTrackIdentity)
+            .join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id)
+            .join(models.MusicEdition, models.MusicEdition.id == models.MusicTrackIdentity.edition_id)
+            .filter(or_(*_pair_filters(chunk)))
+            .order_by(
+                models.MusicEdition.release_id.asc(),
+                models.MusicTrackIdentity.recording_id.asc(),
+                case((models.Track.library_availability == LIBRARY_AVAILABLE, 0), else_=1).asc(),
+                case((models.Track.disc_number.is_(None), 1), else_=0).asc(),
+                models.Track.disc_number.asc(),
+                case((models.Track.track_number.is_(None), 1), else_=0).asc(),
+                models.Track.track_number.asc(),
+                models.Track.relative_path.asc(),
+                models.Track.id.asc(),
+            )
+            .all()
+        )
+        for release_id, recording_id, track_id, edition_id in rows:
+            pair = (int(release_id), int(recording_id))
+            found.setdefault(pair, (int(track_id), int(edition_id)))
+    return found
 
 
 def occurrence_query(
@@ -236,17 +359,7 @@ def occurrence_query(
     release_id: int | None = None,
     sort: str = "artist_album_track",
 ):
-    subq = _base_occurrence_query(db, artist=artist, album=album, q=q, release_id=release_id).subquery()
-    query = db.query(subq).filter(subq.c.rn == 1)
-    if sort == "title":
-        query = query.order_by(subq.c.title_sort.asc(), subq.c.artist_sort.asc(), subq.c.album_sort.asc(), subq.c.presentation_track_id.asc())
-    elif sort == "album":
-        query = query.order_by(subq.c.album_sort.asc(), subq.c.artist_sort.asc(), subq.c.title_sort.asc(), subq.c.presentation_track_id.asc())
-    elif sort == "created_desc":
-        query = query.order_by(subq.c.created_sort.desc(), subq.c.indexed_sort.desc(), subq.c.presentation_track_id.desc())
-    else:
-        query = query.order_by(subq.c.artist_sort.asc(), subq.c.album_sort.asc(), subq.c.presentation_track_id.asc(), subq.c.title_sort.asc(), subq.c.release_id.asc(), subq.c.recording_id.asc())
-    return query
+    return _ordered_occurrence_query(db, artist=artist, album=album, q=q, release_id=release_id, sort=sort)
 
 
 def occurrence_keys(
@@ -265,27 +378,39 @@ def occurrence_keys(
         query = query.offset(max(offset, 0))
     if limit is not None:
         query = query.limit(max(1, limit))
-    return [
-        OccurrenceKey(
-            release_id=int(row.release_id),
-            recording_id=int(row.recording_id),
-            presentation_track_id=int(row.presentation_track_id),
-            edition_id=int(row.edition_id),
-            artist_sort=row.artist_sort or "",
-            album_sort=row.album_sort or "",
-            title_sort=row.title_sort or "",
-            created_sort=row.created_sort,
-            indexed_sort=row.indexed_sort,
-        )
-        for row in query.all()
-    ]
+    rows = query.all()
+    pairs = [(int(row.release_id), int(row.recording_id)) for row in rows]
+    presentations = presentation_tracks_for_occurrences(db, occurrence_keys=pairs)
+    return [_occurrence_key_from_row(row, presentations.get((int(row.release_id), int(row.recording_id)))) for row in rows]
 
 
 def occurrence_count(db: Session, **filters) -> int:
-    query = occurrence_query(db, **filters)
-    return int(query.order_by(None).count() or 0)
+    sort = filters.pop("sort", None)
+    query = _grouped_occurrence_query(db, **filters)
+    return int(db.query(func.count()).select_from(query.subquery()).scalar() or 0)
 
 
+def occurrence_page(
+    db: Session,
+    *,
+    limit: int,
+    offset: int,
+    artist: str | None = None,
+    album: str | None = None,
+    q: str | None = None,
+    release_id: int | None = None,
+    sort: str = "artist_album_track",
+) -> tuple[list[OccurrenceKey], int]:
+    query = _ordered_occurrence_query(db, artist=artist, album=album, q=q, release_id=release_id, sort=sort, include_total=True)
+    rows = query.offset(max(offset, 0)).limit(max(1, limit)).all()
+    if rows:
+        total = int(rows[0].total_count or 0)
+    else:
+        total = occurrence_count(db, artist=artist, album=album, q=q, release_id=release_id)
+    pairs = [(int(row.release_id), int(row.recording_id)) for row in rows]
+    presentations = presentation_tracks_for_occurrences(db, occurrence_keys=pairs)
+    keys = [_occurrence_key_from_row(row, presentations.get((int(row.release_id), int(row.recording_id)))) for row in rows]
+    return keys, total
 
 def _occurrence_subquery(
     db: Session,
@@ -332,14 +457,13 @@ def _release_aggregate_query(
             models.MusicRelease.release_type.label("release_type"),
             title_expr.label("title"),
             artist_expr.label("artist"),
-            func.min(models.Track.year).label("year"),
+            func.min(occ.c.year_sort).label("year"),
             func.count().label("track_count"),
             func.min(occ.c.presentation_track_id).label("presentation_track_id"),
             recent_created.label("recent_created"),
             recent_indexed.label("recent_indexed"),
         )
         .join(models.MusicRelease, models.MusicRelease.id == occ.c.release_id)
-        .join(models.Track, models.Track.id == occ.c.presentation_track_id)
         .group_by(occ.c.release_id, models.MusicRelease.release_type, title_expr, artist_expr)
     )
     if q:
@@ -511,8 +635,8 @@ def listener_tracks_page(
         return _legacy_tracks_page(db, limit=limit, offset=offset, artist=artist, album=album, q=q, sort=sort)
     bounded_limit = min(max(limit, 1), MAX_PAGE_LIMIT)
     bounded_offset = max(offset, 0)
-    total = occurrence_count(db, artist=artist, album=album, q=q, sort=sort)
-    items = listener_tracks(db, limit=bounded_limit, offset=bounded_offset, artist=artist, album=album, q=q, sort=sort)
+    keys, total = occurrence_page(db, limit=bounded_limit, offset=bounded_offset, artist=artist, album=album, q=q, sort=sort)
+    items = serialize_occurrences(db, keys)
     return {"items": items, "total": total, "limit": bounded_limit, "offset": bounded_offset, "has_more": bounded_offset + len(items) < total}
 
 
