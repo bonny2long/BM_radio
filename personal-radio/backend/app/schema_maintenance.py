@@ -22,6 +22,17 @@ SCAN_RECONCILIATION_COLUMNS = {
     },
 }
 
+
+PLAYBACK_IDENTITY_COLUMNS = {
+    "playback_events": {
+        "recording_id": "INTEGER",
+    },
+}
+
+PLAYBACK_IDENTITY_INDEXES = [
+    "CREATE INDEX IF NOT EXISTS ix_playback_events_recording_id ON playback_events (recording_id)",
+]
+
 SCAN_RECONCILIATION_INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_tracks_library_availability ON tracks (library_availability)",
     "CREATE INDEX IF NOT EXISTS ix_tracks_last_seen_scan_id ON tracks (last_seen_scan_id)",
@@ -120,3 +131,16 @@ def ensure_scan_reconciliation_columns(engine: Engine) -> None:
         _backfill_available(engine, table_name)
 
     _create_indexes(engine, SCAN_RECONCILIATION_INDEXES)
+
+def ensure_playback_identity_columns(engine: Engine) -> None:
+    """Add recording identity to existing SQLite playback event tables."""
+    if engine.dialect.name != "sqlite":
+        return
+
+    existing_tables = _existing_tables(engine)
+    for table_name, columns in PLAYBACK_IDENTITY_COLUMNS.items():
+        if table_name not in existing_tables:
+            continue
+        _add_missing_columns(engine, table_name, columns)
+
+    _create_indexes(engine, PLAYBACK_IDENTITY_INDEXES)

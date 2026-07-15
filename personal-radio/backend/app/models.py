@@ -332,6 +332,7 @@ class PlaybackEvent(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     track_id = Column(Integer, ForeignKey("tracks.id"), nullable=True, index=True)
+    recording_id = Column(Integer, ForeignKey("music_recordings.id"), nullable=True, index=True)
     audiobook_id = Column(Integer, ForeignKey("audiobooks.id"), nullable=True, index=True)
     station_id = Column(Integer, ForeignKey("stations.id"), nullable=True, index=True)
     event_type = Column(String, index=True) # start, stop, skip, finish

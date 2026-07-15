@@ -6,6 +6,7 @@ from .. import models
 from ..availability import active_tracks, is_audiobook_available, is_chapter_available, is_track_available
 from ..config import settings
 from ..db import get_db
+from ..music_playback_policy import validate_music_playback_context
 from ..perf import perf_segment
 from ..scanner.path_safety import is_approved_path
 
@@ -67,6 +68,7 @@ def stream_track(track_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, 'Track not found')
     if not is_track_available(track):
         raise HTTPException(409, TRACK_UNAVAILABLE_MESSAGE)
+    validate_music_playback_context(db, track)
     return safe_file(track.path, music_media_roots(), MEDIA_TYPES)
 
 

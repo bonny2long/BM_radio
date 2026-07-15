@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..availability import AUDIOBOOK_UNAVAILABLE_MESSAGE, CHAPTER_UNAVAILABLE_MESSAGE, TRACK_UNAVAILABLE_MESSAGE, is_audiobook_available, is_chapter_available, is_track_available
 from ..db import get_db
-from .serializers import track_item, audiobook_item
+from ..music_playback_policy import MusicPlaybackContext, project_recent_music_playback, recent_qualified_exists, validate_music_playback_context
+from .serializers import audiobook_item
 
 router = APIRouter()
 
@@ -66,32 +67,19 @@ def should_qualify_track_listen(event_type: str, track: models.Track | None, pay
     return percent >= 50.0
 
 
-def recent_qualified_exists(db: Session, track_id: int, minutes: int = 30) -> bool:
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
-    return (
-        db.query(models.PlaybackEvent.id)
-        .filter(
-            models.PlaybackEvent.track_id == track_id,
-            models.PlaybackEvent.event_type == 'qualified_play',
-            models.PlaybackEvent.created_at >= cutoff,
-        )
-        .first()
-        is not None
-    )
-
-
-def validate_playback_media(payload: PlaybackEventCreate, db: Session) -> models.Track | None:
+def validate_playback_media(payload: PlaybackEventCreate, db: Session) -> MusicPlaybackContext | None:
     has_music = payload.track_id is not None
     has_book = payload.audiobook_id is not None or payload.audiobook_chapter_id is not None
     if has_music and has_book:
         raise HTTPException(422, 'Playback event cannot mix music and audiobook media')
-    track = None
+    context = None
     if payload.track_id is not None:
         track = db.get(models.Track, payload.track_id)
         if not track:
             raise HTTPException(404, 'Track not found')
         if not is_track_available(track):
             raise HTTPException(409, TRACK_UNAVAILABLE_MESSAGE)
+        context = validate_music_playback_context(db, track)
     if payload.audiobook_chapter_id is not None and payload.audiobook_id is None:
         raise HTTPException(422, 'Audiobook chapter requires audiobook_id')
     if payload.audiobook_id is not None:
@@ -108,7 +96,7 @@ def validate_playback_media(payload: PlaybackEventCreate, db: Session) -> models
                 raise HTTPException(422, 'Chapter does not belong to audiobook')
             if not is_chapter_available(chapter):
                 raise HTTPException(409, CHAPTER_UNAVAILABLE_MESSAGE)
-    return track
+    return context
 
 
 def active_audiobook_progress(db: Session, book: models.Audiobook):
@@ -127,12 +115,14 @@ def register_event(payload: PlaybackEventCreate, db: Session = Depends(get_db)):
     event_type = norm_event(payload.event_type)
     if event_type not in {'start', 'pause', 'resume', 'skip', 'finish', 'seek', 'progress', 'qualified_play'}:
         raise HTTPException(422, 'Invalid playback event')
-    track = validate_playback_media(payload, db)
-    event = models.PlaybackEvent(event_type=event_type, track_id=payload.track_id, audiobook_id=payload.audiobook_id, station_id=payload.station_id, position_seconds=payload.position_seconds)
+    music_context = validate_playback_media(payload, db)
+    recording_id = music_context.recording_id if music_context is not None else None
+    track = music_context.track if music_context is not None else None
+    event = models.PlaybackEvent(event_type=event_type, track_id=payload.track_id, recording_id=recording_id, audiobook_id=payload.audiobook_id, station_id=payload.station_id, position_seconds=payload.position_seconds)
     db.add(event)
     if (payload.mode == 'music' or payload.track_id) and should_qualify_track_listen(event_type, track, payload):
-        if track and not recent_qualified_exists(db, track.id):
-            db.add(models.PlaybackEvent(event_type='qualified_play', track_id=track.id, station_id=payload.station_id, position_seconds=payload.position_seconds))
+        if track and not recent_qualified_exists(db, track_id=track.id, recording_id=recording_id):
+            db.add(models.PlaybackEvent(event_type='qualified_play', track_id=track.id, recording_id=recording_id, station_id=payload.station_id, position_seconds=payload.position_seconds))
     db.commit()
     db.refresh(event)
     return {'id': event.id, 'event_type': event.event_type}
@@ -143,33 +133,34 @@ def register_event_alias(payload: PlaybackEventCreate, db: Session = Depends(get
     return register_event(payload, db)
 
 
+def _recent_audiobook_items(db: Session, events: list[models.PlaybackEvent], limit: int) -> list[dict]:
+    out = []
+    seen = set()
+    for event in events:
+        if event.audiobook_id is None or event.audiobook_id in seen:
+            continue
+        book = db.get(models.Audiobook, event.audiobook_id)
+        if not is_audiobook_available(book):
+            continue
+        seen.add(event.audiobook_id)
+        item = audiobook_item(book)
+        progress = active_audiobook_progress(db, book)
+        out.append({'mode': 'audiobook', 'audiobook_id': book.id, 'chapter_id': progress.chapter_id if progress else None, 'position_seconds': progress.position_seconds if progress else 0, 'title': book.title, 'subtitle': book.author, 'cover_url': item['cover_url'], 'stream_url': None, 'last_event_at': str(event.created_at)})
+        if len(out) >= limit:
+            break
+    return out
+
+
 @router.get('/recent')
 def recent_playback(limit: int = 5, db: Session = Depends(get_db)):
     visible_limit = max(1, min(limit, 25))
-    rows = db.query(models.PlaybackEvent).filter(or_(and_(models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == 'qualified_play'), and_(models.PlaybackEvent.audiobook_id.isnot(None), models.PlaybackEvent.event_type.in_(['start', 'pause', 'progress', 'seek'])))).order_by(models.PlaybackEvent.created_at.desc()).limit(min(max(visible_limit * 12, 40), 200)).all()
-    out = []
-    seen = set()
-    for e in rows:
-        key = ('track', e.track_id) if e.track_id else ('book', e.audiobook_id)
-        if key in seen:
-            continue
-        if e.track_id:
-            track = db.get(models.Track, e.track_id)
-            if not is_track_available(track):
-                continue
-            seen.add(key)
-            item = track_item(track)
-            out.append({'mode': 'music', 'track_id': track.id, 'title': track.title, 'subtitle': ' - '.join([x for x in [track.artist, track.album] if x]), 'cover_url': item['cover_url'], 'stream_url': item['stream_url'], 'last_event_at': str(e.created_at)})
-        elif e.audiobook_id:
-            book = db.get(models.Audiobook, e.audiobook_id)
-            if not is_audiobook_available(book):
-                continue
-            seen.add(key)
-            item = audiobook_item(book)
-            progress = active_audiobook_progress(db, book)
-            out.append({'mode': 'audiobook', 'audiobook_id': book.id, 'chapter_id': progress.chapter_id if progress else None, 'position_seconds': progress.position_seconds if progress else 0, 'title': book.title, 'subtitle': book.author, 'cover_url': item['cover_url'], 'stream_url': None, 'last_event_at': str(e.created_at)})
-        if len(out) >= visible_limit:
-            break
+    candidate_limit = min(max(visible_limit * 20, 80), 500)
+    rows = db.query(models.PlaybackEvent).filter(or_(and_(models.PlaybackEvent.track_id.isnot(None), models.PlaybackEvent.event_type == 'qualified_play'), and_(models.PlaybackEvent.audiobook_id.isnot(None), models.PlaybackEvent.event_type.in_(['start', 'pause', 'progress', 'seek'])))).order_by(models.PlaybackEvent.created_at.desc()).limit(candidate_limit).all()
+    music_events = [row for row in rows if row.track_id is not None]
+    audiobook_events = [row for row in rows if row.audiobook_id is not None]
+    music_items = project_recent_music_playback(db, events=music_events, limit=visible_limit)
+    audiobook_items = _recent_audiobook_items(db, audiobook_events, visible_limit)
+    out = sorted([*music_items, *audiobook_items], key=lambda item: item.get('last_event_at') or '', reverse=True)[:visible_limit]
     return {'items': out}
 
 
