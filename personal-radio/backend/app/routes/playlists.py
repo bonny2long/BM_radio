@@ -5,7 +5,15 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..availability import TRACK_UNAVAILABLE_MESSAGE, active_track_ids, active_tracks, available_track_filter, is_track_available
 from ..db import get_db
-from .serializers import track_item
+from ..listener_queue import (
+    playlist_active_count,
+    playlist_has_occurrence,
+    playlist_projected_items,
+    remove_playlist_occurrence,
+    reorder_playlist_by_occurrences,
+    track_occurrences_by_id,
+    validate_track_addition,
+)
 
 router = APIRouter()
 
@@ -79,13 +87,11 @@ def smart_summary(db: Session, key: str, name: str, description: str):
 
 
 def summary(p: models.Playlist, db: Session):
-    count = db.query(func.count(models.PlaylistTrack.id)).join(models.Track, models.Track.id == models.PlaylistTrack.track_id).filter(models.PlaylistTrack.playlist_id == p.id, available_track_filter()).scalar()
-    return {'id': p.id, 'name': p.name, 'description': p.description, 'kind': p.kind, 'track_count': count or 0}
+    return {'id': p.id, 'name': p.name, 'description': p.description, 'kind': p.kind, 'track_count': playlist_active_count(db, playlist_id=p.id) or 0}
 
 
 def detail(p: models.Playlist, db: Session):
-    tracks = db.query(models.Track).join(models.PlaylistTrack, models.PlaylistTrack.track_id == models.Track.id).filter(models.PlaylistTrack.playlist_id == p.id, available_track_filter()).order_by(models.PlaylistTrack.position, models.PlaylistTrack.id).all()
-    return {**summary(p, db), 'tracks': [track_item(track) for track in tracks]}
+    return {**summary(p, db), 'tracks': playlist_projected_items(db, playlist_id=p.id)}
 
 
 def get_playlist_or_404(playlist_id: int, db: Session):
@@ -124,32 +130,48 @@ def create_playlist(payload: PlaylistCreate, db: Session = Depends(get_db)):
     return summary(p, db)
 
 
+def _append_track_if_allowed(db: Session, playlist_id: int, track_id: int, position: int | None = None) -> bool:
+    try:
+        occurrence = validate_track_addition(db, track_id=track_id)
+    except ValueError:
+        return False
+    except PermissionError as exc:
+        raise HTTPException(409, str(exc) or TRACK_UNAVAILABLE_MESSAGE) from exc
+    if playlist_has_occurrence(db, playlist_id=playlist_id, occurrence_key=occurrence.key):
+        return False
+    if position is None:
+        position = db.query(func.max(models.PlaylistTrack.position)).filter_by(playlist_id=playlist_id).scalar() or 0
+        position += 1
+    db.add(models.PlaylistTrack(playlist_id=playlist_id, track_id=track_id, position=position))
+    return True
+
+
 @router.post('/from-track-list')
 def create_from_track_list(payload: TrackListPlaylistCreate, db: Session = Depends(get_db)):
     name = payload.name.strip()
     if not name:
         raise HTTPException(422, 'Playlist name is required')
-    seen = set()
-    tracks: list[models.Track] = []
+    selected: list[int] = []
+    seen_occurrences: set[tuple] = set()
     for track_id in payload.track_ids:
-        if track_id in seen:
+        try:
+            occurrence = validate_track_addition(db, track_id=track_id)
+        except ValueError:
             continue
-        seen.add(track_id)
-        track = db.get(models.Track, track_id)
-        if not track:
+        except PermissionError as exc:
+            raise HTTPException(409, str(exc) or TRACK_UNAVAILABLE_MESSAGE) from exc
+        if occurrence.key in seen_occurrences:
             continue
-        if not is_track_available(track):
-            raise HTTPException(409, TRACK_UNAVAILABLE_MESSAGE)
-        tracks.append(track)
+        seen_occurrences.add(occurrence.key)
+        selected.append(track_id)
     p = models.Playlist(name=name, description=payload.description, kind='manual')
     db.add(p)
     db.flush()
-    for position, track in enumerate(tracks, start=1):
-        db.add(models.PlaylistTrack(playlist_id=p.id, track_id=track.id, position=position))
+    for position, track_id in enumerate(selected, start=1):
+        db.add(models.PlaylistTrack(playlist_id=p.id, track_id=track_id, position=position))
     db.commit()
     db.refresh(p)
     return detail(p, db)
-
 
 @router.get('/{playlist_id}')
 def get_playlist(playlist_id: int, db: Session = Depends(get_db)):
@@ -186,20 +208,15 @@ def add_track(playlist_id: int, payload: PlaylistTrackCreate, db: Session = Depe
         raise HTTPException(404, 'Track not found')
     if not is_track_available(track):
         raise HTTPException(409, TRACK_UNAVAILABLE_MESSAGE)
-    existing = db.query(models.PlaylistTrack).filter_by(playlist_id=p.id, track_id=payload.track_id).first()
-    if not existing:
-        max_pos = db.query(func.max(models.PlaylistTrack.position)).filter_by(playlist_id=p.id).scalar() or 0
-        db.add(models.PlaylistTrack(playlist_id=p.id, track_id=payload.track_id, position=max_pos + 1))
-        db.commit()
+    _append_track_if_allowed(db, p.id, payload.track_id)
+    db.commit()
     return detail(p, db)
 
 
 @router.delete('/{playlist_id}/tracks/{track_id}')
 def remove_track(playlist_id: int, track_id: int, db: Session = Depends(get_db)):
     p = get_playlist_or_404(playlist_id, db)
-    rows = db.query(models.PlaylistTrack).filter_by(playlist_id=p.id, track_id=track_id).all()
-    for row in rows:
-        db.delete(row)
+    remove_playlist_occurrence(db, playlist_id=p.id, track_id=track_id)
     db.commit()
     return detail(p, db)
 
@@ -207,9 +224,6 @@ def remove_track(playlist_id: int, track_id: int, db: Session = Depends(get_db))
 @router.patch('/{playlist_id}/tracks/reorder')
 def reorder_tracks(playlist_id: int, payload: ReorderPayload, db: Session = Depends(get_db)):
     p = get_playlist_or_404(playlist_id, db)
-    positions = {tid: i + 1 for i, tid in enumerate(payload.track_ids)}
-    for row in db.query(models.PlaylistTrack).filter_by(playlist_id=p.id).all():
-        if row.track_id in positions:
-            row.position = positions[row.track_id]
+    reorder_playlist_by_occurrences(db, playlist_id=p.id, track_ids=payload.track_ids)
     db.commit()
     return detail(p, db)

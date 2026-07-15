@@ -12,8 +12,9 @@ class StationQueueRequest(BaseModel):
 
 
 class AlbumQueueRequest(BaseModel):
-    artist: str
-    album: str
+    artist: str | None = None
+    album: str | None = None
+    release_id: int | None = None
     limit: int = 500
     shuffle: bool = False
 

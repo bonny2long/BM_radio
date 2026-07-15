@@ -1,12 +1,11 @@
-import random
-
-from fastapi import APIRouter, Depends
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends
 
 from .. import models
-from ..availability import active_track_ids, active_tracks, active_tracks_by_ids, available_track_filter
+from ..availability import active_track_ids, active_tracks, available_track_filter
 from ..db import get_db
+from ..listener_queue import album_queue_items, artist_queue_items, playlist_projected_items, smart_queue_items
 from ..queue_contracts import (
     AlbumQueueRequest,
     ArtistQueueRequest,
@@ -14,8 +13,6 @@ from ..queue_contracts import (
     SmartPlaylistQueueRequest,
     StationQueueRequest,
 )
-from ..queue_payloads import payload
-from ..release_preferences import choose_preferred_tracks
 from ..station_engine import build_station_debug, build_station_queue
 
 router = APIRouter()
@@ -102,45 +99,17 @@ def smart_track_ids(db: Session, key: str, limit: int = 1000) -> list[int]:
 
 @router.post('/album')
 def album_queue(req: AlbumQueueRequest, db: Session = Depends(get_db)):
-    tracks = (
-        active_tracks(db)
-        .filter_by(artist=req.artist, album=req.album)
-        .order_by(models.Track.relative_path, models.Track.title)
-        .limit(min(max(req.limit, 1), 2000))
-        .all()
-    )
-    if req.shuffle:
-        random.shuffle(tracks)
-    return payload(tracks)
+    return {'queue': album_queue_items(db, artist=req.artist, album=req.album, release_id=req.release_id, limit=req.limit, shuffle=req.shuffle)}
 
 
 @router.post('/artist')
 def artist_queue(req: ArtistQueueRequest, db: Session = Depends(get_db)):
-    max_tracks = min(max(req.limit, 1), 5000)
-    tracks = (
-        active_tracks(db)
-        .filter(or_(models.Track.artist == req.artist, models.Track.album_artist == req.artist))
-        .order_by(models.Track.album, models.Track.relative_path, models.Track.title)
-        .limit(max_tracks)
-        .all()
-    )
-    if req.shuffle:
-        random.shuffle(tracks)
-    return payload(tracks)
+    return {'queue': artist_queue_items(db, artist=req.artist, limit=req.limit, shuffle=req.shuffle)}
 
 
 @router.post('/playlist')
 def playlist_queue(req: PlaylistQueueRequest, db: Session = Depends(get_db)):
-    tracks = (
-        db.query(models.Track)
-        .join(models.PlaylistTrack, models.PlaylistTrack.track_id == models.Track.id)
-        .filter(models.PlaylistTrack.playlist_id == req.playlist_id, available_track_filter())
-        .order_by(models.PlaylistTrack.position, models.PlaylistTrack.id)
-        .all()
-    )
-    if req.shuffle:
-        random.shuffle(tracks)
-    return payload(tracks)
+    return {'queue': playlist_projected_items(db, playlist_id=req.playlist_id, shuffle=req.shuffle)}
 
 
 @router.post('/smart-playlist')
@@ -148,10 +117,7 @@ def smart_playlist_queue(req: SmartPlaylistQueueRequest, db: Session = Depends(g
     ids = smart_track_ids(db, req.key, req.limit)
     if not ids:
         return {'queue': []}
-    tracks = active_tracks_by_ids(db, ids)
-    if req.shuffle:
-        random.shuffle(tracks)
-    return payload(choose_preferred_tracks(tracks, mode="smart_playlist"))
+    return {'queue': smart_queue_items(db, track_ids=ids, key=req.key, shuffle=req.shuffle)}
 
 
 @router.get('/current')
