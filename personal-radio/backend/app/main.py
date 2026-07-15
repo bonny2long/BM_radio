@@ -6,7 +6,7 @@ from .radio_profiles import seed_default_radio_profiles
 from .perf import ensure_performance_indexes, install_performance_tools
 from .schema_maintenance import ensure_manifest_ingestion_columns, ensure_scan_reconciliation_columns
 from .runtime_security import configure_cors, fastapi_docs_config, validate_runtime_safety
-from .routes import health, library, stations, audiobooks, queue, playback, media, search, playlists, radio_profiles, library_integrity
+from .routes import health, library, stations, audiobooks, queue, playback, media, search, playlists, radio_profiles, library_integrity, music_recordings
 
 # Validate private runtime invariants before startup side effects.
 validate_runtime_safety(settings)
@@ -35,6 +35,7 @@ app.include_router(search.router, prefix="/api", tags=["Search"])
 app.include_router(playlists.router, prefix="/api/playlists", tags=["Playlists"])
 app.include_router(radio_profiles.router, prefix="/api/radio-profiles", tags=["Radio Profiles"])
 app.include_router(library_integrity.router, prefix="/api/library", tags=["Library Integrity"])
+app.include_router(music_recordings.router, prefix="/api/music/recordings", tags=["Music Recordings"])
 
 @app.get("/")
 async def root():

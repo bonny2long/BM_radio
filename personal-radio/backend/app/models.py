@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum, Float, Text, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum, Float, Text, UniqueConstraint, CheckConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -96,6 +96,7 @@ class MusicRecording(Base):
 
     track_links = relationship("MusicTrackIdentity", back_populates="recording")
     preference = relationship("MusicRecordingPreference", back_populates="recording", uselist=False)
+    participation = relationship("MusicRecordingParticipation", back_populates="recording", uselist=False)
 
 
 class MusicTrackIdentity(Base):
@@ -162,6 +163,24 @@ class MusicRecordingPreference(Base):
     auto_preferred_track = relationship("Track", foreign_keys=[auto_preferred_track_id])
     user_preferred_track = relationship("Track", foreign_keys=[user_preferred_track_id])
 
+
+
+class MusicRecordingParticipation(Base):
+    __tablename__ = "music_recording_participation"
+    __table_args__ = (
+        CheckConstraint("participation_state in ('included', 'library_only', 'archived', 'blocked')", name="ck_music_recording_participation_state"),
+        CheckConstraint("state_source in ('user', 'system')", name="ck_music_recording_participation_source"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    recording_id = Column(Integer, ForeignKey("music_recordings.id"), unique=True, index=True, nullable=False)
+    participation_state = Column(String, nullable=False, default="included", server_default="included", index=True)
+    state_source = Column(String, nullable=False, default="user", server_default="user", index=True)
+    reason_code = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    recording = relationship("MusicRecording", back_populates="participation")
 
 class ArtistRadioProfile(Base):
     __tablename__ = "artist_radio_profiles"

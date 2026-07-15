@@ -139,6 +139,7 @@ def main() -> int:
         ("objective music technical profile foundation", [sys.executable, "scripts/check_prod1_4b1_music_technical_profile.py"], BACKEND),
         ("conservative preferred-source policy foundation", [sys.executable, "scripts/check_prod1_4c1_preferred_source_policy.py"], BACKEND),
         ("scanner-driven preference re-evaluation", [sys.executable, "scripts/check_prod1_4c2_scanner_preference_reevaluation.py"], BACKEND),
+        ("recording curation and preference control API", [sys.executable, "scripts/check_prod1_4d1_recording_control_api.py"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),
