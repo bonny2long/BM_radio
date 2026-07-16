@@ -217,5 +217,6 @@ order by tier asc, bucket_row_number asc
     metrics = intent.debug_summary(bucket_counts=bucket_counts, duplicates_removed=duplicates_removed, total=len(recording_ids))
     metrics['bucket_query_count'] = 1
     metrics['projection_query_count'] = 1
+    metrics['selector_policy'] = 'unified_experimental'
     metrics['unified_projection'] = True
     return recording_ids, metrics

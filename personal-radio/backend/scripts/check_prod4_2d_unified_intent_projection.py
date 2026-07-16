@@ -19,6 +19,7 @@ from app.station_candidate_intent import artist_intent, genre_intent, song_inten
 from app.station_candidates import (
     MAX_STATION_CANDIDATE_POOL,
     load_station_recording_candidates,
+    select_experimental_unified_intent_station_recording_ids,
     select_intent_station_recording_ids,
     select_intent_station_recording_ids_reference,
     station_identity_keys_for_track_ids,
@@ -84,8 +85,9 @@ def selected_debug_identity(result: dict[str, Any]) -> str:
 def assert_reference_equivalence(db, seeds, *, include_queue: bool) -> None:
     for name, req, intent in request_cases(db, seeds):
         ref_ids = candidate_ids(db, req, intent, select_intent_station_recording_ids_reference)
-        unified_ids = candidate_ids(db, req, intent, select_intent_station_recording_ids)
-        assert ref_ids == unified_ids, (name, len(ref_ids), len(unified_ids), next((i for i, pair in enumerate(zip(ref_ids, unified_ids)) if pair[0] != pair[1]), None))
+        production_ids = candidate_ids(db, req, intent, select_intent_station_recording_ids)
+        unified_ids = candidate_ids(db, req, intent, select_experimental_unified_intent_station_recording_ids)
+        assert ref_ids == production_ids == unified_ids, (name, len(ref_ids), len(production_ids), len(unified_ids), next((i for i, pair in enumerate(zip(ref_ids, unified_ids)) if pair[0] != pair[1]), None))
         if include_queue:
             random.seed(PROD4_FIXTURE_SEED)
             with patched_selector(select_intent_station_recording_ids_reference):
@@ -94,7 +96,7 @@ def assert_reference_equivalence(db, seeds, *, include_queue: bool) -> None:
                 ref_debug = build_station_debug(req, db)
                 db.rollback()
             random.seed(PROD4_FIXTURE_SEED)
-            with patched_selector(select_intent_station_recording_ids):
+            with patched_selector(select_experimental_unified_intent_station_recording_ids):
                 unified_queue = build_station_queue(req, db)
                 db.rollback()
                 unified_debug = build_station_debug(req, db)
@@ -109,7 +111,7 @@ def assert_refill_equivalence(db, seeds) -> None:
             random.seed(PROD4_FIXTURE_SEED)
             ref_initial = build_station_queue(base_req, db)
             db.rollback()
-        with patched_selector(select_intent_station_recording_ids):
+        with patched_selector(select_experimental_unified_intent_station_recording_ids):
             random.seed(PROD4_FIXTURE_SEED)
             unified_initial = build_station_queue(base_req, db)
             db.rollback()
@@ -121,7 +123,7 @@ def assert_refill_equivalence(db, seeds) -> None:
                 random.seed(PROD4_FIXTURE_SEED + refill_number)
                 ref_result = build_station_queue(req, db)
                 db.rollback()
-            with patched_selector(select_intent_station_recording_ids):
+            with patched_selector(select_experimental_unified_intent_station_recording_ids):
                 random.seed(PROD4_FIXTURE_SEED + refill_number)
                 unified_result = build_station_queue(req, db)
                 db.rollback()
@@ -156,10 +158,32 @@ def assert_non_seeded_preserved(db) -> None:
 def assert_large_metrics(db, seeds) -> None:
     for name, req, _intent in request_cases(db, seeds):
         metrics = candidate_projection_metrics(db, req, seeds)
-        assert metrics['candidate_intent_bucket_query_count'] == 1, (name, metrics.get('candidate_intent_bucket_query_count'))
-        assert metrics['candidate_intent_projection_query_count'] == 1, name
-        assert metrics['candidate_intent_unified_projection'] is True, name
+        bucket_queries = int(metrics.get('candidate_intent_bucket_query_count') or 0)
+        max_bucket_queries = 3 if req.type == 'genre' else 5
+        assert 1 <= bucket_queries <= max_bucket_queries, (name, bucket_queries)
+        assert metrics['candidate_selector_policy'] == 'multi_bucket', name
+        assert metrics['unified_projection'] is False, name
+        assert metrics['candidate_intent_unified_projection'] is False, name
         assert metrics['recording_ids_source_resolved'] <= MAX_STATION_CANDIDATE_POOL, name
+
+        excluded = excluded_recording_ids_for_req(db, req)
+        unified_ids, unified_metrics = select_experimental_unified_intent_station_recording_ids(
+            db,
+            limit=MAX_STATION_CANDIDATE_POOL,
+            excluded_recording_ids=excluded,
+            intent=_intent,
+        )
+        production_ids, _ = select_intent_station_recording_ids(
+            db,
+            limit=MAX_STATION_CANDIDATE_POOL,
+            excluded_recording_ids=excluded,
+            intent=_intent,
+        )
+        assert production_ids == unified_ids, name
+        assert unified_metrics['bucket_query_count'] == 1, name
+        assert unified_metrics['projection_query_count'] == 1, name
+        assert unified_metrics['unified_projection'] is True, name
+        assert unified_metrics['selector_policy'] == 'unified_experimental', name
         if req.type == 'artist':
             assert metrics['seed_artist_eligible_inside_pool_count'] == metrics['seed_artist_eligible_fixture_count'], metrics
         if req.type == 'genre':

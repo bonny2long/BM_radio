@@ -267,7 +267,7 @@ def _select_station_recording_ids_by_intent_filters(
     return unique_ints([row.recording_id for row in rows])
 
 
-def select_intent_station_recording_ids_reference(
+def select_production_multi_bucket_intent_station_recording_ids(
     db: Session,
     *,
     limit: int,
@@ -331,7 +331,39 @@ def select_intent_station_recording_ids_reference(
 
     metrics = intent.debug_summary(bucket_counts=bucket_counts, duplicates_removed=duplicates_removed, total=len(selected))
     metrics['bucket_query_count'] = query_count
+    metrics['selector_policy'] = 'multi_bucket'
+    metrics['unified_projection'] = False
     return selected[:bounded], metrics
+
+
+def select_intent_station_recording_ids_reference(
+    db: Session,
+    *,
+    limit: int,
+    excluded_recording_ids: set[int] | None,
+    intent: StationCandidateIntent,
+) -> tuple[list[int], dict[str, Any]]:
+    return select_production_multi_bucket_intent_station_recording_ids(
+        db,
+        limit=limit,
+        excluded_recording_ids=excluded_recording_ids,
+        intent=intent,
+    )
+
+
+def select_experimental_unified_intent_station_recording_ids(
+    db: Session,
+    *,
+    limit: int,
+    excluded_recording_ids: set[int] | None,
+    intent: StationCandidateIntent,
+) -> tuple[list[int], dict[str, Any]]:
+    return select_unified_intent_station_recording_ids(
+        db,
+        limit=limit,
+        excluded_recording_ids=excluded_recording_ids,
+        intent=intent,
+    )
 
 
 def select_intent_station_recording_ids(
@@ -341,7 +373,7 @@ def select_intent_station_recording_ids(
     excluded_recording_ids: set[int] | None,
     intent: StationCandidateIntent,
 ) -> tuple[list[int], dict[str, Any]]:
-    return select_unified_intent_station_recording_ids(
+    return select_production_multi_bucket_intent_station_recording_ids(
         db,
         limit=limit,
         excluded_recording_ids=excluded_recording_ids,
@@ -408,6 +440,10 @@ def _projection_metrics(
     }
     if intent_metrics:
         metrics.update({f"candidate_intent_{key}": value for key, value in intent_metrics.items()})
+        if "selector_policy" in intent_metrics:
+            metrics["candidate_selector_policy"] = intent_metrics["selector_policy"]
+        if "unified_projection" in intent_metrics:
+            metrics["unified_projection"] = intent_metrics["unified_projection"]
     return metrics
 
 
