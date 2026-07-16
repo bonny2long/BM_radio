@@ -155,6 +155,7 @@ def main() -> int:
         ("candidate-scoped station profiles and request context", [sys.executable, "scripts/check_prod4_2a_scoped_station_profiles.py"], BACKEND),
         ("final-set station candidate projection and source-resolution scope", [sys.executable, "scripts/check_prod4_2b_station_candidate_projection_scope.py"], BACKEND),
         ("station intent-aware large-library candidate coverage", [sys.executable, "scripts/check_prod4_2c_station_intent_candidate_coverage.py"], BACKEND),
+        ("station refill closure and PROD4 gate", [sys.executable, "scripts/check_prod4_2c_1_station_refill_closure.py"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),
