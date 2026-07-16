@@ -153,6 +153,7 @@ def main() -> int:
         ("listener occurrence query optimization", [sys.executable, "scripts/check_prod3_3_listener_occurrence_query_optimization.py"], BACKEND),
         ("station generation and refill scale benchmark baseline", [sys.executable, "scripts/check_prod4_1_station_scale_benchmark.py"], BACKEND),
         ("candidate-scoped station profiles and request context", [sys.executable, "scripts/check_prod4_2a_scoped_station_profiles.py"], BACKEND),
+        ("final-set station candidate projection and source-resolution scope", [sys.executable, "scripts/check_prod4_2b_station_candidate_projection_scope.py"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),

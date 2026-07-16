@@ -66,6 +66,7 @@ def build_station_request_context(
                     seed_track_id=seed_track.id if seed_track is not None else None,
                 )
         candidate_metrics = _candidate_metrics(tracks)
+        candidate_metrics.update(dict(db.info.get('station_candidate_projection_metrics') or {}))
         extra_tracks = [seed_track] if seed_track is not None else []
         with perf_segment('station.profile_cache'):
             with perf_segment('station.profile_scope_keys'):

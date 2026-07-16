@@ -180,7 +180,8 @@ def _request_station_type(req: StationQueueRequest | None, name: str) -> str | N
 def candidate_projection_metrics(db: Session, req: StationQueueRequest | None, seeds: StationSeeds | None = None) -> dict[str, Any]:
     if req is None:
         tracks = load_station_candidate_tracks(db, limit=MAX_STATION_CANDIDATE_POOL)
-        return {
+        projection_stats = dict(db.info.get("station_candidate_projection_metrics") or {})
+        metrics = {
             "physical_tracks_in_fixture": int(db.query(models.Track).count()),
             "logical_recordings_in_fixture": int(db.query(models.MusicRecording).count()),
             "logical_rows_considered_before_cap": int(db.query(models.MusicTrackIdentity.recording_id).join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id).filter(models.Track.library_availability == "available").distinct().count()),
@@ -193,6 +194,8 @@ def candidate_projection_metrics(db: Session, req: StationQueueRequest | None, s
             "final_candidate_pool_size": len(tracks),
             "candidate_cap_reached": len(tracks) >= MAX_STATION_CANDIDATE_POOL,
         }
+        metrics.update(projection_stats)
+        return metrics
     exclude_keys = station_identity_keys_for_track_ids(db, req.exclude_track_ids or [])
     if req.type == "song" and req.seed_track_id is not None:
         seed_keys = station_identity_keys_for_track_ids(db, [req.seed_track_id])
@@ -200,6 +203,7 @@ def candidate_projection_metrics(db: Session, req: StationQueueRequest | None, s
     candidates = load_station_recording_candidates(db, limit=MAX_STATION_CANDIDATE_POOL, exclude_keys=exclude_keys)
     tracks = [candidate.effective_track for candidate in candidates]
     full_logical = int(db.query(models.MusicTrackIdentity.recording_id).join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id).filter(models.Track.library_availability == "available").distinct().count())
+    projection_stats = dict(db.info.get("station_candidate_projection_metrics") or {})
     metrics = {
         "physical_tracks_in_fixture": int(db.query(models.Track).count()),
         "logical_recordings_in_fixture": int(db.query(models.MusicRecording).count()),
@@ -213,6 +217,7 @@ def candidate_projection_metrics(db: Session, req: StationQueueRequest | None, s
         "final_candidate_pool_size": len(candidates),
         "candidate_cap_reached": len(candidates) >= MAX_STATION_CANDIDATE_POOL,
     }
+    metrics.update(projection_stats)
     artist = req.seed_value if req.type == "artist" else seeds.artist_name if seeds else None
     genre = req.seed_value if req.type == "genre" else seeds.genre_name if seeds else None
     if artist:

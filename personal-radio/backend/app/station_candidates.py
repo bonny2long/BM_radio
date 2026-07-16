@@ -54,38 +54,6 @@ def _track_rows_by_id(db: Session, track_ids: Iterable[int | None]) -> dict[int,
     return {row.id: row for row in db.query(models.Track).filter(models.Track.id.in_(ids)).all()}
 
 
-def _participation_by_recording_id(db: Session, recording_ids: list[int]) -> dict[int, str]:
-    if not recording_ids:
-        return {}
-    rows = db.query(models.MusicRecordingParticipation).filter(models.MusicRecordingParticipation.recording_id.in_(recording_ids)).all()
-    return {row.recording_id: row.participation_state for row in rows}
-
-
-def _recording_rows_by_id(db: Session, recording_ids: list[int]) -> dict[int, models.MusicRecording]:
-    if not recording_ids:
-        return {}
-    return {row.id: row for row in db.query(models.MusicRecording).filter(models.MusicRecording.id.in_(recording_ids)).all()}
-
-
-def _deterministic_profile_track_ids(db: Session, recording_ids: list[int]) -> dict[int, int]:
-    if not recording_ids:
-        return {}
-    row_number = func.row_number().over(
-        partition_by=models.MusicTrackIdentity.recording_id,
-        order_by=(models.Track.created_at.asc(), models.Track.relative_path.asc(), models.Track.id.asc()),
-    ).label("rn")
-    subq = (
-        db.query(
-            models.MusicTrackIdentity.recording_id.label("recording_id"),
-            models.Track.id.label("track_id"),
-            row_number,
-        )
-        .join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id)
-        .filter(models.MusicTrackIdentity.recording_id.in_(recording_ids), models.Track.library_availability == LIBRARY_AVAILABLE)
-        .subquery()
-    )
-    return {int(row.recording_id): int(row.track_id) for row in db.query(subq).filter(subq.c.rn == 1).all()}
-
 
 def _attach_candidate_metadata(track: models.Track, candidate: StationRecordingCandidate) -> models.Track:
     for attr in ("_station_version_affinity_mode", "_station_version_affinity_tier", "_station_version_affinity_score"):
@@ -158,6 +126,103 @@ def validate_song_seed_track(db: Session, track: models.Track) -> tuple[int | No
         raise HTTPException(409, "Recording is not eligible as a station seed")
     return int(row.recording_id), state
 
+def _recording_rows_by_id(db: Session, recording_ids: list[int]) -> dict[int, models.MusicRecording]:
+    if not recording_ids:
+        return {}
+    return {row.id: row for row in db.query(models.MusicRecording).filter(models.MusicRecording.id.in_(recording_ids)).all()}
+
+
+def select_station_recording_ids(
+    db: Session,
+    *,
+    limit: int,
+    excluded_recording_ids: set[int] | None = None,
+) -> list[int]:
+    bounded = max(1, min(int(limit), MAX_STATION_CANDIDATE_POOL))
+    excluded = {int(value) for value in (excluded_recording_ids or set()) if value is not None}
+    with perf_segment("station.candidate_identity_query"):
+        with perf_segment("station.candidate_sql_eligibility"):
+            query = (
+                db.query(
+                    models.MusicTrackIdentity.recording_id.label("recording_id"),
+                    func.min(models.Track.created_at).label("first_seen"),
+                    func.min(models.Track.id).label("stable_id"),
+                )
+                .join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id)
+                .outerjoin(models.MusicRecordingParticipation, models.MusicRecordingParticipation.recording_id == models.MusicTrackIdentity.recording_id)
+                .filter(models.Track.library_availability == LIBRARY_AVAILABLE)
+                .filter(or_(models.MusicRecordingParticipation.id.is_(None), models.MusicRecordingParticipation.participation_state == PARTICIPATION_INCLUDED))
+            )
+            if excluded:
+                query = query.filter(~models.MusicTrackIdentity.recording_id.in_(excluded))
+            rows = (
+                query
+                .group_by(models.MusicTrackIdentity.recording_id)
+                .order_by(func.min(models.Track.created_at).desc(), func.min(models.Track.id).asc())
+                .limit(bounded)
+                .all()
+            )
+    return unique_ints([row.recording_id for row in rows])
+
+
+def _deterministic_profile_track_ids(db: Session, recording_ids: list[int]) -> dict[int, int]:
+    if not recording_ids:
+        return {}
+    row_number = func.row_number().over(
+        partition_by=models.MusicTrackIdentity.recording_id,
+        order_by=(models.Track.created_at.asc(), models.Track.relative_path.asc(), models.Track.id.asc()),
+    ).label("rn")
+    subq = (
+        db.query(
+            models.MusicTrackIdentity.recording_id.label("recording_id"),
+            models.Track.id.label("track_id"),
+            row_number,
+        )
+        .join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id)
+        .filter(models.MusicTrackIdentity.recording_id.in_(recording_ids), models.Track.library_availability == LIBRARY_AVAILABLE)
+        .subquery()
+    )
+    return {int(row.recording_id): int(row.track_id) for row in db.query(subq).filter(subq.c.rn == 1).all()}
+
+
+def _projection_metrics(
+    *,
+    bounded: int,
+    excluded_recording_ids: set[int],
+    excluded_legacy_track_ids: set[int],
+    recording_ids: list[int],
+    resolutions: dict[int, object],
+    profile_ids: dict[int, int],
+    tracks_by_id: dict[int, models.Track],
+    recordings: dict[int, models.MusicRecording],
+    legacy_candidates: list[StationRecordingCandidate],
+    final_candidates: list[StationRecordingCandidate],
+) -> dict[str, int | bool]:
+    effective_track_ids = unique_ints([getattr(resolution, "track_id", None) for resolution in resolutions.values()])
+    metrics: dict[str, int | bool] = {
+        "candidate_limit": bounded,
+        "excluded_recording_ids": len(excluded_recording_ids),
+        "excluded_legacy_track_ids": len(excluded_legacy_track_ids),
+        "recording_ids_selected": len(recording_ids),
+        "recording_ids_source_resolved": len(recording_ids),
+        "recording_ids_with_effective_source": len(effective_track_ids),
+        "recording_rows_loaded": len(recordings),
+        "profile_track_ids_selected": len(set(profile_ids.values())),
+        "effective_track_ids_selected": len(effective_track_ids),
+        "track_rows_hydrated": len(tracks_by_id),
+        "legacy_track_rows_selected": len(legacy_candidates),
+        "final_candidate_pool_size": len(final_candidates),
+        "candidate_cap_reached": len(final_candidates) >= bounded,
+        "recording_ids_loaded": len([candidate for candidate in final_candidates if candidate.recording_id is not None]),
+        "candidates_after_participation": len(recording_ids) + len(legacy_candidates),
+        "candidates_after_exclusion": len(recording_ids) + len(legacy_candidates),
+        "effective_sources_resolved": len(effective_track_ids),
+        "profile_tracks_loaded": len(set(profile_ids.values()) | {candidate.profile_track.id for candidate in legacy_candidates}),
+        "legacy_candidates_loaded": len(legacy_candidates),
+        "fixed_3x_overfetch_removed": True,
+    }
+    return metrics
+
 
 def load_station_recording_candidates(
     db: Session,
@@ -167,29 +232,36 @@ def load_station_recording_candidates(
 ) -> list[StationRecordingCandidate]:
     bounded = max(1, min(int(limit), MAX_STATION_CANDIDATE_POOL))
     exclude = exclude_keys or set()
+    excluded_recording_ids = {int(value) for kind, value in exclude if kind == "recording" and value is not None}
+    excluded_legacy_track_ids = {int(value) for kind, value in exclude if kind == "track" and value is not None}
     if not _has_table(db, "music_track_identities"):
-        return _legacy_track_candidates(db, limit=bounded, exclude=exclude)
-    with perf_segment("station.candidate_identity_query"):
-        recording_rows = (
-            db.query(models.MusicTrackIdentity.recording_id, func.min(models.Track.created_at).label("first_seen"), func.min(models.Track.id).label("stable_id"))
-            .join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id)
-            .filter(models.Track.library_availability == LIBRARY_AVAILABLE)
-            .group_by(models.MusicTrackIdentity.recording_id)
-            .order_by(func.min(models.Track.created_at).desc(), func.min(models.Track.id).asc())
-            .limit(bounded * 3)
-            .all()
+        legacy = _legacy_track_candidates(db, limit=bounded, exclude=exclude)
+        db.info["station_candidate_projection_metrics"] = _projection_metrics(
+            bounded=bounded,
+            excluded_recording_ids=excluded_recording_ids,
+            excluded_legacy_track_ids=excluded_legacy_track_ids,
+            recording_ids=[],
+            resolutions={},
+            profile_ids={},
+            tracks_by_id={candidate.effective_track.id: candidate.effective_track for candidate in legacy},
+            recordings={},
+            legacy_candidates=legacy,
+            final_candidates=legacy,
         )
-    recording_ids = unique_ints([row.recording_id for row in recording_rows])
+        return legacy
+
+    recording_ids = select_station_recording_ids(db, limit=bounded, excluded_recording_ids=excluded_recording_ids)
     with perf_segment('station.candidate_participation'):
-        participation = _participation_by_recording_id(db, recording_ids)
-    recording_ids = [recording_id for recording_id in recording_ids if participation.get(recording_id, PARTICIPATION_INCLUDED) in AUTOMATIC_PARTICIPATION_STATES and ("recording", recording_id) not in exclude]
+        participation: dict[int, str] = {recording_id: PARTICIPATION_INCLUDED for recording_id in recording_ids}
     with perf_segment('station.source_resolution'):
         resolutions = resolve_effective_music_sources_read_only(db, recording_ids=recording_ids)
     with perf_segment('station.profile_track_resolution'):
         profile_ids = _deterministic_profile_track_ids(db, recording_ids)
     with perf_segment('station.track_hydration'):
-        tracks_by_id = _track_rows_by_id(db, [resolution.track_id for resolution in resolutions.values()] + list(profile_ids.values()))
-        recordings = _recording_rows_by_id(db, recording_ids)
+        effective_ids = [resolution.track_id for resolution in resolutions.values()]
+        tracks_by_id = _track_rows_by_id(db, effective_ids + list(profile_ids.values()))
+        with perf_segment('station.candidate_recording_hydration'):
+            recordings = _recording_rows_by_id(db, recording_ids)
 
     candidates: list[StationRecordingCandidate] = []
     for recording_id in recording_ids:
@@ -217,19 +289,37 @@ def load_station_recording_candidates(
         if len(candidates) >= bounded:
             break
 
-    candidates.extend(_legacy_track_candidates(db, limit=max(0, bounded - len(candidates)), exclude=exclude))
-    return candidates[:bounded]
+    with perf_segment('station.candidate_legacy_fill'):
+        legacy_candidates = _legacy_track_candidates(db, limit=max(0, bounded - len(candidates)), exclude=exclude)
+    candidates.extend(legacy_candidates)
+    final_candidates = candidates[:bounded]
+    db.info["station_candidate_projection_metrics"] = _projection_metrics(
+        bounded=bounded,
+        excluded_recording_ids=excluded_recording_ids,
+        excluded_legacy_track_ids=excluded_legacy_track_ids,
+        recording_ids=recording_ids,
+        resolutions=resolutions,
+        profile_ids=profile_ids,
+        tracks_by_id=tracks_by_id,
+        recordings=recordings,
+        legacy_candidates=legacy_candidates,
+        final_candidates=final_candidates,
+    )
+    return final_candidates
 
 
 def _legacy_track_candidates(db: Session, *, limit: int, exclude: set[tuple[str, int]]) -> list[StationRecordingCandidate]:
     if limit <= 0:
         return []
+    excluded_track_ids = {int(value) for kind, value in exclude if kind == "track" and value is not None}
     query = db.query(models.Track)
     if _has_table(db, "music_track_identities"):
         query = query.outerjoin(models.MusicTrackIdentity, models.MusicTrackIdentity.track_id == models.Track.id).filter(models.MusicTrackIdentity.id.is_(None))
+    query = query.filter(models.Track.library_availability == LIBRARY_AVAILABLE)
+    if excluded_track_ids:
+        query = query.filter(~models.Track.id.in_(excluded_track_ids))
     legacy_tracks = (
         query
-        .filter(models.Track.library_availability == LIBRARY_AVAILABLE)
         .order_by(models.Track.created_at.desc(), models.Track.id.asc())
         .limit(limit)
         .all()
@@ -237,8 +327,6 @@ def _legacy_track_candidates(db: Session, *, limit: int, exclude: set[tuple[str,
     candidates: list[StationRecordingCandidate] = []
     for track in legacy_tracks:
         key = ("track", int(track.id))
-        if key in exclude:
-            continue
         candidates.append(StationRecordingCandidate(
             recording_id=None,
             candidate_key=key,
@@ -254,7 +342,6 @@ def _legacy_track_candidates(db: Session, *, limit: int, exclude: set[tuple[str,
         if len(candidates) >= limit:
             break
     return candidates
-
 
 def station_tracks_from_candidates(candidates: list[StationRecordingCandidate]) -> list[models.Track]:
     return [_attach_candidate_metadata(candidate.effective_track, candidate) for candidate in candidates]
