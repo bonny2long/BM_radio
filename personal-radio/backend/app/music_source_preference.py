@@ -7,6 +7,7 @@ from typing import Iterable
 from sqlalchemy.orm import Session
 
 from . import models
+from .perf import perf_segment
 from .scan_runs import LIBRARY_AVAILABLE
 
 PREFERENCE_POLICY_VERSION = 1
@@ -329,16 +330,22 @@ def resolve_effective_music_sources_read_only(
     ids = unique_ints(recording_ids)
     if not ids:
         return {}
-    candidates_by_recording = _load_candidates(db, ids)
-    preferences = _load_preferences(db, ids)
-    return {
-        recording_id: _resolution_from_preference_and_candidates(
-            recording_id=recording_id,
-            preference=preferences.get(recording_id),
-            candidates=candidates_by_recording.get(recording_id, []),
-        )
-        for recording_id in ids
-    }
+    with perf_segment('station.source_resolution.total'):
+        with perf_segment('station.source_resolution.available_sources'):
+            candidates_by_recording = _load_candidates(db, ids)
+        with perf_segment('station.source_resolution.preference_rows'):
+            preferences = _load_preferences(db, ids)
+        with perf_segment('station.source_resolution.fallback'):
+            return {
+                recording_id: _resolution_from_preference_and_candidates(
+                    recording_id=recording_id,
+                    preference=preferences.get(recording_id),
+                    candidates=candidates_by_recording.get(recording_id, []),
+                )
+                for recording_id in ids
+            }
+
+
 def resolve_effective_music_source(
     db: Session,
     *,

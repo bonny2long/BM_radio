@@ -14,6 +14,7 @@ from .music_recording_participation import PARTICIPATION_INCLUDED, PARTICIPATION
 from .music_source_preference import resolve_effective_music_sources_read_only
 from .perf import perf_segment
 from .station_candidate_intent import INTENT_GLOBAL, StationCandidateIntent, global_intent
+from .station_candidate_projection import select_unified_intent_station_recording_ids
 
 AUTOMATIC_PARTICIPATION_STATES = {PARTICIPATION_INCLUDED}
 SEED_PARTICIPATION_STATES = {PARTICIPATION_INCLUDED, PARTICIPATION_LIBRARY_ONLY}
@@ -266,7 +267,7 @@ def _select_station_recording_ids_by_intent_filters(
     return unique_ints([row.recording_id for row in rows])
 
 
-def select_intent_station_recording_ids(
+def select_intent_station_recording_ids_reference(
     db: Session,
     *,
     limit: int,
@@ -331,6 +332,21 @@ def select_intent_station_recording_ids(
     metrics = intent.debug_summary(bucket_counts=bucket_counts, duplicates_removed=duplicates_removed, total=len(selected))
     metrics['bucket_query_count'] = query_count
     return selected[:bounded], metrics
+
+
+def select_intent_station_recording_ids(
+    db: Session,
+    *,
+    limit: int,
+    excluded_recording_ids: set[int] | None,
+    intent: StationCandidateIntent,
+) -> tuple[list[int], dict[str, Any]]:
+    return select_unified_intent_station_recording_ids(
+        db,
+        limit=limit,
+        excluded_recording_ids=excluded_recording_ids,
+        intent=intent,
+    )
 
 
 def _deterministic_profile_track_ids(db: Session, recording_ids: list[int]) -> dict[int, int]:
