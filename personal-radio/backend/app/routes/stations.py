@@ -1,15 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from .. import models, radio_genres
-from ..availability import active_track_ids, active_tracks, available_track_filter
 from ..db import get_db
 from ..perf import perf_segment
-from ..radio_profiles import load_radio_profile_cache, profile_for_track_cached
+from ..radio_profiles import load_radio_profile_cache_for_tracks, profile_for_track_cached
 from ..station_engine import display_genre, norm_genre, track_genre, track_matches_genre
-from ..station_candidates import current_feedback_by_station_track, favorite_ids_by_station_track, load_station_candidate_tracks, logical_station_count
+from ..station_candidates import load_station_candidate_tracks, logical_station_count
+from ..station_context import build_station_request_context
 
 router = APIRouter()
 
@@ -27,15 +26,18 @@ class StationPatch(BaseModel):
 
 
 
-def build_station_count_maps(db: Session) -> dict:
+def build_station_count_maps(db: Session, *, tracks: list[models.Track] | None = None, profile_cache: dict | None = None) -> dict:
     with perf_segment('stations.count_maps'):
-        tracks = load_station_candidate_tracks(db, limit=5000)
+        if tracks is None:
+            tracks = load_station_candidate_tracks(db, limit=5000)
+        if profile_cache is None:
+            with perf_segment('station.profile_cache'):
+                profile_cache = load_radio_profile_cache_for_tracks(db, tracks)
         artist_counts: dict[str, int] = {}
         album_artist_counts: dict[str, int] = {}
         artist_union_ids: dict[str, set[int]] = {}
         genre_counts: dict[str, int] = {}
         family_counts: dict[str, int] = {}
-        profile_cache = load_radio_profile_cache(db)
         for track in tracks:
             if track.artist:
                 artist_counts[track.artist] = artist_counts.get(track.artist, 0) + 1
@@ -141,14 +143,20 @@ def useful_genre_station_rows(counts: dict) -> list[dict]:
 
 @router.get('/')
 async def get_stations(db: Session = Depends(get_db)):
-    counts = build_station_count_maps(db)
+    context = build_station_request_context(
+        db,
+        include_feedback=True,
+        include_favorites=True,
+        include_play_counts=False,
+        include_recent=False,
+    )
+    counts = build_station_count_maps(db, tracks=context.tracks, profile_cache=context.profile_cache)
     total = counts['total']
 
     with perf_segment('stations.feedback_counts'):
-        candidate_tracks = load_station_candidate_tracks(db, limit=5000)
-        feedback = current_feedback_by_station_track(db, candidate_tracks)
-        favorites = favorite_ids_by_station_track(db, candidate_tracks)
-        favorite_count = len([track for track in candidate_tracks if track.id in favorites or feedback.get(track.id) == 'up'])
+        feedback = context.feedback
+        favorites = context.favorites
+        favorite_count = len([track for track in context.tracks if track.id in favorites or feedback.get(track.id) == 'up'])
 
     with perf_segment('stations.system_station_build'):
         stations: list[dict] = []

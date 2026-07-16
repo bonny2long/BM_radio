@@ -230,13 +230,16 @@ def candidate_projection_metrics(db: Session, req: StationQueueRequest | None, s
 
 
 def profile_cache_metrics(db: Session, candidate_metrics: dict[str, Any]) -> dict[str, Any]:
-    rows = int(db.query(models.TrackRadioProfile).count())
-    loaded = int(candidate_metrics.get("profile_tracks_loaded", 0))
-    return {
-        "radio_profile_rows_loaded": rows,
+    context_metrics = db.info.get("station_request_context_metrics") or {}
+    scoped = dict(context_metrics.get("profile_metrics") or {})
+    loaded = int(scoped.get("track_profile_rows_loaded", candidate_metrics.get("profile_tracks_loaded", 0)))
+    scoped.update({
+        "radio_profile_rows_loaded": loaded,
         "profile_cache_wall_time_source": "station.profile_cache",
         "cache_lookup_coverage": round(loaded / max(1, int(candidate_metrics.get("final_candidate_pool_size", 0))), 4),
-    }
+        "total_track_profile_rows_in_fixture": int(db.query(models.TrackRadioProfile).count()),
+    })
+    return scoped
 
 
 def listener_signal_metrics(phase_metrics: dict[str, Any]) -> dict[str, Any]:

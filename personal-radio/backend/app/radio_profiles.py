@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Iterable
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import models, radio_genres
@@ -317,3 +318,129 @@ def seed_default_radio_profiles(db: Session) -> None:
         changed = True
     if changed:
         db.commit()
+
+PROFILE_SCOPE_CHUNK_SIZE = 500
+
+
+def _chunked(values: list[Any], size: int = PROFILE_SCOPE_CHUNK_SIZE):
+    for index in range(0, len(values), size):
+        yield values[index:index + size]
+
+
+def _track_profile_ids(tracks: Iterable[models.Track]) -> list[int]:
+    ids: list[int] = []
+    seen: set[int] = set()
+    for track in tracks:
+        for value in (getattr(track, 'id', None), getattr(track, '_station_effective_track_id', None), getattr(track, '_station_profile_track_id', None)):
+            if value is None:
+                continue
+            track_id = int(value)
+            if track_id not in seen:
+                seen.add(track_id)
+                ids.append(track_id)
+    return ids
+
+
+def _artist_keys_for_tracks(tracks: Iterable[models.Track]) -> set[str]:
+    keys: set[str] = set()
+    for track in tracks:
+        for value in (getattr(track, 'artist', None), getattr(track, 'album_artist', None)):
+            key = normalize_token(value)
+            if key:
+                keys.add(key)
+    return keys
+
+
+def _album_keys_for_tracks(tracks: Iterable[models.Track]) -> set[tuple[str, str]]:
+    keys: set[tuple[str, str]] = set()
+    for track in tracks:
+        album_key = normalize_token(getattr(track, 'album', None))
+        if not album_key:
+            continue
+        for value in (getattr(track, 'artist', None), getattr(track, 'album_artist', None)):
+            artist_key = normalize_token(value)
+            if artist_key:
+                keys.add((artist_key, album_key))
+    return keys
+
+
+def _sql_normalized(column):
+    return func.lower(func.replace(func.trim(column), '_', ' '))
+
+
+def load_radio_profile_cache_for_tracks(
+    db: Session,
+    tracks: Iterable[models.Track],
+    *,
+    extra_tracks: Iterable[models.Track] | None = None,
+) -> dict[str, Any]:
+    requested_tracks = list(tracks or [])
+    if extra_tracks is not None:
+        requested_tracks.extend(list(extra_tracks))
+
+    track_ids = _track_profile_ids(requested_tracks)
+    artist_keys = _artist_keys_for_tracks(requested_tracks)
+    album_keys = _album_keys_for_tracks(requested_tracks)
+    metrics: dict[str, int] = {
+        'requested_candidate_tracks': len(requested_tracks),
+        'requested_profile_track_ids': len(track_ids),
+        'requested_artist_keys': len(artist_keys),
+        'requested_album_keys': len(album_keys),
+        'artist_profile_rows_loaded': 0,
+        'album_profile_rows_loaded': 0,
+        'track_profile_rows_loaded': 0,
+        'artist_profile_queries': 0,
+        'album_profile_queries': 0,
+        'track_profile_queries': 0,
+    }
+
+    artists: dict[str, dict[str, Any]] = {}
+    artist_key_list = sorted(artist_keys)
+    for chunk in _chunked(artist_key_list):
+        if not chunk:
+            continue
+        metrics['artist_profile_queries'] += 1
+        rows = db.query(models.ArtistRadioProfile).filter(_sql_normalized(models.ArtistRadioProfile.artist).in_(chunk)).all()
+        for row in rows:
+            key = normalize_token(row.artist)
+            if key and key in artist_keys:
+                artists[key] = row_profile(row)
+    metrics['artist_profile_rows_loaded'] = len(artists)
+
+    albums: dict[tuple[str, str], dict[str, Any]] = {}
+    album_key_list = sorted(album_keys)
+    for chunk in _chunked(album_key_list):
+        if not chunk:
+            continue
+        metrics['album_profile_queries'] += 1
+        artist_chunk = sorted({artist for artist, _album in chunk})
+        album_chunk = sorted({album for _artist, album in chunk})
+        rows = (
+            db.query(models.AlbumRadioProfile)
+            .filter(_sql_normalized(models.AlbumRadioProfile.artist).in_(artist_chunk))
+            .filter(_sql_normalized(models.AlbumRadioProfile.album).in_(album_chunk))
+            .all()
+        )
+        requested = set(chunk)
+        for row in rows:
+            key = (normalize_token(row.artist), normalize_token(row.album))
+            if key[0] and key[1] and key in requested:
+                albums[key] = row_profile(row)
+    metrics['album_profile_rows_loaded'] = len(albums)
+
+    track_profiles: dict[int, dict[str, Any]] = {}
+    for chunk in _chunked(track_ids):
+        if not chunk:
+            continue
+        metrics['track_profile_queries'] += 1
+        rows = db.query(models.TrackRadioProfile).filter(models.TrackRadioProfile.track_id.in_(chunk)).all()
+        for row in rows:
+            track_profiles[int(row.track_id)] = row_profile(row)
+    metrics['track_profile_rows_loaded'] = len(track_profiles)
+
+    return {
+        'artists': artists,
+        'albums': albums,
+        'tracks': track_profiles,
+        '_station_profile_metrics': metrics,
+    }

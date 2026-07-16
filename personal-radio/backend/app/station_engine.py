@@ -10,16 +10,14 @@ from .availability import TRACK_UNAVAILABLE_MESSAGE, active_tracks, is_track_ava
 from .perf import perf_segment
 from .queue_contracts import StationQueueRequest
 from .queue_payloads import payload
-from .radio_profiles import load_radio_profile_cache, normalize_token, profile_for_track, profile_for_track_cached, row_profile
+from .station_context import build_station_request_context
+from .radio_profiles import normalize_token, profile_for_track, profile_for_track_cached
 from .station_candidates import (
     current_feedback_by_station_track,
     favorite_ids_by_station_track,
-    load_station_candidate_tracks,
-    logical_station_count,
     play_counts_by_station_track,
     recent_ids_by_station_track,
     station_identity_key_for_track,
-    station_identity_keys_for_track_ids,
     validate_song_seed_track,
 )
 from .station_version_affinity import (
@@ -258,11 +256,20 @@ def track_number_guess(track: models.Track) -> int | None:
     return None
 
 
-def score_tracks(db: Session, tracks: list[models.Track], station_type: str) -> list[models.Track]:
-    fb = latest_feedback(db, tracks)
-    counts = play_counts(db, tracks)
-    recent = recent_ids(db, tracks=tracks)
-    favs = favorite_ids(db, tracks)
+def score_tracks(
+    db: Session,
+    tracks: list[models.Track],
+    station_type: str,
+    *,
+    feedback: dict[int, str] | None = None,
+    play_count_map: dict[int, int] | None = None,
+    recent_set: set[int] | None = None,
+    favorite_set: set[int] | None = None,
+) -> list[models.Track]:
+    fb = feedback if feedback is not None else latest_feedback(db, tracks)
+    counts = play_count_map if play_count_map is not None else play_counts(db, tracks)
+    recent = recent_set if recent_set is not None else recent_ids(db, tracks=tracks)
+    favs = favorite_set if favorite_set is not None else favorite_ids(db, tracks)
     albums = album_counts(tracks)
     scored = []
 
@@ -300,7 +307,7 @@ def score_tracks(db: Session, tracks: list[models.Track], station_type: str) -> 
     return [t for _, t in scored]
 
 
-def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Track], profile_cache: dict | None = None, version_intent: VersionAffinityIntent | None = None) -> list[models.Track]:
+def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Track], profile_cache: dict | None = None, version_intent: VersionAffinityIntent | None = None, *, feedback: dict[int, str] | None = None, recent_set: set[int] | None = None, favorite_set: set[int] | None = None) -> list[models.Track]:
     seed_profile = radio_profile(db, seed, profile_cache)
     version_intent = version_intent or derive_version_affinity_intent(db, seed)
     seed_genre = profile_genre(seed_profile) or track_genre(seed)
@@ -308,9 +315,9 @@ def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Tr
     seed_artist = (seed.artist or '').strip().lower()
     seed_album = (seed.album or '').strip().lower()
 
-    fb = latest_feedback(db, candidates)
-    recent = recent_ids(db, tracks=candidates)
-    favs = favorite_ids(db, candidates)
+    fb = feedback if feedback is not None else latest_feedback(db, candidates)
+    recent = recent_set if recent_set is not None else recent_ids(db, tracks=candidates)
+    favs = favorite_set if favorite_set is not None else favorite_ids(db, candidates)
 
     scored: list[tuple[float, models.Track]] = []
     for t in candidates:
@@ -757,14 +764,22 @@ def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], ex
     validate_song_seed_track(db, seed_track)
     version_intent = derive_version_affinity_intent(db, seed_track)
 
-    all_tracks = load_station_candidate_tracks(db, limit=5000, exclude_track_ids=req.exclude_track_ids, seed_track_id=seed_track.id)
-    with perf_segment('station.profile_cache'):
-        profile_cache = load_radio_profile_cache(db)
+    context = build_station_request_context(
+        db,
+        exclude_track_ids=req.exclude_track_ids,
+        seed_track=seed_track,
+        include_feedback=True,
+        include_favorites=True,
+        include_play_counts=False,
+        include_recent=True,
+    )
+    all_tracks = context.tracks
+    profile_cache = context.profile_cache
     seed_profile = radio_profile(db, seed_track, profile_cache)
     seed_genre = profile_genre(seed_profile) or track_genre(seed_track)
-    fb = latest_feedback(db, all_tracks)
-    recent = recent_ids(db, tracks=all_tracks)
-    favs = favorite_ids(db, all_tracks)
+    fb = context.feedback
+    recent = context.recent
+    favs = context.favorites
     down = {tid for tid, value in fb.items() if value == 'down'}
 
     excluded_seed = [seed_track]
@@ -854,12 +869,19 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
     limit = station_limit(req.limit)
     seed_artist = req.seed_value or ''
     seed_token = normalize_token(seed_artist)
-    all_tracks = load_station_candidate_tracks(db, limit=5000, exclude_track_ids=req.exclude_track_ids)
-    with perf_segment('station.profile_cache'):
-        profile_cache = load_radio_profile_cache(db)
-    fb = latest_feedback(db, all_tracks)
-    recent = recent_ids(db, tracks=all_tracks)
-    favs = favorite_ids(db, all_tracks)
+    context = build_station_request_context(
+        db,
+        exclude_track_ids=req.exclude_track_ids,
+        include_feedback=True,
+        include_favorites=True,
+        include_play_counts=False,
+        include_recent=True,
+    )
+    all_tracks = context.tracks
+    profile_cache = context.profile_cache
+    fb = context.feedback
+    recent = context.recent
+    favs = context.favorites
     down = {tid for tid, value in fb.items() if value == 'down'}
     primary = [t for t in all_tracks if normalize_token(t.artist) == seed_token or normalize_token(t.album_artist) == seed_token]
     primary = [t for t in primary if t.id not in down and t.id not in exclude_set]
@@ -969,11 +991,18 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
 def genre_station_debug(req: StationQueueRequest, db: Session, down: set[int], exclude_set: set[int]) -> dict:
     limit = station_limit(req.limit)
     target = norm_genre(req.seed_value)
-    all_tracks = load_station_candidate_tracks(db, limit=5000, exclude_track_ids=req.exclude_track_ids)
-    with perf_segment('station.profile_cache'):
-        profile_cache = load_radio_profile_cache(db)
-    fb = latest_feedback(db, all_tracks)
-    recent = recent_ids(db, tracks=all_tracks)
+    context = build_station_request_context(
+        db,
+        exclude_track_ids=req.exclude_track_ids,
+        include_feedback=True,
+        include_favorites=False,
+        include_play_counts=False,
+        include_recent=True,
+    )
+    all_tracks = context.tracks
+    profile_cache = context.profile_cache
+    fb = context.feedback
+    recent = context.recent
     down = {tid for tid, value in fb.items() if value == 'down'}
     rows: list[dict] = []
     artist_seen: set[str] = set()
@@ -1098,10 +1127,9 @@ def build_station_queue(req: StationQueueRequest, db: Session) -> dict:
 def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
     limit = station_limit(req.limit)
     exclude_set = station_exclude_set(req)
-    with perf_segment('station.profile_cache'):
-        profile_cache = load_radio_profile_cache(db)
 
     seed_track = None
+    version_intent = None
     if req.type == 'song':
         if req.seed_track_id:
             seed_track = db.get(models.Track, req.seed_track_id)
@@ -1115,11 +1143,23 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
         validate_song_seed_track(db, seed_track)
         version_intent = derive_version_affinity_intent(db, seed_track)
 
-    with perf_segment('station.candidate_projection'):
-        station_pool = load_station_candidate_tracks(db, limit=5000, exclude_track_ids=exclude_set, seed_track_id=seed_track.id if seed_track is not None else None)
-    fb = latest_feedback(db, station_pool)
+    include_play_counts = req.type in {'deep_cuts', 'favorites', 'genre'}
+    include_recent = req.type == 'artist'
+    include_favorites = req.type in {'song', 'artist', 'favorites', 'genre', 'deep_cuts'}
+    context = build_station_request_context(
+        db,
+        exclude_track_ids=exclude_set,
+        seed_track=seed_track,
+        include_feedback=True,
+        include_favorites=include_favorites,
+        include_play_counts=include_play_counts,
+        include_recent=include_recent,
+    )
+    station_pool = context.tracks
+    profile_cache = context.profile_cache
+    fb = context.feedback
     down = {tid for tid, value in fb.items() if value == 'down'}
-    favs = favorite_ids(db, station_pool)
+    favs = context.favorites
 
     if req.type == 'favorites':
         tracks = [track for track in station_pool if track.id not in down and (track.id in favs or fb.get(track.id) == 'up')]
@@ -1131,7 +1171,7 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
         selected = sorted([track for track in station_pool if track.id not in down], key=first_seen_key, reverse=True)[:limit]
         return station_payload(selected, source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=len(selected), exclude_count=len(exclude_set), exhausted=not selected, remaining_estimate=max(0, len(station_pool) - len(selected)))
     elif req.type == 'deep_cuts':
-        counts = play_counts(db, station_pool)
+        counts = context.play_counts
         tracks = sorted([track for track in station_pool if track.id not in down], key=lambda t: (counts.get(t.id, 0), random.random()))[:limit * 10]
     elif req.type == 'genre':
         target = norm_genre(req.seed_value)
@@ -1144,7 +1184,16 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
         if not req.allow_exploration and seed_genre:
             candidates = [track for track in candidates if track_is_genre_compatible(track, seed_genre, radio_profile(db, track, profile_cache))]
         with perf_segment('station.scoring'):
-            ranked = score_song_radio(db, seed_track, candidates, profile_cache, version_intent)
+            ranked = score_song_radio(
+                db,
+                seed_track,
+                candidates,
+                profile_cache,
+                version_intent,
+                feedback=fb,
+                recent_set=None,
+                favorite_set=favs,
+            )
             tiers = song_radio_tiers(seed_track, seed_profile, ranked, profile_cache)
         with perf_segment('station.version_affinity'):
             tiers = apply_affinity_to_tiers(tiers, version_intent)
@@ -1164,7 +1213,7 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
         strong_related: list[tuple[float, models.Track]] = []
         soft_similar: list[tuple[float, models.Track]] = []
         weak_related: list[tuple[float, models.Track]] = []
-        recent = recent_ids(db, tracks=station_pool)
+        recent = context.recent
         for track in station_pool:
             if track.id in down:
                 continue
@@ -1196,7 +1245,15 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
     else:
         return station_payload([], source_type=req.type, seed_value=req.seed_value, requested_limit=limit, returned=0, exclude_count=len(exclude_set), exhausted=True, remaining_estimate=0)
 
-    tracks = score_tracks(db, tracks, req.type)
+    tracks = score_tracks(
+        db,
+        tracks,
+        req.type,
+        feedback=fb,
+        play_count_map=context.play_counts,
+        recent_set=None,
+        favorite_set=favs,
+    )
     if req.type == 'genre':
         tiers = genre_radio_tiers(norm_genre(req.seed_value), tracks, profile_cache)
         with perf_segment('station.window_assembly'):
