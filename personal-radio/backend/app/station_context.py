@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from . import models
 from .perf import perf_segment
 from .radio_profiles import load_radio_profile_cache_for_tracks
+from .station_candidate_intent import StationCandidateIntent, global_intent
 from .station_candidates import (
     MAX_STATION_CANDIDATE_POOL,
     current_feedback_by_station_track,
@@ -55,15 +56,19 @@ def build_station_request_context(
     include_favorites: bool = True,
     include_play_counts: bool = True,
     include_recent: bool = True,
+    candidate_intent: StationCandidateIntent | None = None,
+    requested_queue_limit: int = 50,
 ) -> StationRequestContext:
     with perf_segment('station.context_total'):
         with perf_segment('station.context_candidates'):
             with perf_segment('station.candidate_projection'):
+                intent = candidate_intent or global_intent(requested_queue_limit=requested_queue_limit, candidate_limit=limit)
                 tracks = load_station_candidate_tracks(
                     db,
                     limit=limit,
                     exclude_track_ids=exclude_track_ids or [],
                     seed_track_id=seed_track.id if seed_track is not None else None,
+                    candidate_intent=intent,
                 )
         candidate_metrics = _candidate_metrics(tracks)
         candidate_metrics.update(dict(db.info.get('station_candidate_projection_metrics') or {}))

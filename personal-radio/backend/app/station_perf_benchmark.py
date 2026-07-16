@@ -12,11 +12,12 @@ import tracemalloc
 from pathlib import Path
 from typing import Any, Callable
 
-from sqlalchemy import func, text
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from . import models
 from .perf import collect_perf_segments
+from .music_recording_participation import PARTICIPATION_INCLUDED
 from .perf_benchmark import BenchmarkContext, SqlCounter, percentile, stable_checksum
 from .queue_contracts import StationQueueRequest
 from .routes.stations import get_stations
@@ -28,6 +29,7 @@ from .station_candidates import (
     station_identity_key_for_track,
     station_identity_keys_for_track_ids,
 )
+from .station_candidate_intent import StationCandidateIntent, artist_intent, genre_intent, song_intent
 from .station_engine import build_station_debug, build_station_queue
 
 PROD4_FIXTURE_SEED = 41041
@@ -169,12 +171,50 @@ def listing_operations(seeds: StationSeeds) -> list[tuple[str, Callable[[Session
     ]
 
 
+def _candidate_intent_for_metrics(db: Session, req: StationQueueRequest) -> StationCandidateIntent | None:
+    if req.type == "song" and req.seed_track_id is not None:
+        seed_track = db.get(models.Track, req.seed_track_id)
+        if seed_track is not None:
+            return song_intent(db, seed_track=seed_track, requested_queue_limit=req.limit, candidate_limit=MAX_STATION_CANDIDATE_POOL)
+    if req.type == "artist":
+        return artist_intent(db, seed_artist=req.seed_value, requested_queue_limit=req.limit, candidate_limit=MAX_STATION_CANDIDATE_POOL)
+    if req.type == "genre":
+        return genre_intent(target_genre=req.seed_value, requested_queue_limit=req.limit, candidate_limit=MAX_STATION_CANDIDATE_POOL)
+    return None
+
+
 def _request_station_type(req: StationQueueRequest | None, name: str) -> str | None:
     if req is not None:
         return req.type
     if name.startswith("station_count."):
         return name.split(".", 1)[1]
     return None
+
+
+def _norm_sql(column):
+    return func.lower(func.replace(func.replace(func.trim(func.coalesce(column, '')), '_', ' '), '-', ' '))
+
+
+def _coverage_token_variants(value: str | None) -> tuple[str, ...]:
+    token = str(value or '').strip().lower().replace('_', ' ')
+    return tuple(dict.fromkeys(v for v in (token, token.replace('-', ' '), token.replace(' ', '-')) if v))
+
+
+def _eligible_matching_recording_ids(db: Session, *, artist: str | None = None, genre: str | None = None) -> set[int]:
+    query = (
+        db.query(models.MusicTrackIdentity.recording_id)
+        .join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id)
+        .outerjoin(models.MusicRecordingParticipation, models.MusicRecordingParticipation.recording_id == models.MusicTrackIdentity.recording_id)
+        .filter(models.Track.library_availability == "available")
+        .filter(or_(models.MusicRecordingParticipation.id.is_(None), models.MusicRecordingParticipation.participation_state == PARTICIPATION_INCLUDED))
+    )
+    if artist:
+        tokens = _coverage_token_variants(artist)
+        query = query.filter(or_(_norm_sql(models.Track.artist).in_(tokens), _norm_sql(models.Track.album_artist).in_(tokens)))
+    if genre:
+        tokens = _coverage_token_variants(genre)
+        query = query.filter(or_(_norm_sql(models.Track.primary_genre).in_(tokens), _norm_sql(models.Track.genre).in_(tokens)))
+    return {int(row[0]) for row in query.distinct().all() if row[0] is not None}
 
 
 def candidate_projection_metrics(db: Session, req: StationQueueRequest | None, seeds: StationSeeds | None = None) -> dict[str, Any]:
@@ -200,7 +240,7 @@ def candidate_projection_metrics(db: Session, req: StationQueueRequest | None, s
     if req.type == "song" and req.seed_track_id is not None:
         seed_keys = station_identity_keys_for_track_ids(db, [req.seed_track_id])
         exclude_keys |= seed_keys
-    candidates = load_station_recording_candidates(db, limit=MAX_STATION_CANDIDATE_POOL, exclude_keys=exclude_keys)
+    candidates = load_station_recording_candidates(db, limit=MAX_STATION_CANDIDATE_POOL, exclude_keys=exclude_keys, candidate_intent=_candidate_intent_for_metrics(db, req))
     tracks = [candidate.effective_track for candidate in candidates]
     full_logical = int(db.query(models.MusicTrackIdentity.recording_id).join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id).filter(models.Track.library_availability == "available").distinct().count())
     projection_stats = dict(db.info.get("station_candidate_projection_metrics") or {})
@@ -220,17 +260,26 @@ def candidate_projection_metrics(db: Session, req: StationQueueRequest | None, s
     metrics.update(projection_stats)
     artist = req.seed_value if req.type == "artist" else seeds.artist_name if seeds else None
     genre = req.seed_value if req.type == "genre" else seeds.genre_name if seeds else None
+    candidate_recording_ids = {int(candidate.recording_id) for candidate in candidates if candidate.recording_id is not None}
     if artist:
         artist_full = db.query(models.MusicTrackIdentity.recording_id).join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id).filter(models.Track.library_availability == "available").filter((models.Track.artist == artist) | (models.Track.album_artist == artist)).distinct().count()
-        artist_inside = len({station_identity_key_for_track(track) for track in tracks if track.artist == artist or track.album_artist == artist})
+        artist_eligible_ids = _eligible_matching_recording_ids(db, artist=artist)
+        artist_source_inside = len({station_identity_key_for_track(track) for track in tracks if track.artist == artist or track.album_artist == artist})
         metrics["seed_artist_full_fixture_count"] = int(artist_full)
-        metrics["seed_artist_inside_pool_count"] = int(artist_inside)
+        metrics["seed_artist_inside_pool_count"] = int(len(candidate_recording_ids & artist_eligible_ids))
+        metrics["seed_artist_eligible_fixture_count"] = int(len(artist_eligible_ids))
+        metrics["seed_artist_eligible_inside_pool_count"] = int(len(candidate_recording_ids & artist_eligible_ids))
+        metrics["seed_artist_physical_source_inside_pool_count"] = int(artist_source_inside)
     if genre:
         genre_token = str(genre).lower()
         genre_full = db.query(models.MusicTrackIdentity.recording_id).join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id).filter(models.Track.library_availability == "available").filter(func.lower(func.coalesce(models.Track.primary_genre, models.Track.genre)).like(f"%{genre_token}%")).distinct().count()
-        genre_inside = len({station_identity_key_for_track(track) for track in tracks if genre_token in str(track.primary_genre or track.genre or "").lower()})
+        genre_eligible_ids = _eligible_matching_recording_ids(db, genre=genre)
+        genre_source_inside = len({station_identity_key_for_track(track) for track in tracks if genre_token in str(track.primary_genre or track.genre or "").lower()})
         metrics["target_genre_full_fixture_count"] = int(genre_full)
-        metrics["target_genre_inside_pool_count"] = int(genre_inside)
+        metrics["target_genre_inside_pool_count"] = int(len(candidate_recording_ids & genre_eligible_ids))
+        metrics["target_genre_eligible_fixture_count"] = int(len(genre_eligible_ids))
+        metrics["target_genre_eligible_inside_pool_count"] = int(len(candidate_recording_ids & genre_eligible_ids))
+        metrics["target_genre_physical_source_inside_pool_count"] = int(genre_source_inside)
     return metrics
 
 

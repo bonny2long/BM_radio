@@ -11,8 +11,11 @@ from .perf import perf_segment
 from .queue_contracts import StationQueueRequest
 from .queue_payloads import payload
 from .station_context import build_station_request_context
+from .station_candidate_intent import artist_intent, genre_intent, song_intent
+from .station_seed_knowledge import ARTIST_GENRE_FALLBACKS, RELATED_ARTISTS, lookup_by_normalized
 from .radio_profiles import normalize_token, profile_for_track, profile_for_track_cached
 from .station_candidates import (
+    MAX_STATION_CANDIDATE_POOL,
     current_feedback_by_station_track,
     favorite_ids_by_station_track,
     play_counts_by_station_track,
@@ -36,30 +39,6 @@ from .station_intelligence import (
     station_distribution_warnings,
 )
 
-
-ARTIST_GENRE_FALLBACKS = {
-    'Kanye West': 'Hip-Hop',
-    'Kendrick Lamar': 'Hip-Hop',
-    'Lil Wayne': 'Hip-Hop',
-    'The Weeknd': 'R&B',
-    'Bastille': 'Alternative',
-    'Death Cab for Cutie': 'Alternative Rock',
-    'Daft Punk': 'Electronic',
-    'Mac Miller': 'Hip-Hop',
-    'deadmau5': 'Electronic',
-    'Aphex Twin': 'Electronic',
-}
-
-RELATED_ARTISTS: dict[str, list[str]] = {
-    'Kanye West': ['Kid Cudi', 'Pusha T', 'Jay-Z', 'The Weeknd', 'Kendrick Lamar', 'Lil Wayne'],
-    'Kendrick Lamar': ['Kanye West', 'Lil Wayne', 'J. Cole', 'Drake'],
-    'Lil Wayne': ['Kanye West', 'Kendrick Lamar', 'Drake', 'Nicki Minaj'],
-    'The Weeknd': ['Kanye West', 'Drake', 'Frank Ocean', 'SZA'],
-    'Drake': ['The Weeknd', 'Lil Wayne', 'Kanye West', 'Future'],
-    'Daft Punk': ['deadmau5', 'Aphex Twin', 'Chemical Brothers', 'Boards of Canada'],
-    'deadmau5': ['Daft Punk', 'Aphex Twin', 'Chemical Brothers', 'Skrillex'],
-    'Aphex Twin': ['Daft Punk', 'deadmau5', 'Boards of Canada', 'Autechre'],
-}
 
 MAX_STATION_LIMIT = 100
 MAX_EXCLUDE_IDS = 200
@@ -137,14 +116,25 @@ def station_exclude_set(req: StationQueueRequest) -> set[int]:
     return set((req.exclude_track_ids or [])[:MAX_EXCLUDE_IDS])
 
 
-def lookup_by_normalized(mapping: dict, key: str | None, default=None):
-    target = normalize_token(key)
-    if not target:
-        return default
-    for name, value in mapping.items():
-        if normalize_token(name) == target:
-            return value
-    return default
+def station_candidate_intent_for_request(
+    db: Session,
+    req: StationQueueRequest,
+    *,
+    limit: int,
+    seed_track: models.Track | None = None,
+):
+    if req.type == 'song' and seed_track is not None:
+        return song_intent(db, seed_track=seed_track, requested_queue_limit=limit, candidate_limit=MAX_STATION_CANDIDATE_POOL)
+    if req.type == 'artist':
+        return artist_intent(db, seed_artist=req.seed_value, requested_queue_limit=limit, candidate_limit=MAX_STATION_CANDIDATE_POOL)
+    if req.type == 'genre':
+        return genre_intent(target_genre=req.seed_value, requested_queue_limit=limit, candidate_limit=MAX_STATION_CANDIDATE_POOL)
+    return None
+
+
+def candidate_intent_debug(context) -> dict:
+    prefix = 'candidate_intent_'
+    return {key[len(prefix):]: value for key, value in context.candidate_metrics.items() if key.startswith(prefix)}
 
 
 def norm_genre(value: str | None) -> str:
@@ -763,6 +753,7 @@ def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], ex
         return station_debug_response(req, None, {'candidate_count': 0, 'selected_count': 0}, [], [])
     validate_song_seed_track(db, seed_track)
     version_intent = derive_version_affinity_intent(db, seed_track)
+    candidate_intent = station_candidate_intent_for_request(db, req, limit=limit, seed_track=seed_track)
 
     context = build_station_request_context(
         db,
@@ -772,6 +763,8 @@ def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], ex
         include_favorites=True,
         include_play_counts=False,
         include_recent=True,
+        candidate_intent=candidate_intent,
+        requested_queue_limit=limit,
     )
     all_tracks = context.tracks
     profile_cache = context.profile_cache
@@ -846,6 +839,7 @@ def song_station_debug(req: StationQueueRequest, db: Session, down: set[int], ex
     if len(selected) < limit and blocked_unrelated:
         extra_warnings.append('returned_less_than_limit_to_preserve_coherence')
     response['version_affinity'] = version_summary
+    response['candidate_intent'] = candidate_intent_debug(context)
     response['warnings'] = list(set(response['warnings'] + debug_distribution_warnings(distribution) + affinity_warnings(version_summary) + extra_warnings))
     response['seed'] = strip_internal_seed(seed)
     return response
@@ -869,6 +863,7 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
     limit = station_limit(req.limit)
     seed_artist = req.seed_value or ''
     seed_token = normalize_token(seed_artist)
+    candidate_intent = station_candidate_intent_for_request(db, req, limit=limit)
     context = build_station_request_context(
         db,
         exclude_track_ids=req.exclude_track_ids,
@@ -876,6 +871,8 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
         include_favorites=True,
         include_play_counts=False,
         include_recent=True,
+        candidate_intent=candidate_intent,
+        requested_queue_limit=limit,
     )
     all_tracks = context.tracks
     profile_cache = context.profile_cache
@@ -983,6 +980,7 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
         **distribution,
     }, selected, top_rejected)
 
+    response['candidate_intent'] = candidate_intent_debug(context)
     response['warnings'] = list(set(response['warnings'] + warnings + debug_distribution_warnings(distribution)))
     response['seed'] = strip_internal_seed(seed)
     return response
@@ -991,6 +989,7 @@ def artist_station_debug(req: StationQueueRequest, db: Session, down: set[int], 
 def genre_station_debug(req: StationQueueRequest, db: Session, down: set[int], exclude_set: set[int]) -> dict:
     limit = station_limit(req.limit)
     target = norm_genre(req.seed_value)
+    candidate_intent = station_candidate_intent_for_request(db, req, limit=limit)
     context = build_station_request_context(
         db,
         exclude_track_ids=req.exclude_track_ids,
@@ -998,6 +997,8 @@ def genre_station_debug(req: StationQueueRequest, db: Session, down: set[int], e
         include_favorites=False,
         include_play_counts=False,
         include_recent=True,
+        candidate_intent=candidate_intent,
+        requested_queue_limit=limit,
     )
     all_tracks = context.tracks
     profile_cache = context.profile_cache
@@ -1050,6 +1051,7 @@ def genre_station_debug(req: StationQueueRequest, db: Session, down: set[int], e
         'other_artist_count': len(selected),
         **distribution,
     }, selected, [row | {'reason': 'not_selected_after_ranking'} for row in rows if row['track_id'] not in selected_ids][:20])
+    response['candidate_intent'] = candidate_intent_debug(context)
     response['warnings'] = list(set(response['warnings'] + debug_distribution_warnings(distribution)))
     response['seed'] = strip_internal_seed(response['seed'])
     return response
@@ -1146,6 +1148,7 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
     include_play_counts = req.type in {'deep_cuts', 'favorites', 'genre'}
     include_recent = req.type == 'artist'
     include_favorites = req.type in {'song', 'artist', 'favorites', 'genre', 'deep_cuts'}
+    candidate_intent = station_candidate_intent_for_request(db, req, limit=limit, seed_track=seed_track)
     context = build_station_request_context(
         db,
         exclude_track_ids=exclude_set,
@@ -1154,6 +1157,8 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
         include_favorites=include_favorites,
         include_play_counts=include_play_counts,
         include_recent=include_recent,
+        candidate_intent=candidate_intent,
+        requested_queue_limit=limit,
     )
     station_pool = context.tracks
     profile_cache = context.profile_cache

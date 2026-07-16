@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable
 
 from fastapi import HTTPException
 from sqlalchemy import and_, func, or_
@@ -13,6 +13,7 @@ from .availability import LIBRARY_AVAILABLE, TRACK_UNAVAILABLE_MESSAGE, is_track
 from .music_recording_participation import PARTICIPATION_INCLUDED, PARTICIPATION_LIBRARY_ONLY
 from .music_source_preference import resolve_effective_music_sources_read_only
 from .perf import perf_segment
+from .station_candidate_intent import INTENT_GLOBAL, StationCandidateIntent, global_intent
 
 AUTOMATIC_PARTICIPATION_STATES = {PARTICIPATION_INCLUDED}
 SEED_PARTICIPATION_STATES = {PARTICIPATION_INCLUDED, PARTICIPATION_LIBRARY_ONLY}
@@ -165,6 +166,173 @@ def select_station_recording_ids(
     return unique_ints([row.recording_id for row in rows])
 
 
+def _sql_text_token(column):
+    return func.lower(func.replace(func.replace(func.trim(func.coalesce(column, '')), '_', ' '), '-', ' '))
+
+
+def _sql_token_variants(values: Iterable[str]) -> tuple[str, ...]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        token = str(value or '').strip().lower().replace('_', ' ')
+        for variant in (token, token.replace('-', ' '), token.replace(' ', '-')):
+            variant = variant.strip()
+            if variant and variant not in seen:
+                seen.add(variant)
+                out.append(variant)
+    return tuple(out)
+
+
+def _eligible_recording_query(db: Session, *, excluded_recording_ids: set[int] | None = None):
+    excluded = {int(value) for value in (excluded_recording_ids or set()) if value is not None}
+    query = (
+        db.query(
+            models.MusicTrackIdentity.recording_id.label('recording_id'),
+            func.min(models.Track.created_at).label('first_seen'),
+            func.min(models.Track.id).label('stable_id'),
+        )
+        .join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id)
+        .outerjoin(models.MusicRecordingParticipation, models.MusicRecordingParticipation.recording_id == models.MusicTrackIdentity.recording_id)
+        .filter(models.Track.library_availability == LIBRARY_AVAILABLE)
+        .filter(or_(models.MusicRecordingParticipation.id.is_(None), models.MusicRecordingParticipation.participation_state == PARTICIPATION_INCLUDED))
+    )
+    if excluded:
+        query = query.filter(~models.MusicTrackIdentity.recording_id.in_(excluded))
+    return query
+
+
+def eligible_station_recording_count(db: Session, *, excluded_recording_ids: set[int] | None = None) -> int:
+    query = _eligible_recording_query(db, excluded_recording_ids=excluded_recording_ids)
+    subq = query.group_by(models.MusicTrackIdentity.recording_id).subquery()
+    return int(db.query(func.count()).select_from(subq).scalar() or 0)
+
+
+def _select_station_recording_ids_by_intent_filters(
+    db: Session,
+    *,
+    limit: int,
+    excluded_recording_ids: set[int] | None = None,
+    artist_tokens: Iterable[str] = (),
+    exact_genre_tokens: Iterable[str] = (),
+    family_genre_tokens: Iterable[str] = (),
+) -> list[int]:
+    bounded = max(0, min(int(limit), MAX_STATION_CANDIDATE_POOL))
+    if bounded <= 0:
+        return []
+    artist_values = _sql_token_variants(artist_tokens)
+    exact_values = _sql_token_variants(exact_genre_tokens)
+    family_values = _sql_token_variants(family_genre_tokens)
+    if not artist_values and not exact_values and not family_values:
+        return select_station_recording_ids(db, limit=bounded, excluded_recording_ids=excluded_recording_ids)
+
+    query = _eligible_recording_query(db, excluded_recording_ids=excluded_recording_ids)
+    genre_columns = [_sql_text_token(models.Track.genre), _sql_text_token(models.Track.primary_genre)]
+    if _has_table(db, 'track_radio_profiles'):
+        query = query.outerjoin(models.TrackRadioProfile, models.TrackRadioProfile.track_id == models.Track.id)
+        genre_columns.append(_sql_text_token(models.TrackRadioProfile.primary_genre))
+    if _has_table(db, 'artist_radio_profiles'):
+        artist_match = or_(
+            _sql_text_token(models.ArtistRadioProfile.artist) == _sql_text_token(models.Track.artist),
+            _sql_text_token(models.ArtistRadioProfile.artist) == _sql_text_token(models.Track.album_artist),
+        )
+        query = query.outerjoin(models.ArtistRadioProfile, artist_match)
+        genre_columns.append(_sql_text_token(models.ArtistRadioProfile.primary_genre))
+    if _has_table(db, 'album_radio_profiles'):
+        album_match = and_(
+            _sql_text_token(models.AlbumRadioProfile.album) == _sql_text_token(models.Track.album),
+            or_(
+                _sql_text_token(models.AlbumRadioProfile.artist) == _sql_text_token(models.Track.artist),
+                _sql_text_token(models.AlbumRadioProfile.artist) == _sql_text_token(models.Track.album_artist),
+            ),
+        )
+        query = query.outerjoin(models.AlbumRadioProfile, album_match)
+        genre_columns.append(_sql_text_token(models.AlbumRadioProfile.primary_genre))
+
+    filters = []
+    if artist_values:
+        filters.append(or_(_sql_text_token(models.Track.artist).in_(artist_values), _sql_text_token(models.Track.album_artist).in_(artist_values)))
+    if exact_values:
+        filters.append(or_(*[column.in_(exact_values) for column in genre_columns]))
+    if family_values:
+        filters.append(or_(*[column.in_(family_values) for column in genre_columns]))
+    rows = (
+        query
+        .filter(or_(*filters))
+        .group_by(models.MusicTrackIdentity.recording_id)
+        .order_by(func.min(models.Track.created_at).desc(), func.min(models.Track.id).asc())
+        .limit(bounded)
+        .all()
+    )
+    return unique_ints([row.recording_id for row in rows])
+
+
+def select_intent_station_recording_ids(
+    db: Session,
+    *,
+    limit: int,
+    excluded_recording_ids: set[int] | None,
+    intent: StationCandidateIntent,
+) -> tuple[list[int], dict[str, Any]]:
+    bounded = max(1, min(int(limit), MAX_STATION_CANDIDATE_POOL))
+    excluded = {int(value) for value in (excluded_recording_ids or set()) if value is not None}
+    selected: list[int] = []
+    selected_set: set[int] = set()
+    bucket_counts: dict[str, int] = {}
+    duplicates_removed = 0
+    query_count = 0
+
+    def add_bucket(name: str, ids: list[int]) -> None:
+        nonlocal duplicates_removed
+        added = 0
+        for recording_id in ids:
+            if recording_id in selected_set:
+                duplicates_removed += 1
+                continue
+            selected_set.add(recording_id)
+            selected.append(recording_id)
+            added += 1
+            if len(selected) >= bounded:
+                break
+        bucket_counts[name] = bucket_counts.get(name, 0) + added
+
+    def run_bucket(name: str, *, artist_tokens=(), exact_genre_tokens=(), family_genre_tokens=()) -> None:
+        nonlocal query_count
+        if len(selected) >= bounded:
+            return
+        bucket_limit = int(intent.bucket_limits.get(name, bounded) or bounded)
+        bucket_limit = max(0, min(bucket_limit, bounded - len(selected)))
+        if bucket_limit <= 0:
+            bucket_counts.setdefault(name, 0)
+            return
+        combined_excluded = excluded | selected_set
+        query_count += 1
+        ids = _select_station_recording_ids_by_intent_filters(
+            db,
+            limit=bucket_limit,
+            excluded_recording_ids=combined_excluded,
+            artist_tokens=artist_tokens,
+            exact_genre_tokens=exact_genre_tokens,
+            family_genre_tokens=family_genre_tokens,
+        )
+        add_bucket(name, ids)
+
+    if intent.mode in {'song', 'artist'}:
+        run_bucket('seed_artist', artist_tokens=intent.seed_artist_tokens)
+        run_bucket('related_artists', artist_tokens=intent.related_artist_tokens)
+        run_bucket('exact_genre', exact_genre_tokens=intent.exact_genre_tokens)
+        run_bucket('genre_family', family_genre_tokens=intent.family_genre_tokens)
+    elif intent.mode == 'genre':
+        run_bucket('exact_genre', exact_genre_tokens=intent.exact_genre_tokens)
+        run_bucket('genre_family', family_genre_tokens=intent.family_genre_tokens)
+
+    if len(selected) < bounded:
+        run_bucket('global_fallback')
+
+    metrics = intent.debug_summary(bucket_counts=bucket_counts, duplicates_removed=duplicates_removed, total=len(selected))
+    metrics['bucket_query_count'] = query_count
+    return selected[:bounded], metrics
+
+
 def _deterministic_profile_track_ids(db: Session, recording_ids: list[int]) -> dict[int, int]:
     if not recording_ids:
         return {}
@@ -197,9 +365,10 @@ def _projection_metrics(
     recordings: dict[int, models.MusicRecording],
     legacy_candidates: list[StationRecordingCandidate],
     final_candidates: list[StationRecordingCandidate],
-) -> dict[str, int | bool]:
+    intent_metrics: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     effective_track_ids = unique_ints([getattr(resolution, "track_id", None) for resolution in resolutions.values()])
-    metrics: dict[str, int | bool] = {
+    metrics: dict[str, Any] = {
         "candidate_limit": bounded,
         "excluded_recording_ids": len(excluded_recording_ids),
         "excluded_legacy_track_ids": len(excluded_legacy_track_ids),
@@ -221,6 +390,8 @@ def _projection_metrics(
         "legacy_candidates_loaded": len(legacy_candidates),
         "fixed_3x_overfetch_removed": True,
     }
+    if intent_metrics:
+        metrics.update({f"candidate_intent_{key}": value for key, value in intent_metrics.items()})
     return metrics
 
 
@@ -229,6 +400,7 @@ def load_station_recording_candidates(
     *,
     limit: int = MAX_STATION_CANDIDATE_POOL,
     exclude_keys: set[tuple[str, int]] | None = None,
+    candidate_intent: StationCandidateIntent | None = None,
 ) -> list[StationRecordingCandidate]:
     bounded = max(1, min(int(limit), MAX_STATION_CANDIDATE_POOL))
     exclude = exclude_keys or set()
@@ -250,7 +422,27 @@ def load_station_recording_candidates(
         )
         return legacy
 
-    recording_ids = select_station_recording_ids(db, limit=bounded, excluded_recording_ids=excluded_recording_ids)
+    selection_intent = candidate_intent or global_intent(requested_queue_limit=bounded, candidate_limit=bounded)
+    intent_metrics: dict[str, Any] | None = None
+    if selection_intent.mode == INTENT_GLOBAL:
+        recording_ids = select_station_recording_ids(db, limit=bounded, excluded_recording_ids=excluded_recording_ids)
+        intent_metrics = selection_intent.debug_summary(bucket_counts={'global': len(recording_ids)}, total=len(recording_ids))
+    else:
+        with perf_segment('station.candidate_intent_count'):
+            eligible_count = eligible_station_recording_count(db, excluded_recording_ids=excluded_recording_ids)
+        if eligible_count <= bounded:
+            recording_ids = select_station_recording_ids(db, limit=bounded, excluded_recording_ids=excluded_recording_ids)
+            intent_metrics = selection_intent.debug_summary(bucket_counts={'global_below_cap': len(recording_ids)}, total=len(recording_ids))
+            intent_metrics['below_cap_global_equivalent'] = True
+        else:
+            with perf_segment('station.candidate_intent_buckets'):
+                recording_ids, intent_metrics = select_intent_station_recording_ids(
+                    db,
+                    limit=bounded,
+                    excluded_recording_ids=excluded_recording_ids,
+                    intent=selection_intent,
+                )
+            intent_metrics['below_cap_global_equivalent'] = False
     with perf_segment('station.candidate_participation'):
         participation: dict[int, str] = {recording_id: PARTICIPATION_INCLUDED for recording_id in recording_ids}
     with perf_segment('station.source_resolution'):
@@ -304,6 +496,7 @@ def load_station_recording_candidates(
         recordings=recordings,
         legacy_candidates=legacy_candidates,
         final_candidates=final_candidates,
+        intent_metrics=intent_metrics,
     )
     return final_candidates
 
@@ -353,12 +546,13 @@ def load_station_candidate_tracks(
     limit: int = MAX_STATION_CANDIDATE_POOL,
     exclude_track_ids: Iterable[int | None] | None = None,
     seed_track_id: int | None = None,
+    candidate_intent: StationCandidateIntent | None = None,
 ) -> list[models.Track]:
     exclude_keys = station_identity_keys_for_track_ids(db, exclude_track_ids or [])
     if seed_track_id is not None:
         seed_recording_id = seed_recording_id_for_track(db, seed_track_id)
         exclude_keys.add(("recording", seed_recording_id) if seed_recording_id is not None else ("track", int(seed_track_id)))
-    return station_tracks_from_candidates(load_station_recording_candidates(db, limit=limit, exclude_keys=exclude_keys))
+    return station_tracks_from_candidates(load_station_recording_candidates(db, limit=limit, exclude_keys=exclude_keys, candidate_intent=candidate_intent))
 
 
 def current_feedback_by_station_track(db: Session, tracks: list[models.Track]) -> dict[int, str]:
