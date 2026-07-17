@@ -266,18 +266,20 @@ def assert_drift_check(db_url: str) -> None:
 
 def assert_startup_unchanged() -> None:
     source = (BACKEND / 'app' / 'main.py').read_text(encoding='utf-8')
-    for needle in [
-        'models.Base.metadata.create_all(bind=db.engine)',
-        'ensure_manifest_ingestion_columns(db.engine)',
-        'ensure_scan_reconciliation_columns(db.engine)',
-        'ensure_playback_identity_columns(db.engine)',
-        'ensure_recording_feedback_columns(db.engine)',
-        'ensure_performance_indexes()',
-    ]:
-        assert needle in source, needle
-    assert 'alembic' not in source.lower()
+    forbidden = [
+        'Base.metadata.create_all',
+        'ensure_manifest_ingestion_columns',
+        'ensure_scan_reconciliation_columns',
+        'ensure_playback_identity_columns',
+        'ensure_recording_feedback_columns',
+        'ensure_performance_indexes',
+        'alembic.command',
+    ]
+    assert not any(token in source for token in forbidden), source
+    assert 'assert_database_ready(db.engine)' in source
+    assert source.index('assert_database_ready') < source.index('seed_default_radio_profiles')
     mark('runtime import does not auto-run Alembic')
-    mark('current startup DDL behavior remains unchanged')
+    mark('startup uses migration-authoritative readiness')
 
 
 def assert_no_media_access() -> None:

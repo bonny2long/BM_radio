@@ -1,16 +1,38 @@
-# BM Radio Alembic Migrations
+# BM Radio Migrations
 
-BM-PROD5.3A introduces Alembic as a deterministic schema migration framework while preserving the current runtime startup DDL behavior.
+Alembic is the schema authority for BM Radio databases. Application startup validates migration readiness and schema compatibility, but it never creates tables, adds columns, stamps, upgrades, downgrades, or repairs schemas.
 
-Migration commands must use an explicit database URL:
+Every migration command requires an explicit database URL. The application must reject databases that are uninitialized, unversioned, behind, unknown, unreachable, or drifted.
+
+## Fresh Database
 
 ```powershell
-python -m alembic -x db_url=sqlite:///tmp_tests/migrations/example.db upgrade head
+python -m alembic -x db_url=<EXPLICIT_DATABASE_URL> upgrade head
+python scripts/migration_status.py check --db-url <EXPLICIT_DATABASE_URL>
+python scripts/database_readiness.py --db-url <EXPLICIT_DATABASE_URL>
 ```
 
-Allowed URL sources, in order:
+## Compatible Unversioned Database
 
-1. `-x db_url=...`
-2. `BM_RADIO_DB_URL`
+First run the read-only compatibility verifier:
 
-Running Alembic without one of those explicit sources fails before connecting. Do not run migrations, stamping, or downgrades against `bm_radio.db` unless a later production phase explicitly authorizes it.
+```powershell
+python scripts/check_migration_schema_compatibility.py --db-url <EXPLICIT_DATABASE_URL>
+```
+
+Only after it passes, perform the explicit reviewed adoption step:
+
+```powershell
+python -m alembic -x db_url=<EXPLICIT_DATABASE_URL> stamp 0001_current_schema_baseline
+python scripts/migration_status.py check --db-url <EXPLICIT_DATABASE_URL>
+python scripts/database_readiness.py --db-url <EXPLICIT_DATABASE_URL>
+```
+
+## Versioned Database Behind Head
+
+```powershell
+python -m alembic -x db_url=<EXPLICIT_DATABASE_URL> upgrade head
+python scripts/migration_status.py check --db-url <EXPLICIT_DATABASE_URL>
+```
+
+Do not run adoption, stamp, upgrade, or downgrade commands against the real local `bm_radio.db` unless that has been separately reviewed and approved.
