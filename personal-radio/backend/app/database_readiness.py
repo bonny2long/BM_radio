@@ -18,6 +18,7 @@ DEFAULT_ALEMBIC_INI = BACKEND_ROOT / 'alembic.ini'
 READY = 'ready'
 UNINITIALIZED = 'uninitialized'
 LEGACY_UNVERSIONED = 'legacy_unversioned'
+LEGACY_INCOMPATIBLE = 'legacy_incompatible'
 REVISION_BEHIND = 'revision_behind'
 REVISION_UNKNOWN = 'revision_unknown'
 SCHEMA_DRIFT = 'schema_drift'
@@ -109,17 +110,23 @@ def inspect_database_readiness(engine: Engine, *, alembic_ini_path: Path | None 
                 message='BM Radio database is not initialized. Run the explicit Alembic upgrade command before starting the API.',
             )
         if not issues:
-            message = 'BM Radio database has a compatible legacy schema but no Alembic revision. Run compatibility verification and the explicit adoption/stamp procedure.'
-        else:
-            message = 'BM Radio database is unversioned and does not match the required schema. Run the read-only compatibility check before any adoption attempt.'
+            return DatabaseReadiness(
+                status=LEGACY_UNVERSIONED,
+                ready=False,
+                current_revision=None,
+                head_revision=head,
+                schema_issue_count=0,
+                schema_issues=(),
+                message='BM Radio database has a compatible legacy schema but no Alembic revision. Run compatibility verification and the explicit adoption/stamp procedure.',
+            )
         return DatabaseReadiness(
-            status=LEGACY_UNVERSIONED,
+            status=LEGACY_INCOMPATIBLE,
             ready=False,
             current_revision=None,
             head_revision=head,
             schema_issue_count=len(issues),
             schema_issues=issues,
-            message=message,
+            message='BM Radio database contains an unversioned legacy schema that is not compatible with the current baseline. Do not stamp it. Rebuild an empty database or use a reviewed data migration for a populated database.',
         )
 
     if current not in known_revisions:

@@ -8,10 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import text
-
 from .database_readiness import inspect_database_readiness
-from .migration_contract import APP_TABLES, compare_schema, engine_for_url, read_only_sqlite_url_for_path
+from .migration_contract import APP_TABLES, SchemaIssue, compare_schema, engine_for_url, read_only_sqlite_url_for_path
 
 BACKUP_DIR_NAME = '.local_backups'
 
@@ -36,13 +34,14 @@ class SqliteSnapshot:
     has_alembic_version: bool
     alembic_version_rows: tuple[str, ...]
     compatibility: str
+    compatibility_issues: tuple[SchemaIssue, ...]
     readiness_status: str
     readiness_ready: bool
     current_revision: str | None
     head_revision: str
 
-    def as_dict(self) -> dict[str, Any]:
-        return {
+    def as_dict(self, *, include_schema: bool = True, issue_limit: int = 20) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             'logical_path': self.logical_path,
             'size': self.size,
             'modified_utc': self.modified_utc,
@@ -53,19 +52,40 @@ class SqliteSnapshot:
             'user_version': self.user_version,
             'application_tables': list(self.application_tables),
             'application_row_counts': self.application_row_counts,
-            'table_sql': self.table_sql,
-            'index_sql': self.index_sql,
-            'foreign_keys': self.foreign_keys,
-            'table_info': self.table_info,
+            'application_row_count': application_row_count(self),
             'schema_fingerprint': self.schema_fingerprint,
             'has_alembic_version': self.has_alembic_version,
             'alembic_version_rows': list(self.alembic_version_rows),
             'compatibility': self.compatibility,
+            'compatibility_issue_count': len(self.compatibility_issues),
+            'compatibility_issue_summary': compatibility_issue_summary(self.compatibility_issues),
+            'compatibility_issues': [issue.as_dict() for issue in self.compatibility_issues[:issue_limit]],
             'readiness_status': self.readiness_status,
             'readiness_ready': self.readiness_ready,
             'current_revision': self.current_revision,
             'head_revision': self.head_revision,
         }
+        if include_schema:
+            payload.update(
+                {
+                    'table_sql': self.table_sql,
+                    'index_sql': self.index_sql,
+                    'foreign_keys': self.foreign_keys,
+                    'table_info': self.table_info,
+                }
+            )
+        return payload
+
+
+def application_row_count(snapshot: SqliteSnapshot) -> int:
+    return sum(snapshot.application_row_counts.values())
+
+
+def compatibility_issue_summary(issues: tuple[SchemaIssue, ...] | list[SchemaIssue]) -> dict[str, int]:
+    summary: dict[str, int] = {}
+    for issue in issues:
+        summary[issue.category] = summary.get(issue.category, 0) + 1
+    return dict(sorted(summary.items()))
 
 
 def sha256_file(path: Path) -> str:
@@ -190,7 +210,7 @@ def snapshot_sqlite_database(path: Path, *, logical_path: str = '<redacted>') ->
 
     engine = engine_for_url(read_only_sqlite_url_for_path(path))
     try:
-        issues = compare_schema(engine)
+        issues = tuple(compare_schema(engine))
         readiness = inspect_database_readiness(engine)
     finally:
         engine.dispose()
@@ -215,6 +235,7 @@ def snapshot_sqlite_database(path: Path, *, logical_path: str = '<redacted>') ->
         has_alembic_version=has_alembic,
         alembic_version_rows=alembic_rows,
         compatibility='PASS' if not issues else 'FAIL',
+        compatibility_issues=issues,
         readiness_status=readiness.status,
         readiness_ready=readiness.ready,
         current_revision=readiness.current_revision,
@@ -222,12 +243,19 @@ def snapshot_sqlite_database(path: Path, *, logical_path: str = '<redacted>') ->
     )
 
 
-def backup_sqlite_database(source: Path, backup_dir: Path, *, created_utc: datetime | None = None) -> tuple[Path, Path, dict[str, Any]]:
+def backup_sqlite_database(
+    source: Path,
+    backup_dir: Path,
+    *,
+    created_utc: datetime | None = None,
+    label: str = 'pre_alembic_adoption',
+) -> tuple[Path, Path, dict[str, Any]]:
     created = created_utc or datetime.now(timezone.utc)
     stamp = created.strftime('%Y%m%dT%H%M%SZ')
     backup_dir.mkdir(parents=True, exist_ok=True)
-    backup_path = backup_dir / f'bm_radio.pre_alembic_adoption.{stamp}.db'
-    manifest_path = backup_dir / f'bm_radio.pre_alembic_adoption.{stamp}.manifest.json'
+    safe_label = ''.join(char if char.isalnum() or char in {'_', '-'} else '_' for char in label)
+    backup_path = backup_dir / f'bm_radio.{safe_label}.{stamp}.db'
+    manifest_path = backup_dir / f'bm_radio.{safe_label}.{stamp}.manifest.json'
     if backup_path.exists() or manifest_path.exists():
         raise FileExistsError(f'backup already exists for timestamp {stamp}')
 
@@ -244,6 +272,7 @@ def backup_sqlite_database(source: Path, backup_dir: Path, *, created_utc: datet
     manifest = {
         'logical_source_path': 'personal-radio/backend/bm_radio.db',
         'backup_filename': backup_path.name,
+        'backup_label': safe_label,
         'created_utc': created.isoformat(),
         'source_sha256': source_snapshot.sha256,
         'backup_sha256': backup_snapshot.sha256,
@@ -252,9 +281,12 @@ def backup_sqlite_database(source: Path, backup_dir: Path, *, created_utc: datet
         'integrity_check': backup_snapshot.integrity_check,
         'quick_check': backup_snapshot.quick_check,
         'application_row_counts': backup_snapshot.application_row_counts,
+        'application_row_count': application_row_count(backup_snapshot),
         'schema_fingerprint': backup_snapshot.schema_fingerprint,
         'source_schema_fingerprint': source_snapshot.schema_fingerprint,
         'compatibility': backup_snapshot.compatibility,
+        'compatibility_issue_summary': compatibility_issue_summary(backup_snapshot.compatibility_issues),
+        'compatibility_issue_count': len(backup_snapshot.compatibility_issues),
         'readiness': backup_snapshot.readiness_status,
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n', encoding='utf-8')
