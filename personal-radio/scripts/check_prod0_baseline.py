@@ -159,6 +159,7 @@ def main() -> int:
         ("unified station intent candidate projection", [sys.executable, "scripts/check_prod4_2d_unified_intent_projection.py"], BACKEND),
         ("benchmark-selected station projection policy", [sys.executable, "scripts/check_prod4_2e_benchmark_selected_projection_policy.py"], BACKEND),
         ("Alembic migration framework and current-schema baseline", [sys.executable, "scripts/check_prod5_3a_migration_framework.py"], BACKEND),
+        ("Alembic schema parity hardening", [sys.executable, "scripts/check_prod5_3a_1_schema_parity_hardening.py"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),

@@ -106,16 +106,67 @@ def _type_affinity(type_: Any) -> str:
     return name
 
 
+def _strip_outer_parentheses(value: str) -> str:
+    value = value.strip()
+    while value.startswith('(') and value.endswith(')'):
+        depth = 0
+        balanced = True
+        for index, char in enumerate(value):
+            if char == '(':
+                depth += 1
+            elif char == ')':
+                depth -= 1
+                if depth == 0 and index != len(value) - 1:
+                    balanced = False
+                    break
+        if not balanced or depth != 0:
+            break
+        value = value[1:-1].strip()
+    return value
+
+
+def normalize_server_default(value: Any) -> str | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    raw = _strip_outer_parentheses(raw)
+    lowered = raw.lower().replace(' ', '')
+    if lowered in {'now()', 'current_timestamp', 'current_timestamp()'}:
+        return 'current_timestamp'
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {"'", '"'}:
+        raw = raw[1:-1]
+    return raw
+
+
+def _effective_nullable(column: dict[str, Any]) -> bool:
+    if column.get('primary_key'):
+        return False
+    return bool(column.get('nullable', True))
+
+
+def _column_contract(*, type_: Any, nullable: bool, primary_key: bool, server_default: Any) -> dict[str, Any]:
+    default = normalize_server_default(server_default)
+    return {
+        'affinity': _type_affinity(type_),
+        'nullable': bool(nullable),
+        'effective_nullable': False if primary_key else bool(nullable),
+        'primary_key': bool(primary_key),
+        'has_server_default': server_default is not None,
+        'server_default': default,
+    }
+
+
 def expected_columns() -> dict[str, dict[str, dict[str, Any]]]:
     expected: dict[str, dict[str, dict[str, Any]]] = {}
     for table_name, table in models.Base.metadata.tables.items():
         expected[table_name] = {}
         for column in table.columns:
-            expected[table_name][column.name] = {
-                'affinity': _type_affinity(column.type),
-                'nullable': bool(column.nullable),
-                'primary_key': bool(column.primary_key),
-            }
+            expected[table_name][column.name] = _column_contract(
+                type_=column.type,
+                nullable=bool(column.nullable),
+                primary_key=bool(column.primary_key),
+                server_default=column.server_default.arg if column.server_default is not None else None,
+            )
     return expected
 
 
@@ -187,11 +238,13 @@ def inspect_schema(engine: Engine) -> dict[str, Any]:
     for table_name in tables:
         columns[table_name] = {}
         for column in inspector.get_columns(table_name):
-            columns[table_name][column['name']] = {
-                'affinity': _type_affinity(column['type']),
-                'nullable': bool(column.get('nullable', True)),
-                'primary_key': bool(column.get('primary_key', False)),
-            }
+            primary_key = bool(column.get('primary_key', False))
+            columns[table_name][column['name']] = _column_contract(
+                type_=column['type'],
+                nullable=bool(column.get('nullable', True)),
+                primary_key=primary_key,
+                server_default=column.get('default'),
+            )
         indexes[table_name] = {row['name'] for row in inspector.get_indexes(table_name) if row.get('name')}
         foreign_keys[table_name] = {
             (tuple(row.get('constrained_columns') or ()), row.get('referred_table') or '', tuple(row.get('referred_columns') or ()))
@@ -239,6 +292,12 @@ def compare_schema(engine: Engine) -> list[SchemaIssue]:
                 issues.append(SchemaIssue('incompatible_type', f'{table}.{column}: expected {expected["affinity"]}, found {found["affinity"]}'))
             if expected['primary_key'] != found['primary_key']:
                 issues.append(SchemaIssue('incompatible_primary_key', f'{table}.{column}'))
+            if expected['effective_nullable'] != found['effective_nullable']:
+                issues.append(SchemaIssue('incompatible_nullability', f'{table}.{column}: expected nullable={expected["effective_nullable"]}, found nullable={found["effective_nullable"]}'))
+            if expected['has_server_default'] != found['has_server_default']:
+                issues.append(SchemaIssue('incompatible_server_default', f'{table}.{column}: expected default={expected["server_default"]!r}, found default={found["server_default"]!r}'))
+            elif expected['has_server_default'] and expected['server_default'] != found['server_default']:
+                issues.append(SchemaIssue('incompatible_server_default', f'{table}.{column}: expected default={expected["server_default"]!r}, found default={found["server_default"]!r}'))
 
     expected_indexes = expected_index_names()
     for table in sorted(expected_table_names & actual['tables']):
