@@ -599,3 +599,5 @@ def downgrade() -> None:
     op.drop_table('audiobooks')
     op.drop_table('artist_radio_profiles')
     op.drop_table('album_radio_profiles')
+    if op.get_bind().dialect.name == 'postgresql':
+        op.execute(sa.text('DROP TYPE IF EXISTS thumbvalue'))

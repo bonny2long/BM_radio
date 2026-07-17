@@ -286,8 +286,9 @@ def inspect_schema(engine: Engine) -> dict[str, Any]:
     check_constraints: dict[str, set[str]] = {}
     for table_name in tables:
         columns[table_name] = {}
+        primary_key_columns = set(inspector.get_pk_constraint(table_name).get('constrained_columns') or ())
         for column in inspector.get_columns(table_name):
-            primary_key = bool(column.get('primary_key', False))
+            primary_key = column['name'] in primary_key_columns or bool(column.get('primary_key', False))
             columns[table_name][column['name']] = _column_contract(
                 type_=column['type'],
                 nullable=bool(column.get('nullable', True)),
