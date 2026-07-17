@@ -324,9 +324,21 @@ def full_regression(base: Path) -> dict[str, Any]:
     assert_one_head()
     assert_backup_dir_ignored()
     backup_path, manifest_path, manifest = latest_pre_empty_backup()
+    assert_manifest_safe(manifest_path)
     backup_snapshot = snapshot_sqlite_database(backup_path, logical_path=backup_path.name)
+    assert backup_snapshot.integrity_check == 'ok', snapshot_summary(backup_snapshot)
+    assert backup_snapshot.quick_check == 'ok', snapshot_summary(backup_snapshot)
+    assert backup_snapshot.compatibility == 'FAIL', snapshot_summary(backup_snapshot)
     assert backup_snapshot.readiness_status == LEGACY_INCOMPATIBLE, snapshot_summary(backup_snapshot)
     assert application_row_count(backup_snapshot) == 0, snapshot_summary(backup_snapshot)
+    assert manifest['application_row_count'] == 0, manifest
+    assert manifest['compatibility'] == 'FAIL', manifest
+    assert manifest['readiness'] == LEGACY_INCOMPATIBLE, manifest
+    mark('legacy_incompatible classification works')
+    mark('incompatible empty legacy DB is never stamp-adopted')
+    mark('backup permits incompatible schema only when integrity is good and rows are zero')
+    mark('verified incompatible legacy backup exists')
+    mark('backup helper uses SQLite backup API')
     fresh, fresh_snapshot = build_and_verify_fresh(base)
     startup_canary(fresh, base)
     restore_rehearsal(backup_path, base, backup_snapshot)

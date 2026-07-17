@@ -13,6 +13,9 @@ from sqlalchemy import text
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.migration_contract import BASELINE_REVISION
+from app.sqlite_adoption import snapshot_sqlite_database
+
 from app import models, station_candidates
 from app.perf import collect_perf_segments
 from app.perf_benchmark import SqlCounter, stable_checksum
@@ -106,23 +109,19 @@ def debug_identity(result: dict[str, Any]) -> str:
     return stable_checksum([(row.get('recording_id'), row.get('track_id'), row.get('effective_track_id'), row.get('tier')) for row in result.get('selected') or []])
 
 
-def assert_real_db_empty() -> None:
-    db_path = Path('bm_radio.db')
-    assert db_path.exists(), db_path
-    conn = sqlite3.connect(f'file:{db_path.resolve().as_posix()}?mode=ro', uri=True)
-    try:
-        tables = [row[0] for row in conn.execute("select name from sqlite_master where type='table' and name not like 'sqlite_%' order by name").fetchall()]
-        assert len(tables) == 13, tables
-        nonzero = {}
-        for table in tables:
-            count = int(conn.execute(f'select count(*) from "{table}"').fetchone()[0] or 0)
-            if count:
-                nonzero[table] = count
-        assert not nonzero, nonzero
-    finally:
-        conn.close()
-    mark('real db has schema only')
+def real_db_state() -> dict[str, Any]:
+    snapshot = snapshot_sqlite_database(Path('bm_radio.db'), logical_path='bm_radio.db')
+    return snapshot.as_dict(include_schema=False, issue_limit=20)
 
+
+def assert_real_db_ready(state: dict[str, Any]) -> None:
+    assert state['integrity_check'] == 'ok', state
+    assert state['quick_check'] == 'ok', state
+    assert state['compatibility'] == 'PASS', state
+    assert state['readiness_status'] == 'ready', state
+    assert state['current_revision'] == BASELINE_REVISION, state
+    assert state['head_revision'] == BASELINE_REVISION, state
+    mark('real db is ready and migration-current')
 
 def assert_selector_policy(db, engine, seeds) -> None:
     before = table_counts(db, STATION_WRITE_TABLES)
@@ -305,7 +304,8 @@ def assert_docs_and_gate() -> None:
 
 
 def main() -> int:
-    assert_real_db_empty()
+    before_real = real_db_state()
+    assert_real_db_ready(before_real)
     base = Path('tmp_tests') / 'prod4_2e_projection_policy'
     if base.exists():
         shutil.rmtree(base)
@@ -329,6 +329,8 @@ def main() -> int:
             db.close()
             engine.dispose()
         assert_docs_and_gate()
+        after_real = real_db_state()
+        assert before_real == after_real, {'before': before_real, 'after': after_real}
         required = 24
         assert len(CHECKS) >= required, sorted(CHECKS)
         print(f'PASS: BM-PROD4.2E benchmark-selected projection policy ({len(CHECKS)} checks)')

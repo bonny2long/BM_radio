@@ -10,6 +10,9 @@ from sqlalchemy import text
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.migration_contract import BASELINE_REVISION
+from app.sqlite_adoption import snapshot_sqlite_database
+
 from app.perf_benchmark import BenchmarkContext
 from app.perf_fixtures import SyntheticLibrarySpec, build_synthetic_library, create_temp_engine, fixture_counts
 from app.queue_contracts import StationQueueRequest
@@ -90,20 +93,18 @@ def metric_by_name(metrics: list[dict], name: str) -> dict:
     return next(metric for metric in metrics if metric["name"] == name)
 
 
-def real_db_rows() -> int:
-    db_path = Path("bm_radio.db")
-    if not db_path.exists():
-        return 0
-    conn = sqlite3.connect(str(db_path))
-    try:
-        tables = [row[0] for row in conn.execute("select name from sqlite_master where type='table' and name not like 'sqlite_%'").fetchall()]
-        total = 0
-        for table in tables:
-            total += int(conn.execute(f'select count(*) from "{table}"').fetchone()[0] or 0)
-        return total
-    finally:
-        conn.close()
+def real_db_state() -> dict:
+    snapshot = snapshot_sqlite_database(Path("bm_radio.db"), logical_path="bm_radio.db")
+    return snapshot.as_dict(include_schema=False, issue_limit=20)
 
+
+def assert_real_db_ready(state: dict) -> None:
+    assert state["integrity_check"] == "ok", state
+    assert state["quick_check"] == "ok", state
+    assert state["compatibility"] == "PASS", state
+    assert state["readiness_status"] == "ready", state
+    assert state["current_revision"] == BASELINE_REVISION, state
+    assert state["head_revision"] == BASELINE_REVISION, state
 
 def run_prior_station_regression(script: str) -> None:
     result = subprocess.run([sys.executable, script], cwd=Path(__file__).resolve().parents[1], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -131,7 +132,8 @@ def main() -> int:
         shutil.rmtree(base)
     base.mkdir(parents=True, exist_ok=True)
     try:
-        assert real_db_rows() == 0, "real bm_radio.db is not empty"
+        before_real = real_db_state()
+        assert_real_db_ready(before_real)
         engine, Session = create_temp_engine(base / "station_scale.db")
         db = Session()
         try:
@@ -239,7 +241,8 @@ def main() -> int:
 
         run_prior_station_regression("scripts/check_prod1_5a_recording_first_station_candidates.py")
         run_prior_station_regression("scripts/check_prod1_5b_station_version_affinity.py")
-        assert real_db_rows() == 0, "real bm_radio.db changed"
+        after_real = real_db_state()
+        assert before_real == after_real, {'before': before_real, 'after': after_real}
         print("PASS: BM-PROD4.1 station generation and refill scale benchmark baseline")
         return 0
     finally:

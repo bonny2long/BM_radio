@@ -15,6 +15,8 @@ from sqlalchemy.orm import sessionmaker
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.sqlite_adoption import application_row_count, snapshot_sqlite_database
+
 from app import models
 from app.migration_contract import (
     APP_TABLES,
@@ -63,20 +65,20 @@ def alembic_cmd(*args: str, db_url: str | None = None, expect_ok: bool = True) -
 
 
 def real_db_state() -> dict[str, Any]:
-    conn = sqlite3.connect(f'file:{REAL_DB.resolve().as_posix()}?mode=ro', uri=True)
-    try:
-        tables = [row[0] for row in conn.execute("select name from sqlite_master where type='table' and name not like 'sqlite_%' order by name")]
-        counts = {table: int(conn.execute(f'select count(*) from "{table}"').fetchone()[0] or 0) for table in tables}
-        return {'tables': tables, 'total_rows': sum(counts.values()), 'counts': counts, 'has_alembic_version': 'alembic_version' in tables}
-    finally:
-        conn.close()
+    snapshot = snapshot_sqlite_database(REAL_DB, logical_path='bm_radio.db')
+    return snapshot.as_dict(include_schema=False, issue_limit=20)
 
 
 def assert_real_db_expected(state: dict[str, Any]) -> None:
-    assert isinstance(state.get('tables'), list), state
-    assert isinstance(state.get('counts'), dict), state
-    assert 'total_rows' in state, state
-
+    assert state['integrity_check'] == 'ok', state
+    assert state['quick_check'] == 'ok', state
+    assert state['compatibility'] == 'PASS', state
+    assert state['readiness_status'] == 'ready', state
+    assert state['current_revision'] == BASELINE_REVISION, state
+    assert state['head_revision'] == BASELINE_REVISION, state
+    assert state['has_alembic_version'] is True, state
+    assert state['alembic_version_rows'] == [BASELINE_REVISION], state
+    assert isinstance(state.get('application_row_counts'), dict), state
 
 def current_revision(db_url: str) -> str:
     result = run_cmd([sys.executable, 'scripts/migration_status.py', 'current', '--db-url', db_url])

@@ -11,6 +11,9 @@ from sqlalchemy import text
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.migration_contract import BASELINE_REVISION
+from app.sqlite_adoption import snapshot_sqlite_database
+
 from app import models
 from app.perf_fixtures import SyntheticLibrarySpec, build_synthetic_library, create_temp_engine
 from app.queue_contracts import StationQueueRequest
@@ -110,22 +113,18 @@ def assert_physical_variant_exclusion(db) -> None:
     assert not (excluded_keys & returned_keys), (row[0], track_ids)
 
 
-def assert_real_db_empty() -> None:
-    db_path = Path('bm_radio.db')
-    if not db_path.exists():
-        return
-    conn = sqlite3.connect(f'file:{db_path.resolve().as_posix()}?mode=ro', uri=True)
-    try:
-        tables = [row[0] for row in conn.execute("select name from sqlite_master where type='table' and name not like 'sqlite_%'").fetchall()]
-        nonzero = {}
-        for table in tables:
-            count = int(conn.execute(f'select count(*) from "{table}"').fetchone()[0] or 0)
-            if count:
-                nonzero[table] = count
-        assert not nonzero, nonzero
-    finally:
-        conn.close()
+def real_db_state() -> dict[str, Any]:
+    snapshot = snapshot_sqlite_database(Path('bm_radio.db'), logical_path='bm_radio.db')
+    return snapshot.as_dict(include_schema=False, issue_limit=20)
 
+
+def assert_real_db_ready(state: dict[str, Any]) -> None:
+    assert state['integrity_check'] == 'ok', state
+    assert state['quick_check'] == 'ok', state
+    assert state['compatibility'] == 'PASS', state
+    assert state['readiness_status'] == 'ready', state
+    assert state['current_revision'] == BASELINE_REVISION, state
+    assert state['head_revision'] == BASELINE_REVISION, state
 
 def assert_refill_chain(db, base_req: StationQueueRequest, *, expected_mode: str, seeds, operation_seed: int) -> list[dict[str, Any]]:
     seed_recording_id = seed_recording_id_for_track(db, base_req.seed_track_id) if base_req.type == 'song' and base_req.seed_track_id else None
@@ -196,7 +195,8 @@ def assert_thumbs_down_authoritative(db, seeds) -> None:
 
 
 def main() -> int:
-    assert_real_db_empty()
+    before_real = real_db_state()
+    assert_real_db_ready(before_real)
     base = Path('tmp_tests') / 'prod4_2c_1_refill_closure'
     if base.exists():
         shutil.rmtree(base)
@@ -234,7 +234,8 @@ def main() -> int:
             'check_prod4_2c_1_station_refill_closure.py',
         ]:
             assert script in gate_source, script
-        assert_real_db_empty()
+        after_real = real_db_state()
+        assert before_real == after_real, {'before': before_real, 'after': after_real}
         print('PASS: BM-PROD4.2C.1 station refill closure')
         for name, rows in closure_metrics.items():
             last = rows[-1]
