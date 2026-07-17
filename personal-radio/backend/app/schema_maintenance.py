@@ -61,6 +61,11 @@ SCAN_RECONCILIATION_INDEXES = [
 ]
 
 
+def _require_sqlite_engine(engine: Engine) -> None:
+    if engine.dialect.name != 'sqlite':
+        raise ValueError('legacy schema maintenance is SQLite-only')
+
+
 def _existing_tables(engine: Engine) -> set[str]:
     try:
         return set(inspect(engine).get_table_names())
@@ -108,9 +113,7 @@ def ensure_manifest_ingestion_columns(engine: Engine) -> None:
     tables. BM Radio is still pre-migration-tooling, so keep this intentionally
     narrow and additive for local SQLite DBs.
     """
-    if engine.dialect.name != "sqlite":
-        return
-
+    _require_sqlite_engine(engine)
     _add_missing_columns(engine, "tracks", {
         "metadata_source": "VARCHAR",
         "source_manifest_path": "VARCHAR",
@@ -135,9 +138,7 @@ def ensure_scan_reconciliation_columns(engine: Engine) -> None:
     availability as available, and create the narrow indexes needed for later
     reconciliation queries.
     """
-    if engine.dialect.name != "sqlite":
-        return
-
+    _require_sqlite_engine(engine)
     existing_tables = _existing_tables(engine)
     for table_name, columns in SCAN_RECONCILIATION_COLUMNS.items():
         if table_name not in existing_tables:
@@ -149,9 +150,7 @@ def ensure_scan_reconciliation_columns(engine: Engine) -> None:
 
 def ensure_playback_identity_columns(engine: Engine) -> None:
     """Add recording identity to existing SQLite playback event tables."""
-    if engine.dialect.name != "sqlite":
-        return
-
+    _require_sqlite_engine(engine)
     existing_tables = _existing_tables(engine)
     for table_name, columns in PLAYBACK_IDENTITY_COLUMNS.items():
         if table_name not in existing_tables:
@@ -162,9 +161,7 @@ def ensure_playback_identity_columns(engine: Engine) -> None:
 
 def ensure_recording_feedback_columns(engine: Engine) -> None:
     """Add recording identity to existing SQLite favorite/thumb tables."""
-    if engine.dialect.name != "sqlite":
-        return
-
+    _require_sqlite_engine(engine)
     existing_tables = _existing_tables(engine)
     for table_name, columns in RECORDING_FEEDBACK_COLUMNS.items():
         if table_name not in existing_tables:

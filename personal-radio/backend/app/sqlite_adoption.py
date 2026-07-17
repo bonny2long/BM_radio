@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .database_readiness import inspect_database_readiness
+from .database_dialect import require_sqlite_path
 from .migration_contract import APP_TABLES, SchemaIssue, compare_schema, engine_for_url, read_only_sqlite_url_for_path
 
 BACKUP_DIR_NAME = '.local_backups'
@@ -101,6 +102,7 @@ def _canonical_json(value: Any) -> str:
 
 
 def _connect(path: Path, *, read_only: bool = True) -> sqlite3.Connection:
+    path = require_sqlite_path(path)
     if read_only:
         return sqlite3.connect(f'file:{path.resolve().as_posix()}?mode=ro', uri=True)
     return sqlite3.connect(path)
@@ -144,6 +146,7 @@ def _foreign_keys(conn: sqlite3.Connection, table: str) -> tuple[dict[str, Any],
 
 
 def schema_payload(path: Path) -> dict[str, Any]:
+    path = require_sqlite_path(path)
     conn = _connect(path)
     try:
         app_tables = application_tables(conn)
@@ -178,6 +181,7 @@ def schema_fingerprint(path: Path) -> str:
 
 
 def snapshot_sqlite_database(path: Path, *, logical_path: str = '<redacted>') -> SqliteSnapshot:
+    path = require_sqlite_path(path)
     stat = path.stat()
     conn = _connect(path)
     try:
@@ -250,6 +254,7 @@ def backup_sqlite_database(
     created_utc: datetime | None = None,
     label: str = 'pre_alembic_adoption',
 ) -> tuple[Path, Path, dict[str, Any]]:
+    source = require_sqlite_path(source)
     created = created_utc or datetime.now(timezone.utc)
     stamp = created.strftime('%Y%m%dT%H%M%SZ')
     backup_dir.mkdir(parents=True, exist_ok=True)
@@ -294,6 +299,8 @@ def backup_sqlite_database(
 
 
 def restore_sqlite_backup(source: Path, destination: Path) -> None:
+    source = require_sqlite_path(source)
+    destination = require_sqlite_path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     if destination.exists():
         destination.unlink()

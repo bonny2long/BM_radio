@@ -162,6 +162,7 @@ def main() -> int:
         ("Alembic schema parity hardening", [sys.executable, "scripts/check_prod5_3a_1_schema_parity_hardening.py"], BACKEND),
         ("migration-authoritative startup readiness", [sys.executable, "scripts/check_prod5_3b_migration_authoritative_startup.py"], BACKEND),
         ("controlled empty local SQLite rebuild", [sys.executable, "scripts/check_prod5_3c_1_controlled_empty_local_rebuild.py"], BACKEND),
+        ("PostgreSQL dialect foundation and offline migration proof", [sys.executable, "scripts/check_prod5_4a_postgresql_dialect_foundation.py", "--skip-prior-regressions"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),

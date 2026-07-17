@@ -93,6 +93,8 @@ INDEX_STATEMENTS = [
 
 
 def ensure_performance_indexes() -> None:
+    if engine.dialect.name != 'sqlite':
+        raise ValueError('legacy performance-index maintenance is SQLite-only')
     with engine.begin() as conn:
         for statement in INDEX_STATEMENTS:
             conn.execute(text(statement))

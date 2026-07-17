@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .database_dialect import require_sqlite_path
 from .migration_contract import BASELINE_REVISION
 from .sqlite_adoption import restore_sqlite_backup, snapshot_sqlite_database
 
@@ -23,11 +24,13 @@ class ReplacementResult:
 
 
 def sqlite_url(path: Path) -> str:
+    path = require_sqlite_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     return f'sqlite:///{path.resolve().as_posix()}'
 
 
 def sidecar_paths(path: Path) -> tuple[Path, ...]:
+    path = require_sqlite_path(path)
     return tuple(path.with_name(path.name + suffix) for suffix in SIDECAR_SUFFIXES)
 
 
@@ -65,6 +68,8 @@ def copy_sqlite_database(source: Path, destination: Path) -> None:
 
 
 def archive_database_with_sidecars(current: Path, archive_dir: Path, *, archive_stem: str) -> tuple[Path, tuple[Path, ...]]:
+    current = require_sqlite_path(current)
+    archive_dir = require_sqlite_path(archive_dir)
     archive_dir.mkdir(parents=True, exist_ok=True)
     archived_db = archive_dir / f'{archive_stem}.db'
     if archived_db.exists():
@@ -81,6 +86,9 @@ def archive_database_with_sidecars(current: Path, archive_dir: Path, *, archive_
 
 
 def replace_current_with_candidate(current: Path, candidate: Path, archive_dir: Path, *, archive_stem: str) -> tuple[Path, tuple[Path, ...]]:
+    current = require_sqlite_path(current)
+    candidate = require_sqlite_path(candidate)
+    archive_dir = require_sqlite_path(archive_dir)
     if not current.exists():
         raise FileNotFoundError(current)
     if not candidate.exists():

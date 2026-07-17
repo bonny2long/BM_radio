@@ -7,11 +7,10 @@ import sys
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from alembic.runtime.migration import MigrationContext
-from sqlalchemy import create_engine
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.migration_contract import compare_schema, sqlite_connect_args
+from app.migration_contract import compare_schema, engine_for_url
 
 
 def _config() -> Config:
@@ -47,7 +46,7 @@ def main() -> int:
         return 0
 
     url = _require_url(args)
-    engine = create_engine(url, connect_args=sqlite_connect_args(url))
+    engine = engine_for_url(url)
     try:
         with engine.connect() as conn:
             revision = MigrationContext.configure(conn).get_current_revision()

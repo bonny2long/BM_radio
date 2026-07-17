@@ -9,6 +9,8 @@ from typing import Any
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .database_dialect import require_supported_database_url
+
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BACKEND_DIR.parent
 BACKEND_ENV_FILE = BACKEND_DIR / ".env"
@@ -59,6 +61,7 @@ class Settings(BaseSettings):
     BM_RADIO_API_DOCS_ENABLED: bool = False
     BM_RADIO_CORS_ORIGINS: list[str] = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
     BM_RADIO_ENABLE_LEGACY_DISCOGRAPHY_SCAN: bool = False
+    BM_RADIO_DB_POLICY_STATUS: str = Field('unvalidated', exclude=True, repr=False)
 
     # Temporary compatibility fields. Runtime code reads resolved values from these
     # until the broader BM-PROD configuration migration removes old names.
@@ -134,6 +137,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def resolve_and_validate(self) -> "Settings":
+        database_target = require_supported_database_url(self.BM_RADIO_DB_URL)
+        environment = self.APP_ENV.strip().lower()
+        if database_target.is_sqlite and environment in {'production', 'prod', 'staging', 'stage'}:
+            raise ValueError('production-like APP_ENV requires postgresql+psycopg; SQLite is development-only')
+        object.__setattr__(
+            self,
+            'BM_RADIO_DB_POLICY_STATUS',
+            'development_sqlite' if database_target.is_sqlite else 'postgresql_supported',
+        )
         music_root = Path(self.BM_RADIO_MUSIC_ROOT)
         canonical_music_supplied = self.BM_RADIO_MUSIC_ROOT_SOURCE == "canonical"
 

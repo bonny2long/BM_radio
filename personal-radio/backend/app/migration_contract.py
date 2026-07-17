@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ast
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +12,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.sql.schema import CheckConstraint, ForeignKeyConstraint, UniqueConstraint
 from sqlalchemy.sql.sqltypes import Boolean, DateTime, Enum, Float, Integer, String, Text
 
+from .database_dialect import engine_options, require_sqlite_path, require_supported_database_url
 from . import models
 from .perf import INDEX_STATEMENTS as PERFORMANCE_INDEX_STATEMENTS
 from .schema_maintenance import (
@@ -25,6 +28,7 @@ from .schema_maintenance import (
 BASELINE_REVISION = '0001_current_schema_baseline'
 BASELINE_SLUG = 'current_schema_baseline'
 APP_TABLES = tuple(models.Base.metadata.tables.keys())
+BASELINE_MIGRATION_PATH = Path(__file__).resolve().parents[1] / 'migrations' / 'versions' / '0001_current_schema_baseline.py'
 RUNTIME_INDEX_STATEMENTS = tuple(
     dict.fromkeys(
         list(SCAN_RECONCILIATION_INDEXES)
@@ -44,20 +48,40 @@ class SchemaIssue:
         return {'category': self.category, 'detail': self.detail}
 
 
+@dataclass(frozen=True)
+class SchemaDialectPolicy:
+    name: str
+
+    @property
+    def is_postgresql(self) -> bool:
+        return self.name == 'postgresql'
+
+
+def dialect_policy_for_engine(engine: Engine) -> SchemaDialectPolicy:
+    name = engine.dialect.name
+    if name not in {'sqlite', 'postgresql'}:
+        raise ValueError(f'unsupported schema comparison dialect: {name}')
+    return SchemaDialectPolicy(name=name)
+
+
 def sqlite_connect_args(url: str) -> dict[str, Any]:
-    return {'check_same_thread': False} if url.startswith('sqlite') else {}
+    target = require_supported_database_url(url)
+    return dict(engine_options(url).get('connect_args', {})) if target.is_sqlite else {}
 
 
 def engine_for_url(url: str) -> Engine:
-    return create_engine(url, connect_args=sqlite_connect_args(url))
+    return create_engine(url, **engine_options(url))
 
 
 def read_only_sqlite_url_for_path(path: Path) -> str:
+    path = require_sqlite_path(path)
     resolved = path.resolve().as_posix()
     return f'sqlite:///file:{resolved}?mode=ro&uri=true'
 
 
 def create_legacy_current_schema(engine: Engine) -> None:
+    if engine.dialect.name != 'sqlite':
+        raise ValueError('legacy schema construction is SQLite-only')
     models.Base.metadata.create_all(bind=engine)
     ensure_manifest_ingestion_columns(engine)
     ensure_scan_reconciliation_columns(engine)
@@ -130,6 +154,7 @@ def normalize_server_default(value: Any) -> str | None:
         return None
     raw = str(value).strip()
     raw = _strip_outer_parentheses(raw)
+    raw = re.sub(r'::(?:character varying|varchar|text|timestamp(?: with time zone)?|boolean|integer|bigint)$', '', raw, flags=re.IGNORECASE)
     lowered = raw.lower().replace(' ', '')
     if lowered in {'now()', 'current_timestamp', 'current_timestamp()'}:
         return 'current_timestamp'
@@ -211,12 +236,31 @@ def _index_name_from_statement(statement: str) -> str | None:
     return match.group(1) if match else None
 
 
-def expected_index_names() -> dict[str, set[str]]:
+def model_declared_index_names() -> dict[str, set[str]]:
     out: dict[str, set[str]] = {name: set() for name in models.Base.metadata.tables}
     for table_name, table in models.Base.metadata.tables.items():
-        for index in table.indexes:
-            if index.name:
-                out.setdefault(table_name, set()).add(index.name)
+        out[table_name] = {index.name for index in table.indexes if index.name}
+    return out
+
+
+@lru_cache(maxsize=1)
+def migration_authoritative_index_names() -> dict[str, set[str]]:
+    tree = ast.parse(BASELINE_MIGRATION_PATH.read_text(encoding='utf-8'))
+    out: dict[str, set[str]] = {name: set() for name in models.Base.metadata.tables}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute) or node.func.attr != 'create_index':
+            continue
+        if len(node.args) < 2 or not isinstance(node.args[0], ast.Constant) or not isinstance(node.args[1], ast.Constant):
+            continue
+        index_name = node.args[0].value
+        table_name = node.args[1].value
+        if isinstance(index_name, str) and isinstance(table_name, str) and table_name in out:
+            out[table_name].add(index_name)
+    return out
+
+
+def sqlite_legacy_index_names() -> dict[str, set[str]]:
+    out: dict[str, set[str]] = {name: set() for name in models.Base.metadata.tables}
     for statement in RUNTIME_INDEX_STATEMENTS:
         name = _index_name_from_statement(statement)
         table_match = re.search(r'\sON\s+([^\s(]+)', statement, flags=re.IGNORECASE)
@@ -225,6 +269,11 @@ def expected_index_names() -> dict[str, set[str]]:
             if table_name in out:
                 out[table_name].add(name)
     return out
+
+
+def expected_index_names(policy: SchemaDialectPolicy | None = None) -> dict[str, set[str]]:
+    # Fresh databases are governed by the Alembic baseline for both accepted dialects.
+    return {table: set(names) for table, names in migration_authoritative_index_names().items()}
 
 
 def inspect_schema(engine: Engine) -> dict[str, Any]:
@@ -269,7 +318,8 @@ def inspect_schema(engine: Engine) -> dict[str, Any]:
     }
 
 
-def compare_schema(engine: Engine) -> list[SchemaIssue]:
+def compare_schema(engine: Engine, dialect_policy: SchemaDialectPolicy | None = None) -> list[SchemaIssue]:
+    policy = dialect_policy or dialect_policy_for_engine(engine)
     actual = inspect_schema(engine)
     expected_table_names = set(APP_TABLES)
     issues: list[SchemaIssue] = []
@@ -294,12 +344,13 @@ def compare_schema(engine: Engine) -> list[SchemaIssue]:
                 issues.append(SchemaIssue('incompatible_primary_key', f'{table}.{column}'))
             if expected['effective_nullable'] != found['effective_nullable']:
                 issues.append(SchemaIssue('incompatible_nullability', f'{table}.{column}: expected nullable={expected["effective_nullable"]}, found nullable={found["effective_nullable"]}'))
-            if expected['has_server_default'] != found['has_server_default']:
+            generated_postgresql_pk = policy.is_postgresql and expected['primary_key'] and found['has_server_default']
+            if expected['has_server_default'] != found['has_server_default'] and not generated_postgresql_pk:
                 issues.append(SchemaIssue('incompatible_server_default', f'{table}.{column}: expected default={expected["server_default"]!r}, found default={found["server_default"]!r}'))
             elif expected['has_server_default'] and expected['server_default'] != found['server_default']:
                 issues.append(SchemaIssue('incompatible_server_default', f'{table}.{column}: expected default={expected["server_default"]!r}, found default={found["server_default"]!r}'))
 
-    expected_indexes = expected_index_names()
+    expected_indexes = expected_index_names(policy)
     for table in sorted(expected_table_names & actual['tables']):
         missing = expected_indexes.get(table, set()) - actual['indexes'].get(table, set())
         for index_name in sorted(missing):

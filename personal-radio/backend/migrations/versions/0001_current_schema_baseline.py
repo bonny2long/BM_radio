@@ -196,7 +196,7 @@ def upgrade() -> None:
         sa.Column('year', sa.Integer()),
         sa.Column('edition_type', sa.String(), nullable=False, server_default=sa.text("'unknown'")),
         sa.Column('source_scope', sa.String(), nullable=False),
-        sa.Column('source_format_family', sa.String(), nullable=False, server_default=sa.text('UNKNOWN')),
+        sa.Column('source_format_family', sa.String(), nullable=False, server_default=sa.text("'UNKNOWN'")),
         sa.Column('source_manifest_path', sa.String()),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)')),
         sa.Column('updated_at', sa.DateTime(timezone=True)),

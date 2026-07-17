@@ -6,13 +6,14 @@ from pathlib import Path
 import sys
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import create_engine, pool
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app import models  # noqa: E402
+from app.database_dialect import engine_options, require_supported_database_url  # noqa: E402
 
 config = context.config
 if config.config_file_name is not None:
@@ -26,6 +27,7 @@ def _explicit_database_url() -> str:
     db_url = x_args.get('db_url') or os.environ.get('BM_RADIO_DB_URL')
     if not db_url:
         raise RuntimeError('Alembic requires an explicit database URL via -x db_url=... or BM_RADIO_DB_URL')
+    require_supported_database_url(db_url)
     return db_url
 
 
@@ -44,13 +46,8 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    configuration = config.get_section(config.config_ini_section, {})
-    configuration['sqlalchemy.url'] = _explicit_database_url()
-    connectable = engine_from_config(
-        configuration,
-        prefix='sqlalchemy.',
-        poolclass=pool.NullPool,
-    )
+    url = _explicit_database_url()
+    connectable = create_engine(url, poolclass=pool.NullPool, **engine_options(url))
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
