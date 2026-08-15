@@ -1,0 +1,6 @@
+# Local recovery storage. These folders can contain personal media, databases,
+# caches, reports, and backup material and must never be committed.
+/nas-data/
+/local-state/
+/recovery-docs/
+
