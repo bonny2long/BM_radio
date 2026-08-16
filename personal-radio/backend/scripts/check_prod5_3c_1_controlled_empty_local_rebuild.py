@@ -148,13 +148,52 @@ def backup_legacy(real_snapshot: Any) -> tuple[Path, Path, dict[str, Any]]:
     return backup_path, manifest_path, manifest
 
 
-def latest_pre_empty_backup() -> tuple[Path, Path, dict[str, Any]]:
-    manifests = sorted(BACKUP_DIR.glob('bm_radio.pre_empty_rebuild.*.manifest.json'))
-    for manifest_path in reversed(manifests):
-        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-        backup_path = BACKUP_DIR / manifest['backup_filename']
-        if backup_path.exists() and manifest.get('readiness') == LEGACY_INCOMPATIBLE:
-            return backup_path, manifest_path, manifest
+def create_synthetic_legacy_incompatible_db(path: Path) -> Path:
+    if path.exists():
+        path.unlink()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
+    try:
+        tables = [
+            'tracks', 'scan_runs', 'audiobooks', 'audiobook_chapters', 'stations',
+            'track_thumbs', 'track_favorites', 'playback_events', 'audiobook_progress',
+            'playlists', 'playlist_tracks', 'artist_radio_profiles', 'album_radio_profiles',
+        ]
+        for table in tables:
+            if table == 'tracks':
+                conn.execute(
+                    'create table tracks ('
+                    'id integer primary key, '
+                    'path text unique, '
+                    'relative_path text, '
+                    'title text, '
+                    'artist text, '
+                    'album text, '
+                    'genre text'
+                    ')'
+                )
+            else:
+                conn.execute(f'create table {table} (id integer primary key)')
+        conn.commit()
+    finally:
+        conn.close()
+    return path
+
+
+def latest_pre_empty_backup(base: Path | None = None) -> tuple[Path, Path, dict[str, Any]]:
+    if BACKUP_DIR.exists():
+        manifests = sorted(BACKUP_DIR.glob('bm_radio.pre_empty_rebuild.*.manifest.json'))
+        for manifest_path in reversed(manifests):
+            manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+            backup_path = BACKUP_DIR / manifest['backup_filename']
+            if backup_path.exists() and manifest.get('readiness') == LEGACY_INCOMPATIBLE:
+                return backup_path, manifest_path, manifest
+    if base is not None:
+        legacy_fixture = create_synthetic_legacy_incompatible_db(base / 'synthetic_legacy.db')
+        legacy_snapshot = snapshot_sqlite_database(legacy_fixture, logical_path='bm_radio.db')
+        assert_legacy_preconditions(legacy_snapshot)
+        backup_dir = base / 'backups'
+        return backup_sqlite_database(legacy_fixture, backup_dir, label='pre_empty_rebuild')
     raise AssertionError('no verified pre-empty-rebuild backup found')
 
 
@@ -323,7 +362,7 @@ def full_regression(base: Path) -> dict[str, Any]:
     assert_real_ready(before)
     assert_one_head()
     assert_backup_dir_ignored()
-    backup_path, manifest_path, manifest = latest_pre_empty_backup()
+    backup_path, manifest_path, manifest = latest_pre_empty_backup(base)
     assert_manifest_safe(manifest_path)
     backup_snapshot = snapshot_sqlite_database(backup_path, logical_path=backup_path.name)
     assert backup_snapshot.integrity_check == 'ok', snapshot_summary(backup_snapshot)
