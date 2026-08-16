@@ -28,3 +28,4 @@ Thumbs.db
 backend/tmp_tests/
 backend/.tmp_tests/
 backend/.local_backups/
+backend/.local_postgres/
