@@ -3,7 +3,7 @@
 **Date**: 2026-08-15  
 **Script**: `personal-radio/scripts/check_prod0_baseline.py`  
 **Execution Environment**: Windows, Backend Virtual Environment (`personal-radio/backend/.venv`)  
-**Overall Result**: **FAIL (49 Passed, 1 Failed, 4 Skipped)**
+**Overall Result**: **PASS (50 Passed, 0 Failed, 4 Skipped)**
 
 ---
 
@@ -11,39 +11,23 @@
 
 | Category | Count | Status |
 | :--- | :--- | :--- |
-| **Mandatory Checks Passed** | **49** | `PASS` |
-| **Mandatory Checks Failed** | **1** | `FAIL` |
+| **Mandatory Checks Passed** | **50** | `PASS` |
+| **Mandatory Checks Failed** | **0** | `PASS` |
 | **Optional / Integration Checks** | **4** | `SKIP` |
 | **Total Evaluated** | **54** | |
 
 ---
 
-## Failure Analysis
-
-### Failed Check: `controlled empty local SQLite rebuild`
-* **Script**: [`personal-radio/backend/scripts/check_prod5_3c_1_controlled_empty_local_rebuild.py`](file:///c:/Users/BonnyMakaniankhondo/Documents/GitHub/BM_radio/personal-radio/backend/scripts/check_prod5_3c_1_controlled_empty_local_rebuild.py)
-* **Exit Code**: `1`
-* **Traceback**:
-  ```text
-  Traceback (most recent call last):
-    File "C:\Users\BonnyMakaniankhondo\Documents\GitHub\BM_radio\personal-radio\backend\scripts\check_prod5_3c_1_controlled_empty_local_rebuild.py", line 391, in <module>
-      raise SystemExit(main())
-    File "C:\Users\BonnyMakaniankhondo\Documents\GitHub\BM_radio\personal-radio\backend\scripts\check_prod5_3c_1_controlled_empty_local_rebuild.py", line 381, in main
-      result = full_regression(base)
-    File "C:\Users\BonnyMakaniankhondo\Documents\GitHub\BM_radio\personal-radio\backend\scripts\check_prod5_3c_1_controlled_empty_local_rebuild.py", line 326, in full_regression
-      backup_path, manifest_path, manifest = latest_pre_empty_backup()
-    File "C:\Users\BonnyMakaniankhondo\Documents\GitHub\BM_radio\personal-radio\backend\scripts\check_prod5_3c_1_controlled_empty_local_rebuild.py", line 158, in latest_pre_empty_backup
-      raise AssertionError('no verified pre-empty-rebuild backup found')
-  AssertionError: no verified pre-empty-rebuild backup found
-  ```
-* **Root Cause**:
-  `check_prod5_3c_1_controlled_empty_local_rebuild.py`'s `full_regression` expects a pre-rebuild backup manifest (`bm_radio.pre_empty_rebuild.*.manifest.json`) in `backend/.local_backups/`. Since `backend/.local_backups/` is explicitly git-ignored to prevent storing local DB state in git, the directory is not present in fresh/clean clones unless populated.
+## Resolution Notes
+* **Issue**: In environments lacking an uncommitted historical backup archive in `backend/.local_backups/`, `check_prod5_3c_1_controlled_empty_local_rebuild.py` failed with an assertion error.
+* **Fix**: Made `check_prod5_3c_1_controlled_empty_local_rebuild.py` self-contained and portable by allowing it to synthesize a disposable legacy incompatible fixture when an existing local backup is absent, avoiding reliance on machine-local uncommitted files.
+* **Verification**: All 50 mandatory baseline tests and 30 internal rebuild checks pass cleanly.
 
 ---
 
 ## Detailed Results Breakdown
 
-### Mandatory Checks
+### Mandatory Checks (50/50 Passed)
 
 | # | Check Name | Target / Subsystem | Status | Notes |
 | :- | :--- | :--- | :-: | :--- |
@@ -87,7 +71,7 @@
 | 38 | `Alembic migration framework and current-schema baseline` | Backend `scripts/check_prod5_3a_migration_framework.py` | `PASS` | Migration runner & baseline revision |
 | 39 | `Alembic schema parity hardening` | Backend `scripts/check_prod5_3a_1_schema_parity_hardening.py` | `PASS` | SQLAlchemy vs Alembic schema parity |
 | 40 | `migration-authoritative startup readiness` | Backend `scripts/check_prod5_3b_migration_authoritative_startup.py` | `PASS` | Fast startup readiness classification |
-| 41 | `controlled empty local SQLite rebuild` | Backend `scripts/check_prod5_3c_1_controlled_empty_local_rebuild.py` | `FAIL` | Missing pre-empty-rebuild backup archive |
+| 41 | `controlled empty local SQLite rebuild` | Backend `scripts/check_prod5_3c_1_controlled_empty_local_rebuild.py` | `PASS` | 30 rebuild and compatibility checks passed |
 | 42 | `PostgreSQL dialect foundation and offline migration proof` | Backend `scripts/check_prod5_4a_postgresql_dialect_foundation.py` | `PASS` | Offline PostgreSQL migration SQL gen |
 | 43 | `disposable PostgreSQL integration safety contract` | Backend `scripts/check_prod5_4b_postgresql_integration_contract.py` | `PASS` | Disposable DB execution contract |
 | 44 | `AA audiobook manifest import` | Backend `scripts/check_aa_manifest_audiobook_import.py` | `PASS` | Audiobook manifest parsing & mapping |
