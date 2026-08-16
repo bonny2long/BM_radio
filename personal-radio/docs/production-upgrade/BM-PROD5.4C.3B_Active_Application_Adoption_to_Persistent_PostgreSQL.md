@@ -7,7 +7,8 @@ BM-PROD5.4C.3B status: ACTIVE-POSTGRES-ADOPTION PASS
 ## Repository
 
 - Starting SHA: `65157583b3b0c8ab74c3c08b697e9da114f114d9`
-- Ending SHA / working-tree state: HEAD remains `65157583b3b0c8ab74c3c08b697e9da114f114d9`; the BM-PROD5.4C.3B implementation is present as uncommitted working-tree changes.
+- Ending SHA / implementation commit: `ae0aa471d71e53d4e2609944e1f7e15d55a0e6b7`
+- BM-PROD5.4C.3B implementation commit: `ae0aa471d71e53d4e2609944e1f7e15d55a0e6b7`
 - BM-PROD5.4C.3A implementation SHA correction: PASS
 - Correct BM-PROD5.4C.3A implementation commit: `65157583b3b0c8ab74c3c08b697e9da114f114d9`
 
@@ -166,7 +167,7 @@ The BM Radio Uvicorn backend found by the writer gate was stopped before adoptio
 - Frontend production build: PASS
 - Frontend lint: PASS — 0 errors, 8 existing warnings
 - `git diff --check`: PASS
-- Final Git status: expected BM-PROD5.4C.3B source, scripts, registration, report, and 5.4C.3A report correction remain uncommitted
+- Final Git status: BM-PROD5.4C.3B source, scripts, registration, report, and 5.4C.3A report correction are recorded in implementation commit `ae0aa471d71e53d4e2609944e1f7e15d55a0e6b7`
 
 ## Outcome
 
