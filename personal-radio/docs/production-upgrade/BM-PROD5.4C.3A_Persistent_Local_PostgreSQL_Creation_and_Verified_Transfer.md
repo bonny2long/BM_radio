@@ -7,7 +7,7 @@ BM-PROD5.4C.3A status: PERSISTENT-TRANSFER GATE PASS
 ## Repository
 
 - Starting SHA: `5fa5db5122bcca19fe8260ac4f8527da71e75c4f`
-- Ending SHA / working-tree state: HEAD remains `5fa5db5122bcca19fe8260ac4f8527da71e75c4f`; the BM-PROD5.4C.3A implementation is present as uncommitted working-tree changes.
+- Ending SHA / implementation commit: `65157583b3b0c8ab74c3c08b697e9da114f114d9`
 - BM-PROD5.4C.2 implementation SHA correction: PASS
 - Correct 5.4C.2 implementation commit: `5fa5db5122bcca19fe8260ac4f8527da71e75c4f`
 

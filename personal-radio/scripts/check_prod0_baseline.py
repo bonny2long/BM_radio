@@ -167,6 +167,7 @@ def main() -> int:
         ("persistent local PostgreSQL adoption safety contract", [sys.executable, "scripts/check_prod5_4c_1_persistent_postgres_adoption_contract.py", "--skip-prior-regressions"], BACKEND),
         ("populated SQLite to PostgreSQL transfer safety contract", [sys.executable, "scripts/check_prod5_4c_2_sqlite_postgres_transfer_contract.py", "--skip-prior-regressions"], BACKEND),
         ("persistent populated PostgreSQL transfer safety contract", [sys.executable, "scripts/check_prod5_4c_3a_persistent_postgres_transfer_contract.py", "--skip-prior-regressions"], BACKEND),
+        ("active persistent PostgreSQL adoption safety contract", [sys.executable, "scripts/check_prod5_4c_3b_active_postgres_adoption_contract.py", "--skip-prior-regressions"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),

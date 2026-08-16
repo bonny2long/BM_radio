@@ -33,6 +33,7 @@ POSTGRES_ENV_PATH = LOCAL_STATE_DIR / "postgres.env"
 STATE_PATH = LOCAL_STATE_DIR / "state.json"
 BACKEND_ENV_BEFORE_PATH = LOCAL_STATE_DIR / "backend_env.before"
 TRANSFER_VERIFICATION_PATH = LOCAL_STATE_DIR / "transfer_verification.json"
+ADOPTION_VERIFICATION_PATH = LOCAL_STATE_DIR / "adoption_verification.json"
 BACKUP_DIR = BACKEND_ROOT / ".local_backups"
 ACCEPTED_REHEARSAL_REPORT = BACKEND_ROOT / "tmp_tests" / "prod5_4c_2" / "transfer_rehearsal_report.json"
 
@@ -54,6 +55,8 @@ EXPECTED_SOURCE_SHA256 = "e7edbf59d2f447193175e764e83b7ecb6375d77792399ae578f1ce
 EXPECTED_SOURCE_SCHEMA_FINGERPRINT = "bd34f4cf845273954a42a4febd9d0340ae52d221f8f07b9b77eeb3cd04125678"
 EXPECTED_SOURCE_REVISION = "0001_current_schema_baseline"
 EXPECTED_SOURCE_ROWS = 1257
+EXPECTED_BACKEND_ENV_SHA256 = "a668b6dc50b63ab6e23e5ccb0b743ccd41c581eecdf0e94dfef94f826441db3e"
+EXPECTED_PROD5_4C_3A_COMMIT = "65157583b3b0c8ab74c3c08b697e9da114f114d9"
 _RESOURCE_NAME = re.compile(r"^[a-z0-9][a-z0-9_.-]+$")
 
 
@@ -428,7 +431,9 @@ def source_quiescence_status() -> dict[str, Any]:
             continue
         command = str(process.get("CommandLine") or "").lower().replace("\\", "/")
         name = str(process.get("Name") or "").lower()
-        if "manage_local_postgres_adoption.py" in command:
+        if "manage_local_postgres_adoption.py" in command or "check_prod5_4c_3b_active_postgres_adoption.py" in command:
+            continue
+        if "vite" in command and "uvicorn" not in command and "app.main" not in command:
             continue
         repo_related = "personal-radio" in command or "bm_radio" in command or "bm-radio" in command
         writer_shape = any(token in command for token in ("uvicorn", "app.main", "npm run dev", "vite"))
@@ -990,6 +995,122 @@ def validate_transfer_evidence() -> dict[str, Any]:
     return {"verified": True, "source_rows": verified["source_total_rows"], "target_rows": verified["target_total_rows"], "artifact_sha256": expected_hash}
 
 
+def active_adoption_preflight() -> dict[str, Any]:
+    """Strictly read-only BM-PROD5.4C.3B gate; never changes configuration or databases."""
+    blockers: list[str] = []
+    commit = _run(["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT)
+    if commit.returncode != 0 or commit.stdout.strip() != EXPECTED_PROD5_4C_3A_COMMIT:
+        blockers.append("repository HEAD is not the accepted BM-PROD5.4C.3A commit")
+    docker = docker_context_status()
+    if not (docker.get("available") and docker.get("local") and docker.get("linux")):
+        blockers.append("a reachable local Docker Linux engine is required")
+    current_container = container_status() if docker.get("available") and docker.get("local") else None
+    if not current_container or not (
+        current_container.get("exists")
+        and current_container.get("running")
+        and current_container.get("healthy")
+        and current_container.get("loopback_binding")
+        and current_container.get("named_volume")
+    ):
+        blockers.append("the exact persistent PostgreSQL container is not healthy and correctly bound")
+    try:
+        evidence = validate_transfer_evidence()
+    except AdoptionBlockedError as exc:
+        evidence = None
+        blockers.append(str(exc))
+    quiescence = source_quiescence_status()
+    if not quiescence.get("inspectable"):
+        blockers.append(str(quiescence.get("reason") or "writer quiescence is not inspectable"))
+    elif quiescence.get("writer_detected"):
+        blockers.append("a BM Radio backend writer may already be active")
+    env_sha = sha256_path(BACKEND_ENV_PATH)
+    env_target = env_target_summary()
+    if env_sha != EXPECTED_BACKEND_ENV_SHA256:
+        blockers.append("backend/.env does not match the accepted pre-adoption hash")
+    if env_target.get("dialect") != "sqlite":
+        blockers.append("backend/.env is not currently configured for SQLite")
+    if "BM_RADIO_DB_URL" in os.environ:
+        blockers.append("process environment overrides BM_RADIO_DB_URL; adopted .env would not be authoritative")
+    if BACKEND_ENV_BEFORE_PATH.exists():
+        blockers.append("backend_env.before already exists")
+    state = read_state()
+    if state.get("phase") != "BM-PROD5.4C.3A" or state.get("application_adopted") is not False:
+        blockers.append("persistent state is not at the accepted pre-adoption phase")
+    database = None
+    if current_container and current_container.get("running"):
+        try:
+            database = database_verification()
+        except AdoptionBlockedError as exc:
+            blockers.append(str(exc))
+    if database and not (
+        database.get("server_major") == POSTGRES_MAJOR
+        and database.get("revision") == EXPECTED_SOURCE_REVISION
+        and database.get("readiness") == READY
+        and database.get("compatibility") == "PASS"
+        and database.get("application_row_count") == EXPECTED_SOURCE_ROWS
+    ):
+        blockers.append("persistent PostgreSQL readiness or identity does not match the accepted transfer")
+    return {
+        "gate": "PASS" if not blockers else "BLOCKED",
+        "blockers": blockers,
+        "source_commit": commit.stdout.strip() if commit.returncode == 0 else None,
+        "transfer_evidence": evidence,
+        "docker": docker,
+        "container": current_container,
+        "postgresql": database,
+        "source_quiescence": quiescence,
+        "backend_env_sha256": env_sha,
+        "backend_env_target": env_target,
+        "backend_env_before_exists": BACKEND_ENV_BEFORE_PATH.exists(),
+        "explicit_approval_received": False,
+    }
+
+
+def write_active_adoption_verification(payload: dict[str, Any]) -> str:
+    """Write only privacy-safe 5.4C.3B evidence and return its SHA-256."""
+    encoded = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    safe_display = payload.get("database_target_safe_display")
+    expected_display = f"postgresql+psycopg://{APPLICATION_ROLE}:***@{HOST}:{HOST_PORT}/{DATABASE_NAME}"
+    if safe_display != expected_display:
+        raise AdoptionBlockedError("adoption verification database target is not the exact redacted persistent target")
+    lowered = encoded.replace(expected_display, "<redacted-persistent-target>").lower()
+    forbidden = ("postgres_password", "postgresql+psycopg://", "c:\\users\\", "bonnymakaniankhondo", "raw_rows", "media_path")
+    if any(token in lowered for token in forbidden):
+        raise AdoptionBlockedError("adoption verification contains forbidden private data")
+    temporary = ADOPTION_VERIFICATION_PATH.with_suffix(".tmp")
+    temporary.write_text(encoded, encoding="utf-8")
+    temporary.replace(ADOPTION_VERIFICATION_PATH)
+    digest = sha256_path(ADOPTION_VERIFICATION_PATH)
+    if not digest:
+        raise AdoptionBlockedError("adoption verification hash could not be calculated")
+    return digest
+
+
+def finalize_active_adoption(payload: dict[str, Any]) -> dict[str, Any]:
+    artifact_sha = write_active_adoption_verification(payload)
+    state = read_state()
+    transfer_sha = state.get("transfer_verification_sha256")
+    if not transfer_sha or transfer_sha != payload.get("transfer_verification_sha256"):
+        raise AdoptionBlockedError("transfer verification SHA cannot be preserved during adoption finalization")
+    state.update(
+        {
+            "phase": "BM-PROD5.4C.3B",
+            "application_adopted": True,
+            "active_database": "postgresql",
+            "application_startup_verified": True,
+            "application_startup_twice": True,
+            "write_routing_verified": True,
+            "post_canary_target_rows": EXPECTED_SOURCE_ROWS,
+            "adoption_verification_sha256": artifact_sha,
+            "sqlite_fallback_preserved": True,
+            "rollback_snapshot_verified": True,
+            "verified_utc": utc_now(),
+        }
+    )
+    write_state(state)
+    return {"phase": state["phase"], "application_adopted": True, "adoption_verification_sha256": artifact_sha}
+
+
 def adopt_persistent_target(confirmation: str) -> dict[str, Any]:
     if confirmation != ADOPT_CONFIRMATION:
         raise AdoptionBlockedError("exact adoption confirmation token is required")
@@ -1038,22 +1159,63 @@ def adopt_persistent_target(confirmation: str) -> dict[str, Any]:
     return {"adopted": True, "dialect": "postgresql", "driver": "psycopg", "policy": "postgresql_supported", "safe_display": safe_target_display(target_url)}
 
 
-def rollback_configuration() -> dict[str, Any]:
-    state = read_state()
+def validate_rollback_files(
+    state: dict[str, Any],
+    *,
+    current_env_path: Path = BACKEND_ENV_PATH,
+    snapshot_path: Path = BACKEND_ENV_BEFORE_PATH,
+) -> bytes:
     before_hash = state.get("backend_env_before_sha256")
     adopted_hash = state.get("backend_env_adopted_sha256")
-    if not BACKEND_ENV_BEFORE_PATH.is_file() or not before_hash or not adopted_hash:
+    if not snapshot_path.is_file() or not before_hash or not adopted_hash:
         raise AdoptionBlockedError("valid backend/.env recovery state is missing")
-    if sha256_path(BACKEND_ENV_BEFORE_PATH) != before_hash:
+    if sha256_path(snapshot_path) != before_hash:
         raise AdoptionBlockedError("stored backend/.env snapshot hash does not match")
-    if sha256_path(BACKEND_ENV_PATH) != adopted_hash:
+    if sha256_path(current_env_path) != adopted_hash:
         raise AdoptionBlockedError("backend/.env changed independently after adoption")
-    restored = BACKEND_ENV_BEFORE_PATH.read_bytes()
+    return snapshot_path.read_bytes()
+
+
+def rollback_configuration() -> dict[str, Any]:
+    state = read_state()
+    restored = validate_rollback_files(state)
     BACKEND_ENV_PATH.write_bytes(restored)
     summary = env_target_summary()
     state.update({"phase": "config-rolled-back", "rollback_utc": utc_now()})
     write_state(state)
     return {"restored": True, "database_target": summary}
+
+
+def prepare_failed_adoption_retry(confirmation: str) -> dict[str, Any]:
+    """Reset only a hash-verified 5.4C.3B rollback created by this operator."""
+    if confirmation != ADOPT_CONFIRMATION:
+        raise AdoptionBlockedError("exact active-adoption confirmation token is required for retry recovery")
+    state = read_state()
+    if state.get("phase") not in {"BM-PROD5.4C.3B-failed-rolled-back", "BM-PROD5.4C.3A"}:
+        raise AdoptionBlockedError("local state is not an eligible failed-adoption rollback")
+    if state.get("application_adopted") is not False or env_target_summary().get("dialect") != "sqlite":
+        raise AdoptionBlockedError("application configuration is not safely rolled back to SQLite")
+    if sha256_path(BACKEND_ENV_PATH) != EXPECTED_BACKEND_ENV_SHA256:
+        raise AdoptionBlockedError("rolled-back backend/.env does not match the accepted hash")
+    if not BACKEND_ENV_BEFORE_PATH.is_file() or sha256_path(BACKEND_ENV_BEFORE_PATH) != EXPECTED_BACKEND_ENV_SHA256:
+        raise AdoptionBlockedError("failed-attempt fallback snapshot is missing or mismatched")
+    if sha256_path(TRANSFER_VERIFICATION_PATH) != state.get("transfer_verification_sha256"):
+        raise AdoptionBlockedError("transfer evidence changed during the failed adoption")
+    retry_state = dict(state)
+    for key in (
+        "active_database",
+        "adopted_utc",
+        "backend_env_adopted_sha256",
+        "backend_env_before_sha256",
+        "failed_utc",
+        "last_verified_application_rows",
+        "rollback_utc",
+    ):
+        retry_state.pop(key, None)
+    retry_state.update({"phase": "BM-PROD5.4C.3A", "application_adopted": False})
+    write_state(retry_state)
+    BACKEND_ENV_BEFORE_PATH.unlink()
+    return {"retry_ready": True, "phase": retry_state["phase"], "backend_env_sha256": EXPECTED_BACKEND_ENV_SHA256}
 
 
 def _env_points_to_persistent_target() -> bool:

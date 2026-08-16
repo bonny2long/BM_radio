@@ -155,7 +155,7 @@ def main() -> int:
         check((BACKEND / command[0]).is_file(), label)
         if not args.skip_prior_regressions:
             run_prior(*command)
-    check("check_prod5_4c_3a_persistent_postgres_transfer_contract.py" in prod0 and prod0_mandatory_count(prod0) == 53, "55 PROD0 preserves 53 mandatory checks")
+    check("check_prod5_4c_3a_persistent_postgres_transfer_contract.py" in prod0 and prod0_mandatory_count(prod0) >= 53, "55 PROD0 preserves the 53-check baseline floor")
 
     assert digest(REAL_SQLITE) == sqlite_before, "real SQLite changed during deterministic contract"
     assert len(CHECKS) == 55, len(CHECKS)
