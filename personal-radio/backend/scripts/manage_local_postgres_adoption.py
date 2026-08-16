@@ -14,12 +14,15 @@ if str(BACKEND) not in sys.path:
 from app.local_postgres_adoption import (  # noqa: E402
     ADOPT_CONFIRMATION,
     DESTROY_CONFIRMATION,
+    PERSISTENT_TRANSFER_CONFIRMATION,
     AdoptionBlockedError,
     adopt_persistent_target,
     create_persistent_target,
+    create_verified_persistent_transfer,
     database_verification,
     destroy_persistent_target,
     migrate_persistent_target,
+    persistent_transfer_preflight,
     preflight,
     rollback_configuration,
     status,
@@ -42,7 +45,12 @@ def _json(payload: dict[str, Any]) -> None:
 
 def _preflight() -> int:
     result = preflight()
-    print(f"PRE-ADOPTION GATE: {result['gate']}")
+    if result["transfer_required"]:
+        result = persistent_transfer_preflight()
+        print(f"BM-PROD5.4C.3A PRE-CREATION GATE: {result['gate']}")
+        print("Explicit operator approval received: NO")
+    else:
+        print(f"PRE-ADOPTION GATE: {result['gate']}")
     for reason in result["blockers"]:
         print(f"reason: {reason}")
     _json(result)
@@ -70,6 +78,8 @@ def main() -> int:
     subparsers.add_parser("preflight", help="strictly read-only pre-adoption safety gate")
     subparsers.add_parser("status", help="read-only persistent-target status")
     subparsers.add_parser("create", help="create the approved named-volume PostgreSQL target")
+    transfer_parser = subparsers.add_parser("persistent-transfer", help="create and populate the exact persistent target after approval")
+    transfer_parser.add_argument("--confirm", required=True, help=f"must exactly equal {PERSISTENT_TRANSFER_CONFIRMATION}")
     subparsers.add_parser("migrate", help="run explicit Alembic upgrade head and verify")
     subparsers.add_parser("verify", help="read-only persistent PostgreSQL verification")
     adopt_parser = subparsers.add_parser("adopt", help="switch only backend/.env database target after verification")
@@ -86,6 +96,8 @@ def main() -> int:
             return _status()
         if args.command == "create":
             return _mutating_result("CREATE", create_persistent_target)
+        if args.command == "persistent-transfer":
+            return _mutating_result("PERSISTENT-TRANSFER", lambda: create_verified_persistent_transfer(args.confirm))
         if args.command == "migrate":
             return _mutating_result("MIGRATE", migrate_persistent_target)
         if args.command == "verify":

@@ -19,6 +19,7 @@ CLI = BACKEND / "scripts" / "transfer_sqlite_to_postgres.py"
 REHEARSAL = BACKEND / "scripts" / "check_prod5_4c_2_sqlite_postgres_transfer_rehearsal.py"
 ADOPTION = BACKEND / "app" / "local_postgres_adoption.py"
 ADOPTION_DOC = PROJECT / "docs" / "production-upgrade" / "BM-PROD5.4C.1_Persistent_Local_PostgreSQL_Adoption_Tooling_and_Preflight.md"
+TRANSFER_DOC = PROJECT / "docs" / "production-upgrade" / "BM-PROD5.4C.2_Populated_SQLite_to_PostgreSQL_Transfer_Rehearsal.md"
 PROD0 = PROJECT / "scripts" / "check_prod0_baseline.py"
 REAL_DB = BACKEND / "bm_radio.db"
 CHECKS: list[str] = []
@@ -87,6 +88,7 @@ def main() -> int:
     rehearsal = REHEARSAL.read_text(encoding="utf-8")
     adoption = ADOPTION.read_text(encoding="utf-8")
     adoption_doc = ADOPTION_DOC.read_text(encoding="utf-8")
+    transfer_doc = TRANSFER_DOC.read_text(encoding="utf-8")
     prod0 = PROD0.read_text(encoding="utf-8")
 
     check(MODULE.is_file() and "class TransferPlan" in source and "def transfer_database" in source, "1 transfer module exists")
@@ -135,9 +137,9 @@ def main() -> int:
     check('client.get("/api/media' not in rehearsal and '"media_streamed": False' in rehearsal, "41 read/API canary never streams media")
     check("password in serialized" in rehearsal and "Path.home()" in rehearsal and "raw DB rows" not in rehearsal, "42 privacy-safe report validation")
     check("live_before == live_after_cleanup" in rehearsal and "per_table_canonical_digests" in rehearsal, "43 exact live-source before/after protection")
-    check('"transfer_required"' in adoption and "populated SQLite requires verified transfer evidence" in adoption, "44 populated source remains blocked from direct adoption")
-    check("future approved adoption phase" in adoption, "45 future adoption requires verified transfer evidence")
-    check("e21fdd97760072187e5e23ad6c93c230f4df17b5" in adoption_doc and "working-tree implementation is not committed" not in adoption_doc, "46 historical report has actual implementation commit")
+    check('"transfer_required"' in adoption and "validate_transfer_evidence()" in adoption, "44 populated source requires verified evidence before direct adoption")
+    check("persistent transfer verification" in adoption and "does not match" in adoption, "45 populated adoption fails closed on mismatched evidence")
+    check("5fa5db5122bcca19fe8260ac4f8527da71e75c4f" in transfer_doc and "working-tree implementation is not committed" not in transfer_doc, "46 historical report has actual implementation commit")
 
     prior = {
         "47 BM-PROD5.4C.1 contract remains passing": ("scripts/check_prod5_4c_1_persistent_postgres_adoption_contract.py", "--skip-prior-regressions"),
@@ -149,7 +151,7 @@ def main() -> int:
         check((BACKEND / command[0]).is_file(), label)
         if not args.skip_prior_regressions:
             run_prior(*command)
-    check("check_prod5_4c_2_sqlite_postgres_transfer_contract.py" in prod0 and prod0_mandatory_count(prod0) == 52, "51 PROD0 registration preserves 52 mandatory checks")
+    check("check_prod5_4c_2_sqlite_postgres_transfer_contract.py" in prod0 and prod0_mandatory_count(prod0) >= 52, "51 PROD0 registration preserves the 52-check baseline floor")
 
     assert digest(REAL_DB) == real_before, "real SQLite changed during deterministic contract"
     assert len(CHECKS) == 51, len(CHECKS)

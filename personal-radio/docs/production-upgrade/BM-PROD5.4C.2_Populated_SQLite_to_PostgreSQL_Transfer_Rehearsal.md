@@ -7,9 +7,9 @@ BM-PROD5.4C.2 status: PRE-TRANSFER GATE PASS
 ## Repository and Historical Correction
 
 - Starting SHA: `e21fdd97760072187e5e23ad6c93c230f4df17b5`
-- Ending SHA: `e21fdd97760072187e5e23ad6c93c230f4df17b5` (working-tree implementation is not committed)
+- Ending SHA / implementation commit: `5fa5db5122bcca19fe8260ac4f8527da71e75c4f`
 - BM-PROD5.4C.1 implementation SHA correction: PASS
-- Correct implementation commit recorded: `e21fdd97760072187e5e23ad6c93c230f4df17b5`
+- Correct implementation commit recorded: `5fa5db5122bcca19fe8260ac4f8527da71e75c4f`
 - The historical 5.4C.1 PRE-ADOPTION GATE remains correctly recorded as BLOCKED.
 
 ## Docker Safety

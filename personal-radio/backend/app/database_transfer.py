@@ -243,12 +243,19 @@ def inventory_digests(inventory: dict[str, dict[str, Any]]) -> dict[str, str]:
     return {name: str(data["canonical_digest"]) for name, data in inventory.items()}
 
 
-def create_verified_sqlite_backup(source: Path, backup_dir: Path) -> tuple[Path, Path, dict[str, Any]]:
+def create_verified_sqlite_backup(
+    source: Path,
+    backup_dir: Path,
+    *,
+    label: str = "pre_postgres_transfer",
+) -> tuple[Path, Path, dict[str, Any]]:
     if not source.is_file():
         raise TransferBlockedError("live SQLite source is missing")
+    if not label or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789_" for character in label):
+        raise TransferBlockedError("SQLite backup label is invalid")
     backup_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-    backup = backup_dir / f"bm_radio.pre_postgres_transfer.{stamp}.db"
+    backup = backup_dir / f"bm_radio.{label}.{stamp}.db"
     manifest_path = backup.with_suffix(".manifest.json")
     source_uri = f"file:{source.resolve().as_posix()}?mode=ro"
     source_connection = sqlite3.connect(source_uri, uri=True)
