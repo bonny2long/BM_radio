@@ -82,6 +82,20 @@ def application_row_count(snapshot: SqliteSnapshot) -> int:
     return sum(snapshot.application_row_counts.values())
 
 
+def sqlite_foreign_key_violations(path: Path) -> list[dict[str, Any]]:
+    """Inspect SQLite FK integrity through a read-only connection."""
+    path = require_sqlite_path(path)
+    connection = _connect(path)
+    try:
+        rows = connection.execute('pragma foreign_key_check').fetchall()
+    finally:
+        connection.close()
+    return [
+        {'table': str(row[0]), 'rowid': row[1], 'parent': str(row[2]), 'fk_index': row[3]}
+        for row in rows
+    ]
+
+
 def compatibility_issue_summary(issues: tuple[SchemaIssue, ...] | list[SchemaIssue]) -> dict[str, int]:
     summary: dict[str, int] = {}
     for issue in issues:

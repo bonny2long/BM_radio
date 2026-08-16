@@ -165,7 +165,7 @@ def main() -> int:
         check((BACKEND / command[0]).is_file(), label)
         if not args.skip_prior_regressions:
             run_prior(*command)
-    check("check_prod5_4c_1_persistent_postgres_adoption_contract.py" in prod0 and "--skip-prior-regressions" in prod0 and prod0_mandatory_count(prod0) == 51, "44 PROD0 registration preserves 51 mandatory checks")
+    check("check_prod5_4c_1_persistent_postgres_adoption_contract.py" in prod0 and "--skip-prior-regressions" in prod0 and prod0_mandatory_count(prod0) >= 51, "44 PROD0 registration preserves the 51-check baseline floor")
 
     check(digest(REAL_SQLITE) == sqlite_before, "real SQLite final equality")
     CHECKS.pop()  # final guard supports check 39 without increasing the mandated count

@@ -165,6 +165,7 @@ def main() -> int:
         ("PostgreSQL dialect foundation and offline migration proof", [sys.executable, "scripts/check_prod5_4a_postgresql_dialect_foundation.py", "--skip-prior-regressions"], BACKEND),
         ("disposable PostgreSQL integration safety contract", [sys.executable, "scripts/check_prod5_4b_postgresql_integration_contract.py", "--skip-prior-regressions"], BACKEND),
         ("persistent local PostgreSQL adoption safety contract", [sys.executable, "scripts/check_prod5_4c_1_persistent_postgres_adoption_contract.py", "--skip-prior-regressions"], BACKEND),
+        ("populated SQLite to PostgreSQL transfer safety contract", [sys.executable, "scripts/check_prod5_4c_2_sqlite_postgres_transfer_contract.py", "--skip-prior-regressions"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),

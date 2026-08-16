@@ -9,7 +9,8 @@ The tooling and deterministic safety contract are complete. Live adoption is blo
 ## Repository Baseline
 
 - Starting SHA: `980bfb4e39181741c3abddf1e55c6f4210ebd00d`
-- Ending SHA: `980bfb4e39181741c3abddf1e55c6f4210ebd00d` (working-tree implementation is not committed)
+- Implementation commit: `e21fdd97760072187e5e23ad6c93c230f4df17b5`
+- Ending SHA: `e21fdd97760072187e5e23ad6c93c230f4df17b5`
 - Recovered PROD0 entry baseline: 50 passed / 0 failed / 4 skipped
 - BM-PROD5.4B documentation closure: PASS
 

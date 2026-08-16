@@ -447,6 +447,7 @@ def preflight(*, allow_expected_resources: bool = False) -> dict[str, Any]:
         "database_policy": {"dialect": policy.dialect, "driver": policy.driver, "supported": True},
         "sqlite": sqlite,
         "zero_data_eligible": not sqlite.get("exists") or sqlite.get("application_row_count", 0) == 0,
+        "transfer_required": bool(sqlite.get("exists") and sqlite.get("application_row_count", 0) > 0),
     }
 
 
@@ -555,7 +556,7 @@ def adopt_persistent_target(confirmation: str) -> dict[str, Any]:
         raise AdoptionBlockedError("adoption preflight blocked: " + "; ".join(environment_only_blockers))
     sqlite = safety["sqlite"]
     if sqlite.get("exists") and sqlite.get("application_row_count") != 0:
-        raise AdoptionBlockedError("SQLite is not eligible for zero-data adoption")
+        raise AdoptionBlockedError("populated SQLite requires verified transfer evidence from a future approved adoption phase")
     verified = database_verification()
     if not (verified["ready"] and verified["compatibility"] == "PASS" and verified["revision"] == verified["head_revision"] and verified["application_row_count"] == 0):
         raise AdoptionBlockedError("persistent PostgreSQL target is not eligible for adoption")
