@@ -522,7 +522,14 @@ def _load_state() -> dict[str, Any]:
 
 def manual_url() -> dict[str, Any]:
     state = _load_state()
-    port = int(state["port"])
+    web_name = next((name for name in state.get("containers", []) if name.startswith(f"{RESOURCE_PREFIX}web-")), None)
+    if web_name is None:
+        raise ListenerAcceptanceBlocked("retained frontend container identity is missing")
+    port = _dynamic_port(web_name, "8080/tcp")
+    if int(state.get("port", 0)) != port:
+        state["port"] = port
+        state["proof"]["frontend_url"] = f"http://127.0.0.1:{port}"
+        STATE_PATH.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
     _wait_origin(port, timeout=30)
     return {"frontend_url": f"http://127.0.0.1:{port}", "manual_checklist": MANUAL_CHECKS, "recorded_result": state["proof"].get("manual_result")}
 

@@ -2,12 +2,13 @@
 
 Date: 2026-08-17  
 Owner: Bonny Makaniankhondo  
-Status: **AUTOMATED PASS — MANUAL LISTENER CONFIRMATION PENDING**
+Status: **LISTENER-PLAYBACK PASS**
 
 ## Phase identity
 
 - Starting SHA: `100d81e730ad24b58ec294a73e3bec061024cb0d`.
-- Ending SHA: pending reviewed implementation commit.
+- Ending SHA / implementation commit: `cd8add5c3de868f0872ed9786c3520a1243eedd5` (`feat: implement playback state management and queueing infrastructure for personal radio system`).
+- Final evidence state: the completion-result update, 5.6B contract count compatibility correction, and restart-resilient manual-URL discovery remain as intentional uncommitted changes for exact review.
 - BM-PROD5.6B documentation correction: PASS; its completion report records accepted implementation commit `100d81e730ad24b58ec294a73e3bec061024cb0d` while preserving all integrated-stack evidence.
 
 ## Media safety and fixture
@@ -17,7 +18,7 @@ Status: **AUTOMATED PASS — MANUAL LISTENER CONFIRMATION PENDING**
 - Mount policy: read-only inside the production backend container.
 - Artwork: `not_applicable`; the generated fixture intentionally contains none, and missing artwork does not block playback.
 - Alternate-source case: `not_applicable`; no logical recording has multiple physical sources in this bounded fixture.
-- Before/after SHA-256, size, and mtime evidence: exact equality after automated acceptance; final equality will be repeated immediately before cleanup.
+- Before/after SHA-256, size, and mtime evidence: exact equality after automated acceptance and again immediately before cleanup.
 
 | Fixture path | SHA-256 | Bytes |
 | --- | --- | ---: |
@@ -68,27 +69,35 @@ Status: **AUTOMATED PASS — MANUAL LISTENER CONFIRMATION PENDING**
 
 ## Manual listener acceptance
 
-Pending human confirmation from the retained loopback-only production frontend URL `http://127.0.0.1:53074`. Automated API checks cannot claim audible playback.
-
-The required operator checklist covers audible correct-song playback, pause, resume, forward/backward seek, volume, one natural-end advance, Next, Previous, narrow-mobile player/queue/search/album usability, and basic keyboard/accessibility behavior.
+- Result: **PASS**.
+- Operator: Bonny Makaniankhondo.
+- Recorded: `2026-08-17T17:21:48Z`.
+- Evidence origin: explicit user confirmation after completing the displayed checklist; automated code did not fabricate the result.
+- Confirmed scope: audible correct-song playback, pause, resume, forward/backward seek, volume, one natural-end advance, Next, Previous, narrow-mobile player/queue/search/album usability, and basic keyboard/accessibility behavior.
+- The computer restarted before confirmation, stopping both task containers and the protected active PostgreSQL container. The exact task stack was recovered in database/backend/frontend order and received a new loopback port. The protected PostgreSQL container was later restarted with its existing configuration and named volume; final equality proved no protected-state change.
 
 ## Protected state and cleanup
 
-- Active 1,257-row PostgreSQL: exact protected-state hash equality after automated acceptance (`5fcaf1261e0dd11e5f342a77ed7ea656334c2cef8c9b547cb8cabf6a3e3728a3`); final equality pending.
-- SQLite fallback: included in the same exact protected-state equality; final equality pending.
-- Active `.env` and durable evidence: included in the same exact protected-state equality; final equality pending.
-- Task resources: task-prefixed only; final cleanup pending.
+- Active 1,257-row PostgreSQL: exact protected-state equality after automated acceptance and before cleanup.
+- SQLite fallback: exact protected-state equality after automated acceptance and before cleanup.
+- Active `.env` and durable evidence: exact protected-state equality after automated acceptance and before cleanup.
+- Protected-state canonical SHA-256 before and after: `5fcaf1261e0dd11e5f342a77ed7ea656334c2cef8c9b547cb8cabf6a3e3728a3`.
+- Remaining `bm-prod6a-*` containers: none.
+- Remaining `bm-prod6a-*` networks: none.
+- Remaining `bm-prod6a-*` volumes: none.
+- Generated test media, task credentials, cache, and local state: removed.
 - TrueNAS work: prohibited and not performed.
 - Station recommendation quality is deferred to BM-PROD6B.
 
 ## Validation
 
-- Python compile: pending final run.
-- BM-PROD6A contract: pending final run.
-- BM-PROD5.6B contract: pending final run.
-- PROD0: target 59 passed / 0 failed / 4 skipped; pending final run.
+- Python compile: PASS.
+- BM-PROD6A contract: PASS, 40 checks, including the prior 5.6B regression.
+- BM-PROD5.6B contract: PASS, 34 checks.
+- PROD0: PASS — 59 passed / 0 failed / 4 skipped.
 - Frontend build: PASS.
 - Frontend lint: PASS with no errors and the existing warning set.
-- Final Git status: pending final review.
+- `git diff --check`: PASS.
+- Final Git status: only this completion-result update, the 5.6B contract compatibility correction, and the restart-resilient manual-URL discovery change remain uncommitted for exact review; all other PROD6A implementation files are committed at `cd8add5c3de868f0872ed9786c3520a1243eedd5`.
 
-**STOP: manual listener confirmation is required before `LISTENER-PLAYBACK PASS` can be recorded.**
+**STOP: BM-PROD6A LISTENER-PLAYBACK PASS. Station recommendation quality remains deferred to BM-PROD6B; no station changes or TrueNAS work were performed.**
