@@ -7,7 +7,7 @@ Status: **INTEGRATED-STACK PASS**
 ## Phase identity
 
 - Starting SHA: `18775bea08d19ea84bd87364c1bbacf206c7b746`
-- Ending SHA / working-tree state: HEAD remains `18775bea08d19ea84bd87364c1bbacf206c7b746`; the reviewed BM-PROD5.6B implementation is present as intentional uncommitted working-tree changes.
+- Ending SHA / accepted implementation commit: `100d81e730ad24b58ec294a73e3bec061024cb0d`.
 - BM-PROD5.6A implementation documentation correction: PASS; the 5.6A report now records implementation commit `18775bea08d19ea84bd87364c1bbacf206c7b746`.
 
 ## Frontend API and proxy audit
@@ -189,10 +189,10 @@ All requests below used the frontend loopback origin; none bypassed the reverse 
 - Frontend production build: PASS.
 - Frontend lint: PASS — 0 errors, 8 existing warnings.
 - `git diff --check`: PASS.
-- Final Git status: expected frontend routing/build/server files, compose example, live/contract scripts, PROD0 registration, 5.6A documentation/contract compatibility updates, and this report remain uncommitted for exact-commit review.
+- Final Git status at acceptance: clean after commit `100d81e730ad24b58ec294a73e3bec061024cb0d`.
 
 ## Next action
 
-Review the exact BM-PROD5.6B working-tree diff and commit it if accepted. After acceptance, close BM-PROD5.6 and begin BM Radio application-production acceptance as a separate reviewed phase.
+BM-PROD5.6B is accepted and BM-PROD5.6 is closed. Begin BM Radio application-production acceptance as a separate reviewed phase.
 
 **STOP: BM-PROD5.6B INTEGRATED-STACK PASS. No TrueNAS deployment, registry push, real-media mount/scan, or application-production acceptance work was performed.**

@@ -17,7 +17,7 @@ const asTrack = (item: NowPlaying): Track => ({
 })
 
 export default function QueuePage({ onBack }: { onBack: () => void }) {
-  const { queue, queueIndex, playQueue, nowPlaying, queueSource } = usePlayback()
+  const { queue, queueIndex, playQueue, nowPlaying, queueSource, removeQueueItem, clearQueue, moveQueueItem } = usePlayback()
   const { startSongRadio, saveSongStation } = useRadioActions()
   const [actionTrack, setActionTrack] = useState<Track | null>(null)
   const [saveOpen, setSaveOpen] = useState(false)
@@ -74,6 +74,8 @@ export default function QueuePage({ onBack }: { onBack: () => void }) {
         <button onClick={() => { setStatus(''); setSaveOpen(true) }} disabled={!musicQueue.length} className="card-premium" style={{ padding: 12, color: 'var(--text-primary)', fontWeight: 800, opacity: musicQueue.length ? 1 : .45 }}>{radioWindow ? 'Save Current Radio Queue' : 'Save Queue'}</button>
       </div>
 
+      {!!upcoming.length && <button onClick={clearQueue} style={{ width: '100%', padding: 10, marginBottom: 16, color: 'var(--text-muted)', fontSize: 12 }}>Clear Up Next</button>}
+
       <p className="section-label">Up Next</p>
       <div style={{ display: 'grid', gap: 8 }}>
         {upcoming.map((item, offset) => {
@@ -88,7 +90,12 @@ export default function QueuePage({ onBack }: { onBack: () => void }) {
                   <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.subtitle}</span>
                 </span>
               </button>
-              {track && <button className="track-overflow-button" aria-label="Track actions" onClick={() => setActionTrack(track)}>&#8943;</button>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <button className="track-overflow-button" aria-label={`Move ${item.title} up`} disabled={index <= queueIndex + 1} onClick={() => moveQueueItem(index, index - 1)}>&uarr;</button>
+                <button className="track-overflow-button" aria-label={`Move ${item.title} down`} disabled={index >= queue.length - 1} onClick={() => moveQueueItem(index, index + 1)}>&darr;</button>
+                <button className="track-overflow-button" aria-label={`Remove ${item.title} from queue`} onClick={() => removeQueueItem(index)}>&times;</button>
+                {track && <button className="track-overflow-button" aria-label="Track actions" onClick={() => setActionTrack(track)}>&#8943;</button>}
+              </div>
             </div>
           )
         })}

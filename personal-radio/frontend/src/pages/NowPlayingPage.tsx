@@ -65,13 +65,16 @@ export default function NowPlayingPage({
     nowPlaying,
     queue,
     queueIndex,
+    queueSource,
     isPlaying,
     currentTime,
     duration,
+    volume,
     togglePlayPause,
     next,
     previous,
     seek,
+    setVolume,
   } = usePlayback()
 
   const [feedback, setFeedback] = useState('neutral')
@@ -139,7 +142,7 @@ export default function NowPlayingPage({
 
   const music = nowPlaying.mode === 'music'
   const hasPrev = queueIndex > 0
-  const hasNext = queueIndex < queue.length - 1
+  const hasNext = queueIndex < queue.length - 1 || (queueSource?.kind === 'station' && !queueSource.exhausted)
   const sourceLabel = nowPlaying.stationName ?? (music ? 'NOW PLAYING' : 'AUDIOBOOK')
   const currentTrack: Track | null = music ? {
     id: nowPlaying.id,
@@ -227,6 +230,12 @@ export default function NowPlayingPage({
         <div className="np-progress">
           <ProgressBar current={currentTime} duration={duration} onSeek={seek} />
         </div>
+
+        <label className="np-volume">
+          <span>Volume</span>
+          <input aria-label="Playback volume" type="range" min={0} max={1} step={0.05} value={volume} onChange={event => setVolume(Number(event.target.value))} />
+          <span>{Math.round(volume * 100)}%</span>
+        </label>
 
         <div className="np-controls">
           {music ? (

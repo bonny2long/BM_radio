@@ -172,6 +172,7 @@ def main() -> int:
         ("cold PostgreSQL disaster-recovery safety contract", [sys.executable, "scripts/check_prod5_5b_cold_postgres_recovery_contract.py", "--skip-prior-regressions"], BACKEND),
         ("production backend container safety contract", [sys.executable, "scripts/check_prod5_6a_backend_container_contract.py", "--skip-prior-regressions"], BACKEND),
         ("integrated local production container stack safety contract", [sys.executable, "scripts/check_prod5_6b_integrated_container_stack_contract.py", "--skip-prior-regressions"], PROJECT_ROOT),
+        ("listener playback queue and media delivery contract", [sys.executable, "scripts/check_prod6a_listener_playback_contract.py", "--skip-prior-regressions"], PROJECT_ROOT),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),

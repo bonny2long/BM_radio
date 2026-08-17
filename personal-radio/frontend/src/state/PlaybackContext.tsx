@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { getStationQueue, logPlaybackEvent, updateAudiobookProgress } from '../api'
 import { trackToNowPlaying } from '../utils/mediaMappers'
+import { clampVolume, moveQueueEntry, nextQueueIndex, playbackIdentity, playEventForIdentity, previousQueueIndex, removeQueueEntry, shouldAdvanceForEnded } from './playbackInvariants'
 
 export type QueueSource =
   | { kind: 'station'; stationType: string; seedValue?: string | null; stationName: string; canContinue: true; exhausted?: boolean }
@@ -35,6 +36,7 @@ type Playback = {
   isPlaying: boolean
   currentTime: number
   duration: number
+  volume: number
   error: string | null
   queueSource: QueueSource | null
   playItem: (item: NowPlaying, queue?: NowPlaying[]) => void
@@ -43,6 +45,10 @@ type Playback = {
   next: () => void
   previous: () => void
   seek: (seconds: number) => void
+  setVolume: (volume: number) => void
+  removeQueueItem: (index: number) => void
+  clearQueue: () => void
+  moveQueueItem: (from: number, to: number) => void
 }
 
 const Context = createContext<Playback | null>(null)
@@ -64,6 +70,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const lastSaved = useRef(0)
   const pendingStart = useRef(0)
   const refillInFlight = useRef(false)
+  const sourceTransition = useRef(false)
+  const startedIdentity = useRef<string | null>(null)
+  const endedIdentity = useRef<string | null>(null)
+  const volumeRef = useRef(clampVolume(Number(window.localStorage.getItem('bm-radio-volume') ?? .8)))
 
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null)
   const [queue, setQueue] = useState<NowPlaying[]>([])
@@ -71,6 +81,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [volume, setVolumeState] = useState(volumeRef.current)
   const [error, setError] = useState<string | null>(null)
   const [queueSource, setQueueSource] = useState<QueueSource | null>(null)
 
@@ -105,7 +116,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const load = useCallback((item: NowPlaying) => {
     const el = audioRef.current
     if (!el) return
+    sourceTransition.current = true
+    el.pause()
     itemRef.current = item
+    startedIdentity.current = null
+    endedIdentity.current = null
     pendingStart.current = item.mode === 'audiobook' ? Math.max(0, item.startPositionSeconds ?? 0) : 0
     lastSaved.current = pendingStart.current
     setNowPlaying(item)
@@ -113,10 +128,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setDuration(0)
     setError(null)
     el.src = item.streamUrl
+    el.volume = volumeRef.current
     el.load()
-    event('start', item)
+    sourceTransition.current = false
     void el.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false))
-  }, [event])
+  }, [])
 
   const markStationExhausted = useCallback(() => {
     const src = sourceRef.current
@@ -173,10 +189,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [refillStationQueue])
 
   const continueOrEnd = useCallback(async (step: number, userInitiated = false) => {
-    const next = indexRef.current + step
-    if (next < 0) return
+    const next = step > 0
+      ? nextQueueIndex(indexRef.current, queueRef.current.length)
+      : previousQueueIndex(indexRef.current, queueRef.current.length)
 
-    if (next < queueRef.current.length) {
+    if (step < 0 && next < 0) return
+
+    if (next >= 0) {
       if (step > 0 && userInitiated) event('skip')
       indexRef.current = next
       setQueueIndex(next)
@@ -209,13 +228,31 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         pendingStart.current = 0
       }
     }
-    const play = () => setIsPlaying(true)
+    const play = () => {
+      setIsPlaying(true)
+      const item = itemRef.current
+      if (!item) return
+      const identity = playbackIdentity(item.mode, item.id, item.chapterId)
+      const historyEvent = playEventForIdentity(identity, startedIdentity.current)
+      if (historyEvent === 'start') {
+        startedIdentity.current = identity
+        event('start', item)
+      } else {
+        event('resume', item)
+      }
+    }
     const pause = () => {
       setIsPlaying(false)
+      if (sourceTransition.current || el.ended) return
       event('pause')
       saveProgress()
     }
     const ended = () => {
+      const item = itemRef.current
+      if (!item) return
+      const identity = playbackIdentity(item.mode, item.id, item.chapterId)
+      if (!shouldAdvanceForEnded(identity, endedIdentity.current)) return
+      endedIdentity.current = identity
       event('finish')
       saveProgress()
       void continueOrEnd(1, false)
@@ -276,6 +313,39 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     else el.pause()
   }
 
+  const updateVolume = (value: number) => {
+    const safe = clampVolume(value)
+    volumeRef.current = safe
+    if (audioRef.current) audioRef.current.volume = safe
+    setVolumeState(safe)
+    window.localStorage.setItem('bm-radio-volume', String(safe))
+  }
+
+  const removeQueueItem = (index: number) => {
+    if (index <= indexRef.current || index < 0 || index >= queueRef.current.length) return
+    const updated = removeQueueEntry(queueRef.current, index)
+    queueRef.current = updated
+    setQueue(updated)
+  }
+
+  const clearQueue = () => {
+    const current = itemRef.current
+    const updated = current ? [current] : []
+    queueRef.current = updated
+    indexRef.current = current ? 0 : -1
+    sourceRef.current = { kind: 'manual', canContinue: false }
+    setQueue(updated)
+    setQueueIndex(indexRef.current)
+    setQueueSource(sourceRef.current)
+  }
+
+  const moveQueueItem = (from: number, to: number) => {
+    if (from <= indexRef.current || to <= indexRef.current) return
+    const updated = moveQueueEntry(queueRef.current, from, to)
+    queueRef.current = updated
+    setQueue(updated)
+  }
+
   return (
     <Context.Provider value={{
       nowPlaying,
@@ -284,6 +354,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       isPlaying,
       currentTime,
       duration,
+      volume,
       error,
       queueSource,
       playItem,
@@ -297,6 +368,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           event('seek')
         }
       },
+      setVolume: updateVolume,
+      removeQueueItem,
+      clearQueue,
+      moveQueueItem,
     }}>
       {children}
     </Context.Provider>
