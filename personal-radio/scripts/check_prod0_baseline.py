@@ -170,6 +170,7 @@ def main() -> int:
         ("active persistent PostgreSQL adoption safety contract", [sys.executable, "scripts/check_prod5_4c_3b_active_postgres_adoption_contract.py", "--skip-prior-regressions"], BACKEND),
         ("PostgreSQL logical backup and disposable restore safety contract", [sys.executable, "scripts/check_prod5_5a_postgres_backup_restore_contract.py", "--skip-prior-regressions"], BACKEND),
         ("cold PostgreSQL disaster-recovery safety contract", [sys.executable, "scripts/check_prod5_5b_cold_postgres_recovery_contract.py", "--skip-prior-regressions"], BACKEND),
+        ("production backend container safety contract", [sys.executable, "scripts/check_prod5_6a_backend_container_contract.py", "--skip-prior-regressions"], BACKEND),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),

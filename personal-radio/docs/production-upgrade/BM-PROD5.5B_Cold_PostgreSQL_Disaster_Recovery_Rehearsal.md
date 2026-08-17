@@ -4,7 +4,7 @@
 
 - BM-PROD5.5B status: **COLD-RECOVERY REHEARSAL PASS**
 - Starting SHA: `789964e841ad06663e96e02f57cb53b259c93283`
-- Ending SHA / working-tree state: HEAD remains `789964e841ad06663e96e02f57cb53b259c93283`; the BM-PROD5.5B implementation is present as intentional uncommitted working-tree changes.
+- Ending SHA / implementation commit: `bc444f3b06c8006189d63607c139f6e90672d7f9`.
 - BM-PROD5.5A implementation SHA correction: PASS; the prior report now records implementation commit `789964e841ad06663e96e02f57cb53b259c93283`.
 
 ## Retained backup
@@ -173,7 +173,7 @@
 - Frontend production build: PASS
 - Frontend lint: PASS, 0 errors / 8 existing warnings
 - `git diff --check`: PASS
-- Final Git status: expected 5.5B recovery module, operator/live/contract scripts, PROD0 registration, 5.5A report/contract compatibility updates, and this report remain uncommitted
+- Final Git status at acceptance: the BM-PROD5.5B implementation was committed as `bc444f3b06c8006189d63607c139f6e90672d7f9`.
 
 ## Next action
 

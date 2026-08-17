@@ -160,7 +160,7 @@ def main() -> int:
         check((BACKEND / command[0]).is_file(), label)
         if not arguments.skip_prior_regressions:
             run_prior(*command)
-    check("check_prod5_5b_cold_postgres_recovery_contract.py" in prod0 and prod0_mandatory_count(prod0) == 56, "57 full PROD0 preserves 56 mandatory checks")
+    check("check_prod5_5b_cold_postgres_recovery_contract.py" in prod0 and prod0_mandatory_count(prod0) >= 56, "57 full PROD0 preserves at least 56 mandatory checks")
 
     assert len(CHECKS) == 57, len(CHECKS)
     print("PASS: BM-PROD5.5B cold PostgreSQL disaster-recovery contract (57 checks)")
