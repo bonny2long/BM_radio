@@ -1,0 +1,81 @@
+name: bm-radio-local-production-example
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${BM_RADIO_POSTGRES_DB:-bm_radio}
+      POSTGRES_USER: ${BM_RADIO_POSTGRES_USER:-bm_radio_app}
+      POSTGRES_PASSWORD: ${BM_RADIO_POSTGRES_PASSWORD:?set an external local-production password}
+    volumes:
+      - bm-radio-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - bm-radio-private
+
+  backend:
+    image: bm-radio-backend:prod5.6a-bc444f3
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    environment:
+      APP_ENV: production
+      BM_RADIO_DB_URL: postgresql+psycopg://${BM_RADIO_POSTGRES_USER:-bm_radio_app}:${BM_RADIO_POSTGRES_PASSWORD:?set an external local-production password}@postgres:5432/${BM_RADIO_POSTGRES_DB:-bm_radio}
+      BM_RADIO_MUSIC_ROOT: /media/Music
+      BM_RADIO_AUDIOBOOK_ROOT: /media/Audiobooks/Library
+      BM_RADIO_BOOK_ROOT: /media/Books
+      BM_RADIO_CACHE_ROOT: /app-cache
+      BM_RADIO_ARTWORK_CACHE_ROOT: /app-cache/artwork
+      BM_RADIO_API_HOST: 0.0.0.0
+      BM_RADIO_API_PORT: "8094"
+      BM_RADIO_CORS_ORIGINS: http://127.0.0.1:${BM_RADIO_WEB_PORT:-8080}
+      BM_RADIO_API_DOCS_ENABLED: "false"
+      BM_RADIO_ENABLE_LEGACY_DISCOGRAPHY_SCAN: "false"
+    expose:
+      - "8094"
+    volumes:
+      - bm-radio-music:/media/Music:ro
+      - bm-radio-audiobooks:/media/Audiobooks/Library:ro
+      - bm-radio-books:/media/Books:ro
+      - bm-radio-cache:/app-cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - bm-radio-private
+
+  frontend:
+    image: bm-radio-frontend:prod5.6b-18775be
+    user: "101:101"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    ports:
+      - "127.0.0.1:${BM_RADIO_WEB_PORT:-8080}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - bm-radio-private
+
+networks:
+  bm-radio-private:
+    driver: bridge
+
+volumes:
+  bm-radio-postgres-data:
+  bm-radio-music:
+  bm-radio-audiobooks:
+  bm-radio-books:
+  bm-radio-cache:

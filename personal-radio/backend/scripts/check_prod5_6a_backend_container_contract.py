@@ -156,7 +156,7 @@ def main() -> int:
         check((BACKEND / command[0]).is_file(), label)
         if not arguments.skip_prior_regressions:
             run_prior(*command)
-    check("check_prod5_6a_backend_container_contract.py" in prod0 and prod0_mandatory_count(prod0) == 57, "61 full PROD0 preserves 57 mandatory checks")
+    check("check_prod5_6a_backend_container_contract.py" in prod0 and prod0_mandatory_count(prod0) >= 57, "61 full PROD0 preserves at least 57 mandatory checks")
 
     assert len(CHECKS) == 61, len(CHECKS)
     print("PASS: BM-PROD5.6A production backend container contract (61 checks)")

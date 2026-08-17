@@ -7,7 +7,7 @@ Status: **BACKEND-CONTAINER PASS**
 ## Phase identity
 
 - Starting SHA: `bc444f3b06c8006189d63607c139f6e90672d7f9`
-- Ending SHA / working-tree state: HEAD remains `bc444f3b06c8006189d63607c139f6e90672d7f9`; the reviewed BM-PROD5.6A implementation is present as intentional uncommitted working-tree changes.
+- Ending SHA / implementation commit: `18775bea08d19ea84bd87364c1bbacf206c7b746`.
 - BM-PROD5.5B implementation SHA correction: PASS; the 5.5B report now records implementation commit `bc444f3b06c8006189d63607c139f6e90672d7f9` while preserving its cold-recovery evidence.
 
 ## Docker source audit
@@ -132,7 +132,7 @@ The HTTP write canary created a temporary playlist in disposable PostgreSQL, con
 - Frontend production build: PASS
 - Frontend lint: PASS — 0 errors, 8 existing warnings
 - `git diff --check`: PASS
-- Final Git status: expected Docker/runtime/environment/dependency files, production runner/healthcheck, live/contract scripts, PROD0 registration, 5.5B report/contract compatibility updates, and this report remain uncommitted for exact-commit review.
+- Final Git status at acceptance: the BM-PROD5.6A implementation was committed as `18775bea08d19ea84bd87364c1bbacf206c7b746`.
 
 ## Next action
 
