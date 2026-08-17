@@ -717,12 +717,14 @@ def logical_station_count(db: Session, *, station_type: str, seed_value: str | N
     if station_type == "favorites":
         fb = current_feedback_by_station_track(db, tracks)
         favs = favorite_ids_by_station_track(db, tracks)
-        return len([track for track in tracks if track.id in favs or fb.get(track.id) == "up"])
+        return len([track for track in tracks if fb.get(track.id) != "down" and (track.id in favs or fb.get(track.id) == "up")])
     if station_type == "recently_added":
-        return len(tracks)
+        fb = current_feedback_by_station_track(db, tracks)
+        return len([track for track in tracks if fb.get(track.id) != "down"])
     if station_type == "deep_cuts":
+        fb = current_feedback_by_station_track(db, tracks)
         counts = play_counts_by_station_track(db, tracks)
-        return len([track for track in tracks if counts.get(track.id, 0) <= 1])
+        return len([track for track in tracks if fb.get(track.id) != "down" and counts.get(track.id, 0) <= 1])
     if station_type == "artist" and seed_value:
         token = str(seed_value).strip().lower()
         return len([track for track in tracks if (track.artist or "").strip().lower() == token or (track.album_artist or "").strip().lower() == token])

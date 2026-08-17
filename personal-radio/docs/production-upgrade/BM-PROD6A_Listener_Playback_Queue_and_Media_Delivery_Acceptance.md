@@ -7,8 +7,8 @@ Status: **LISTENER-PLAYBACK PASS**
 ## Phase identity
 
 - Starting SHA: `100d81e730ad24b58ec294a73e3bec061024cb0d`.
-- Ending SHA / implementation commit: `cd8add5c3de868f0872ed9786c3520a1243eedd5` (`feat: implement playback state management and queueing infrastructure for personal radio system`).
-- Final evidence state: the completion-result update, 5.6B contract count compatibility correction, and restart-resilient manual-URL discovery remain as intentional uncommitted changes for exact review.
+- Core implementation commit: `cd8add5c3de868f0872ed9786c3520a1243eedd5` (`feat: implement playback state management and queueing infrastructure for personal radio system`).
+- Final accepted phase commit: `387033a7cfad43ce42c9f8ba7fc0372c7b471b30` (`docs: finalize PROD6A listener playback acceptance and improve test resilience`).
 - BM-PROD5.6B documentation correction: PASS; its completion report records accepted implementation commit `100d81e730ad24b58ec294a73e3bec061024cb0d` while preserving all integrated-stack evidence.
 
 ## Media safety and fixture
@@ -98,6 +98,6 @@ Status: **LISTENER-PLAYBACK PASS**
 - Frontend build: PASS.
 - Frontend lint: PASS with no errors and the existing warning set.
 - `git diff --check`: PASS.
-- Final Git status: only this completion-result update, the 5.6B contract compatibility correction, and the restart-resilient manual-URL discovery change remain uncommitted for exact review; all other PROD6A implementation files are committed at `cd8add5c3de868f0872ed9786c3520a1243eedd5`.
+- Final Git status at acceptance: clean at final phase commit `387033a7cfad43ce42c9f8ba7fc0372c7b471b30`; core implementation remains traceable to `cd8add5c3de868f0872ed9786c3520a1243eedd5`.
 
 **STOP: BM-PROD6A LISTENER-PLAYBACK PASS. Station recommendation quality remains deferred to BM-PROD6B; no station changes or TrueNAS work were performed.**

@@ -147,7 +147,7 @@ async def get_stations(db: Session = Depends(get_db)):
         db,
         include_feedback=True,
         include_favorites=True,
-        include_play_counts=False,
+        include_play_counts=True,
         include_recent=False,
     )
     counts = build_station_count_maps(db, tracks=context.tracks, profile_cache=context.profile_cache)
@@ -156,15 +156,17 @@ async def get_stations(db: Session = Depends(get_db)):
     with perf_segment('stations.feedback_counts'):
         feedback = context.feedback
         favorites = context.favorites
-        favorite_count = len([track for track in context.tracks if track.id in favorites or feedback.get(track.id) == 'up'])
+        favorite_count = len([track for track in context.tracks if feedback.get(track.id) != 'down' and (track.id in favorites or feedback.get(track.id) == 'up')])
+        recently_added_count = len([track for track in context.tracks if feedback.get(track.id) != 'down'])
+        deep_cut_count = len([track for track in context.tracks if feedback.get(track.id) != 'down' and context.play_counts.get(track.id, 0) <= 1])
 
     with perf_segment('stations.system_station_build'):
         stations: list[dict] = []
         if total:
             stations.extend([
                 {'name': 'Favorites Radio', 'type': 'favorites', 'track_count': favorite_count, 'source': 'system'},
-                {'name': 'Recently Added', 'type': 'recently_added', 'track_count': total, 'source': 'system'},
-                {'name': 'Deep Cuts', 'type': 'deep_cuts', 'track_count': total, 'source': 'system'},
+                {'name': 'Recently Added', 'type': 'recently_added', 'track_count': recently_added_count, 'source': 'system'},
+                {'name': 'Deep Cuts', 'type': 'deep_cuts', 'track_count': deep_cut_count, 'source': 'system'},
             ])
         stations.extend(useful_genre_station_rows(counts))
         for artist, count in sorted(counts['artist'].items(), key=lambda item: item[1], reverse=True)[:5]:

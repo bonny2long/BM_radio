@@ -29,3 +29,24 @@ export const moveQueueEntry = <T,>(items: T[], from: number, to: number) => {
 
 export const removeQueueEntry = <T,>(items: T[], index: number) =>
   index < 0 || index >= items.length ? [...items] : items.filter((_, itemIndex) => itemIndex !== index)
+
+export const STATION_REFILL_THRESHOLD = 5
+export const STATION_REFILL_LIMIT = 50
+export const STATION_EXCLUDE_LIMIT = 200
+
+export const shouldPrefetchStation = (queueLength: number, queueIndex: number, exhausted = false) =>
+  !exhausted && queueLength - queueIndex - 1 <= STATION_REFILL_THRESHOLD
+
+export const stationExcludeIds = <T extends { mode: 'music' | 'audiobook'; id: number }>(items: T[]) =>
+  items.filter(item => item.mode === 'music').map(item => item.id).slice(-STATION_EXCLUDE_LIMIT)
+
+export const appendUniqueQueueItems = <T extends { id: number }>(current: T[], incoming: T[]) => {
+  const seen = new Set(current.map(item => item.id))
+  const appended: T[] = []
+  for (const item of incoming) {
+    if (seen.has(item.id)) continue
+    seen.add(item.id)
+    appended.push(item)
+  }
+  return { queue: [...current, ...appended], appended }
+}

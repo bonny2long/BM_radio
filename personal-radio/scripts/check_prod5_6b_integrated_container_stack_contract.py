@@ -139,8 +139,9 @@ def main() -> int:
     check(
         "check_prod5_6b_integrated_container_stack_contract.py" in prod0
         and "check_prod6a_listener_playback_contract.py" in prod0
-        and prod0_mandatory_count(prod0) == 59,
-        "34 full PROD0 preserves 58 prior mandatory checks and registers PROD6A",
+        and "check_prod6b_station_quality_contract.py" in prod0
+        and prod0_mandatory_count(prod0) == 60,
+        "34 full PROD0 preserves prior mandatory checks and registers PROD6A/PROD6B",
     )
 
     assert len(CHECKS) == 34, len(CHECKS)

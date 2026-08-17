@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { getStationQueue, logPlaybackEvent, updateAudiobookProgress } from '../api'
 import { trackToNowPlaying } from '../utils/mediaMappers'
-import { clampVolume, moveQueueEntry, nextQueueIndex, playbackIdentity, playEventForIdentity, previousQueueIndex, removeQueueEntry, shouldAdvanceForEnded } from './playbackInvariants'
+import { appendUniqueQueueItems, clampVolume, moveQueueEntry, nextQueueIndex, playbackIdentity, playEventForIdentity, previousQueueIndex, removeQueueEntry, shouldAdvanceForEnded, shouldPrefetchStation, stationExcludeIds, STATION_REFILL_LIMIT } from './playbackInvariants'
 
 export type QueueSource =
   | { kind: 'station'; stationType: string; seedValue?: string | null; stationName: string; canContinue: true; exhausted?: boolean }
@@ -52,9 +52,6 @@ type Playback = {
 }
 
 const Context = createContext<Playback | null>(null)
-const REFILL_THRESHOLD = 5
-const REFILL_LIMIT = 50
-
 const normalizeSource = (source?: QueueSource): QueueSource => {
   if (!source) return { kind: 'manual', canContinue: false }
   if (source.kind === 'station') return { ...source, canContinue: true, exhausted: source.exhausted ?? false }
@@ -146,14 +143,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const src = sourceRef.current
     if (src?.kind !== 'station' || src.exhausted || refillInFlight.current) return false
 
-    const excludeIds = queueRef.current.filter(item => item.mode === 'music').map(item => item.id).slice(-200)
+    const excludeIds = stationExcludeIds(queueRef.current)
     refillInFlight.current = true
     try {
-      const result = await getStationQueue(src.stationType, src.seedValue ?? null, REFILL_LIMIT, excludeIds)
-      const existing = new Set(queueRef.current.map(item => item.id))
-      const newItems = result.queue
-        .filter(track => !existing.has(track.id))
-        .map(track => trackToNowPlaying(track, { stationName: src.stationName }))
+      const result = await getStationQueue(src.stationType, src.seedValue ?? null, STATION_REFILL_LIMIT, excludeIds)
+      const mapped = result.queue.map(track => trackToNowPlaying(track, { stationName: src.stationName }))
+      const { queue: merged, appended: newItems } = appendUniqueQueueItems(queueRef.current, mapped)
 
       if (!newItems.length) {
         if (result.exhausted !== false) markStationExhausted()
@@ -161,7 +156,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       }
 
       const startIndex = queueRef.current.length
-      const merged = [...queueRef.current, ...newItems]
       const updatedSource: QueueSource = { ...src, canContinue: true, exhausted: Boolean(result.exhausted) && !newItems.length }
       queueRef.current = merged
       sourceRef.current = updatedSource
@@ -183,7 +177,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const maybePrefetchStation = useCallback((index: number) => {
     const src = sourceRef.current
-    if (src?.kind === 'station' && !src.exhausted && queueRef.current.length - index - 1 <= REFILL_THRESHOLD) {
+    if (src?.kind === 'station' && shouldPrefetchStation(queueRef.current.length, index, src.exhausted)) {
       void refillStationQueue(false)
     }
   }, [refillStationQueue])
