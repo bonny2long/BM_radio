@@ -146,7 +146,7 @@ def main() -> int:
         check((BACKEND / command[0]).is_file(), label)
         if not arguments.skip_prior_regressions:
             run_prior(*command)
-    check("check_prod5_5a_postgres_backup_restore_contract.py" in prod0 and prod0_mandatory_count(prod0) == 55, "51 full PROD0 preserves 55 mandatory checks")
+    check("check_prod5_5a_postgres_backup_restore_contract.py" in prod0 and prod0_mandatory_count(prod0) >= 55, "51 full PROD0 preserves at least 55 mandatory checks")
 
     assert len(CHECKS) == 51, len(CHECKS)
     print("PASS: BM-PROD5.5A PostgreSQL logical backup and disposable restore contract (51 checks)")

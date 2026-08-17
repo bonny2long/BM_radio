@@ -4,7 +4,8 @@
 
 - BM-PROD5.5A status: **LOGICAL-BACKUP-RESTORE PASS**
 - Starting SHA: `ae0aa471d71e53d4e2609944e1f7e15d55a0e6b7`
-- Ending SHA / working-tree state: HEAD remains `ae0aa471d71e53d4e2609944e1f7e15d55a0e6b7`; the BM-PROD5.5A implementation is present as intentional uncommitted working-tree changes.
+- Ending SHA / implementation commit: `789964e841ad06663e96e02f57cb53b259c93283`
+- BM-PROD5.5A implementation commit: `789964e841ad06663e96e02f57cb53b259c93283`
 - BM-PROD5.4C.3B implementation SHA correction: PASS; the prior report now records `ae0aa471d71e53d4e2609944e1f7e15d55a0e6b7`.
 
 ## Active PostgreSQL preflight
@@ -141,7 +142,7 @@
 - Frontend production build: PASS
 - Frontend lint: PASS, 0 errors / 8 existing warnings
 - `git diff --check`: PASS
-- Final Git status: expected BM-PROD5.5A module, operator/live/contract scripts, PROD0 registration, 5.4C.3B report/contract compatibility updates, and this report remain uncommitted
+- Final Git status: BM-PROD5.5A module, operator/live/contract scripts, PROD0 registration, 5.4C.3B report/contract compatibility updates, and this report are recorded in implementation commit `789964e841ad06663e96e02f57cb53b259c93283`
 
 The first two implementation diagnostics failed closed and cleaned up their disposable containers: one exposed a zero-row check-canary assumption, and one exposed incorrect handling of valid uncalled empty sequences. The corrected proof then passed. A first full PROD0 attempt also encountered a transient timeout in an older nested SQLite/Alembic regression; that check passed in isolation, and the complete PROD0 rerun passed 55/0/4.
 
