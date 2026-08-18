@@ -85,7 +85,7 @@ def main() -> int:
     check("queue_source_continuity" in live and "source override corrupted logical album queue identity" in live, "26 queue/source continuity exists")
     check("artwork = \"not_applicable\"" in live and "artwork = \"PASS\"" in live, "27 artwork acceptance and not-applicable handling exist")
     check("Human real-library review" in checklist and "human_checklist" in live, "28 human library review exists")
-    check("automation cannot fabricate" in live and '"automated": False' in live and "NOT PROVIDED" in report6c, "29 human result cannot be fabricated")
+    check("automation cannot fabricate" in live and '"automated": False' in live and "Automation did not fabricate" in report6c, "29 human result cannot be fabricated")
     check("Rerun Intake" in checklist and "no duplicate promoted fixture" in checklist, "30 Intake rerun duplicate check exists")
     check("Rescan/restart Archive Assistant" in checklist and "no duplicate final media" in checklist, "31 AA rescan duplicate check exists")
     check("BM Radio rescan changed" in live and "logical_equal" in live and "physical_equal" in live, "32 BM Radio rescan duplicate check exists")

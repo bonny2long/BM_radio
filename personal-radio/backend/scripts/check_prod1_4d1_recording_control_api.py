@@ -503,9 +503,23 @@ def case_t_u_v_static_boundaries() -> None:
         for forbidden in ["unlink(", "rename(", "replace(", "write_bytes", "write_text", "mutagen", "Mutagen"]:
             assert forbidden not in text
 
-    frontend = root.parent / "frontend"
-    frontend_hits = [path for path in frontend.rglob("*") if path.is_file() and path.suffix in {".js", ".jsx", ".ts", ".tsx", ".css"} and "music/recordings" in path.read_text(encoding="utf-8", errors="ignore")]
-    assert not frontend_hits, frontend_hits
+    # PROD6C intentionally added the smallest advanced source-curation surface.
+    # Keep the original no-broad-frontend boundary by allowing the route literal
+    # only in the API adapter and the control consumer only in TrackActionSheet.
+    frontend_src = root.parent / "frontend" / "src"
+    frontend_hits = [
+        path.relative_to(frontend_src).as_posix()
+        for path in frontend_src.rglob("*")
+        if path.is_file()
+        and path.suffix in {".js", ".jsx", ".ts", ".tsx", ".css"}
+        and "music/recordings" in path.read_text(encoding="utf-8", errors="ignore")
+    ]
+    assert frontend_hits == ["api.ts"], frontend_hits
+    api_source = (frontend_src / "api.ts").read_text(encoding="utf-8")
+    sheet_source = (frontend_src / "components" / "TrackActionSheet.tsx").read_text(encoding="utf-8")
+    assert all(token in api_source for token in ("getRecordingSourceControl", "setRecordingPreferredTrack", "clearRecordingPreferredTrack"))
+    assert all(token in sheet_source for token in ("Source details", "Automatic quality selection", "Use automatic source selection"))
+    assert "participation" not in sheet_source.lower()
 
 
 def main() -> int:
