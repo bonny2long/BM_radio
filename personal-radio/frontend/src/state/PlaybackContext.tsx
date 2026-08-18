@@ -52,6 +52,40 @@ type Playback = {
 }
 
 const Context = createContext<Playback | null>(null)
+const LATENCY_ACCEPTANCE_QUERY = 'bm_latency_acceptance'
+const LATENCY_EVENTS = ['loadstart', 'durationchange', 'loadedmetadata', 'loadeddata', 'canplay', 'playing', 'waiting', 'stalled', 'seeking', 'seeked', 'error'] as const
+
+type LatencyEvent = {
+  event: string
+  elapsedMs: number
+  currentTime: number
+  readyState: number
+  networkState: number
+}
+
+type LatencyLoad = {
+  loadId: number
+  mode: NowPlaying['mode']
+  itemId: number
+  title: string
+  startedAt: number
+  events: LatencyEvent[]
+}
+
+type LatencyAcceptanceWindow = Window & {
+  __BM_RADIO_LATENCY__?: { loads: LatencyLoad[] }
+  __BM_RADIO_LATENCY_CONTROL__?: {
+    playQueue: Playback['playQueue']
+    next: Playback['next']
+    previous: Playback['previous']
+    seek: Playback['seek']
+    togglePlayPause: Playback['togglePlayPause']
+    snapshot: () => Pick<Playback, 'nowPlaying' | 'queueIndex' | 'isPlaying' | 'currentTime' | 'duration'>
+  }
+}
+
+const latencyAcceptanceEnabled = () => new URLSearchParams(window.location.search).get(LATENCY_ACCEPTANCE_QUERY) === '1'
+
 const normalizeSource = (source?: QueueSource): QueueSource => {
   if (!source) return { kind: 'manual', canContinue: false }
   if (source.kind === 'station') return { ...source, canContinue: true, exhausted: source.exhausted ?? false }
@@ -70,6 +104,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const sourceTransition = useRef(false)
   const startedIdentity = useRef<string | null>(null)
   const endedIdentity = useRef<string | null>(null)
+  const latencyLoadId = useRef(0)
+  const activeLatencyLoad = useRef<LatencyLoad | null>(null)
   const volumeRef = useRef(clampVolume(Number(window.localStorage.getItem('bm-radio-volume') ?? .8)))
 
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null)
@@ -81,6 +117,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [volume, setVolumeState] = useState(volumeRef.current)
   const [error, setError] = useState<string | null>(null)
   const [queueSource, setQueueSource] = useState<QueueSource | null>(null)
+
+  const recordLatencyEvent = useCallback((eventName: string) => {
+    if (!latencyAcceptanceEnabled()) return
+    const el = audioRef.current
+    const active = activeLatencyLoad.current
+    if (!el || !active) return
+    active.events.push({
+      event: eventName,
+      elapsedMs: Number((performance.now() - active.startedAt).toFixed(3)),
+      currentTime: Number(el.currentTime.toFixed(3)),
+      readyState: el.readyState,
+      networkState: el.networkState,
+    })
+  }, [])
 
   const event = useCallback((event_type: string, item = itemRef.current, extra?: Record<string, unknown>) => {
     if (!item) return
@@ -115,6 +165,21 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     if (!el) return
     sourceTransition.current = true
     el.pause()
+    if (latencyAcceptanceEnabled()) {
+      const acceptanceWindow = window as LatencyAcceptanceWindow
+      const store = acceptanceWindow.__BM_RADIO_LATENCY__ ?? { loads: [] }
+      acceptanceWindow.__BM_RADIO_LATENCY__ = store
+      const active = {
+        loadId: ++latencyLoadId.current,
+        mode: item.mode,
+        itemId: item.id,
+        title: item.title,
+        startedAt: performance.now(),
+        events: [],
+      } satisfies LatencyLoad
+      store.loads.push(active)
+      activeLatencyLoad.current = active
+    }
     itemRef.current = item
     startedIdentity.current = null
     endedIdentity.current = null
@@ -255,6 +320,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       setIsPlaying(false)
       setError('Unable to play this file')
     }
+    const latencyHandlers = Object.fromEntries(
+      LATENCY_EVENTS.map(eventName => [eventName, () => recordLatencyEvent(eventName)]),
+    ) as Record<(typeof LATENCY_EVENTS)[number], () => void>
 
     el.addEventListener('timeupdate', time)
     el.addEventListener('loadedmetadata', meta)
@@ -262,6 +330,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     el.addEventListener('pause', pause)
     el.addEventListener('ended', ended)
     el.addEventListener('error', fail)
+    for (const eventName of LATENCY_EVENTS) el.addEventListener(eventName, latencyHandlers[eventName])
 
     return () => {
       el.pause()
@@ -271,8 +340,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       el.removeEventListener('pause', pause)
       el.removeEventListener('ended', ended)
       el.removeEventListener('error', fail)
+      for (const eventName of LATENCY_EVENTS) el.removeEventListener(eventName, latencyHandlers[eventName])
     }
-  }, [continueOrEnd, event, saveProgress])
+  }, [continueOrEnd, event, recordLatencyEvent, saveProgress])
 
   useEffect(() => {
     if (!nowPlaying || nowPlaying.mode !== 'audiobook' || currentTime - lastSaved.current < 15) return
@@ -339,6 +409,30 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     queueRef.current = updated
     setQueue(updated)
   }
+
+  useEffect(() => {
+    if (!latencyAcceptanceEnabled()) return
+    const acceptanceWindow = window as LatencyAcceptanceWindow
+    const control = {
+      playQueue,
+      next: () => { void continueOrEnd(1, true) },
+      previous: () => { void continueOrEnd(-1, true) },
+      seek: (seconds: number) => {
+        if (audioRef.current) audioRef.current.currentTime = seconds
+      },
+      togglePlayPause: () => {
+        const el = audioRef.current
+        if (!el || !itemRef.current) return
+        if (el.paused) void el.play()
+        else el.pause()
+      },
+      snapshot: () => ({ nowPlaying, queueIndex, isPlaying, currentTime, duration }),
+    } satisfies NonNullable<LatencyAcceptanceWindow['__BM_RADIO_LATENCY_CONTROL__']>
+    acceptanceWindow.__BM_RADIO_LATENCY_CONTROL__ = control
+    return () => {
+      if (acceptanceWindow.__BM_RADIO_LATENCY_CONTROL__ === control) delete acceptanceWindow.__BM_RADIO_LATENCY_CONTROL__
+    }
+  })
 
   return (
     <Context.Provider value={{
