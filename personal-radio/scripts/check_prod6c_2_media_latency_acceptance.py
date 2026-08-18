@@ -18,8 +18,8 @@ import sys
 import tempfile
 import time
 from typing import Any
-from urllib.parse import quote, urlparse
-from urllib.request import Request, urlopen
+from urllib.parse import urlparse
+from urllib.request import urlopen
 
 from sqlalchemy.engine import URL
 
@@ -66,6 +66,13 @@ _dynamic_port = prior._dynamic_port
 
 class MediaLatencyBlocked(RuntimeError):
     pass
+
+
+class ChromeDevToolsError(MediaLatencyBlocked):
+    def __init__(self, code: int | None, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(f"Chrome DevTools error: code={code} message={message}")
 
 
 def nas_root() -> Path:
@@ -539,8 +546,43 @@ class _CDP:
             message = self._recv()
             if message.get("id") == call_id:
                 if "error" in message:
-                    raise MediaLatencyBlocked(f"Chrome DevTools error: {message['error']}")
+                    error = message["error"]
+                    raise ChromeDevToolsError(error.get("code"), str(error.get("message", "unknown DevTools error")))
                 return message.get("result", {})
+
+
+def _is_pre_measurement_context_race(error: ChromeDevToolsError) -> bool:
+    return error.code == -32000 and "execution context was destroyed" in error.message.casefold()
+
+
+def _evaluate_value(cdp: _CDP, expression: str) -> Any:
+    response = cdp.call("Runtime.evaluate", {"expression": expression, "returnByValue": True})
+    if response.get("exceptionDetails"):
+        raise MediaLatencyBlocked(f"Chrome readiness JavaScript failed: {response['exceptionDetails']}")
+    remote = response.get("result", {})
+    if "value" not in remote:
+        raise MediaLatencyBlocked(f"Chrome readiness probe returned no value: {remote}")
+    return remote["value"]
+
+
+def _wait_for_browser_ready(cdp: _CDP, expected_url: str, timeout: float = 30) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    readiness_expression = "({href: location.href, readyState: document.readyState, control: Boolean(window.__BM_RADIO_LATENCY_CONTROL__)})"
+    last_probe: dict[str, Any] | None = None
+    while time.monotonic() < deadline:
+        try:
+            probe = _evaluate_value(cdp, readiness_expression)
+        except ChromeDevToolsError as exc:
+            if not _is_pre_measurement_context_race(exc):
+                raise
+            time.sleep(0.1)
+            continue
+        if isinstance(probe, dict):
+            last_probe = probe
+            if probe.get("href") == expected_url and probe.get("readyState") in {"interactive", "complete"} and probe.get("control") is True:
+                return probe
+        time.sleep(0.1)
+    raise MediaLatencyBlocked(f"Chrome acceptance page was not ready within {timeout:.0f}s: {last_probe}")
 
 
 def _chrome_path() -> Path:
@@ -572,16 +614,24 @@ def _browser_probe(web_port: int) -> dict[str, Any]:
         lines = active_port.read_text(encoding="utf-8").splitlines()
         debug_port = int(lines[0])
         target_url = f"http://127.0.0.1:{web_port}/?bm_latency_acceptance=1"
-        request = Request(f"http://127.0.0.1:{debug_port}/json/new?{quote(target_url, safe=':/?=&')}", method="PUT")
-        target = json.loads(urlopen(request, timeout=10).read().decode())
+        targets = json.loads(urlopen(f"http://127.0.0.1:{debug_port}/json/list", timeout=10).read().decode())
+        target = next((item for item in targets if item.get("type") == "page" and item.get("url") == "about:blank"), None)
+        if not target:
+            raise MediaLatencyBlocked("stable about:blank Chrome target is unavailable")
         cdp = _CDP(target["webSocketDebuggerUrl"])
+        cdp.call("Page.enable", {})
+        cdp.call("Runtime.enable", {})
+        navigation = cdp.call("Page.navigate", {"url": target_url})
+        if navigation.get("errorText"):
+            raise MediaLatencyBlocked(f"Chrome navigation failed: {navigation['errorText']}")
+        readiness = _wait_for_browser_ready(cdp, target_url)
         expression = r"""
 (async () => {
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const deadline = performance.now() + 30000;
   while (!window.__BM_RADIO_LATENCY_CONTROL__ && performance.now() < deadline) await sleep(100);
   if (!window.__BM_RADIO_LATENCY_CONTROL__) throw new Error('latency acceptance control unavailable');
-  const store = window.__BM_RADIO_LATENCY__;
+  const store = window.__BM_RADIO_LATENCY__ ?? (window.__BM_RADIO_LATENCY__ = {loads: []});
   const control = () => window.__BM_RADIO_LATENCY_CONTROL__;
   const waitFor = async (predicate, timeout = 15000) => {
     const until = performance.now() + timeout;
@@ -591,8 +641,8 @@ def _browser_probe(web_port: int) -> dict[str, Any]:
     }
     throw new Error('browser media event timeout');
   };
-  const playForLoad = async (loadIndex) => {
-    await waitFor(() => store.loads[loadIndex]?.events.some(event => event.event === 'playing'));
+  const playForLoad = async (loadIndex, timeout = 15000) => {
+    await waitFor(() => store.loads[loadIndex]?.events.some(event => event.event === 'playing'), timeout);
     return store.loads[loadIndex];
   };
   const tracks = await (await fetch('/api/library/tracks?limit=200')).json();
@@ -622,7 +672,7 @@ def _browser_probe(web_port: int) -> dict[str, Any]:
   };
   index = store.loads.length;
   control().playQueue([audiobook], 0, {kind: 'manual', canContinue: false});
-  await playForLoad(index);
+  await playForLoad(index, 240000);
   const audiobookLoad = index;
   control().togglePlayPause();
   await waitFor(() => !control().snapshot().isPlaying, 5000);
@@ -641,7 +691,10 @@ def _browser_probe(web_port: int) -> dict[str, Any]:
   return {loads: store.loads, musicActions, audiobookLoad, resumeMs, seekMs};
 })()
 """
-        result = cdp.call("Runtime.evaluate", {"expression": expression, "awaitPromise": True, "returnByValue": True, "timeout": 120000})
+        cdp.sock.settimeout(360)
+        result = cdp.call("Runtime.evaluate", {"expression": expression, "awaitPromise": True, "returnByValue": True, "timeout": 300000})
+        if result.get("exceptionDetails"):
+            raise MediaLatencyBlocked(f"browser timing JavaScript failed: {result['exceptionDetails']}")
         remote = result.get("result", {})
         if remote.get("subtype") == "error" or "value" not in remote:
             raise MediaLatencyBlocked(f"browser timing failed: {remote.get('description', remote)}")
@@ -657,6 +710,7 @@ def _browser_probe(web_port: int) -> dict[str, Any]:
         book_load = value["loads"][value["audiobookLoad"]]
         book_playing = next(event for event in book_load["events"] if event["event"] == "playing")
         return {
+            "readiness": readiness,
             "music": {
                 "actions": value["musicActions"],
                 "cold_playing_ms": music_ms[0],
@@ -719,7 +773,9 @@ def probe_http() -> dict[str, Any]:
         audiobook["backend_direct"][range_name] = _timed_range(api_port, chapter["stream_url"], start, end)
         audiobook["frontend_origin"][range_name] = _timed_range(web_port, chapter["stream_url"], start, end)
     m4b = next(path for path in _final_media() if path.suffix.lower() == ".m4b")
-    result = {
+    partial = {
+        "status": "PARTIAL; BROWSER MEASUREMENT PENDING; NOT A PASS",
+        "partial": True,
         "phase": phase,
         "classification": source_classification(),
         "music_http": music,
@@ -728,11 +784,16 @@ def probe_http() -> dict[str, Any]:
         },
         "audiobook_http": audiobook,
         "m4b_layout": _mp4_layout(m4b),
+        "frontend_url": f"http://127.0.0.1:{web_port}/?bm_latency_acceptance=1",
+        "backend_direct_loopback_port": api_port,
+    }
+    partial_path = evidence_dir() / f"{phase}.partial.json"
+    partial_path.write_text(json.dumps(partial, indent=2, sort_keys=True), encoding="utf-8")
+    result = {
+        **{key: value for key, value in partial.items() if key not in {"status", "partial"}},
         "browser": _browser_probe(web_port),
         "database_pool": _pool_proof(web_port, chapter["stream_url"]),
         "equality": _assert_equality(state),
-        "frontend_url": f"http://127.0.0.1:{web_port}/?bm_latency_acceptance=1",
-        "backend_direct_loopback_port": api_port,
     }
     (evidence_dir() / f"{phase}.json").write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps(result, indent=2, sort_keys=True))

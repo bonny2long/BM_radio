@@ -16,6 +16,7 @@ REPORT6C = PROJECT / "docs" / "production-upgrade" / "BM-PROD6C_Local_NAS_Pipeli
 API = PROJECT / "frontend" / "src" / "api.ts"
 SHEET = PROJECT / "frontend" / "src" / "components" / "TrackActionSheet.tsx"
 PROD6A_LIVE = PROJECT / "scripts" / "check_prod6a_listener_playback_acceptance.py"
+LATENCY_LIVE = PROJECT / "scripts" / "check_prod6c_2_media_latency_acceptance.py"
 AA_MUSIC = PROJECT / "backend" / "scripts" / "check_aa_manifest_music_import.py"
 AA_AUDIOBOOK = PROJECT / "backend" / "scripts" / "check_aa_manifest_audiobook_import.py"
 PROD0 = PROJECT / "scripts" / "check_prod0_baseline.py"
@@ -59,6 +60,7 @@ def main() -> int:
     sheet = SHEET.read_text(encoding="utf-8")
     prod0 = PROD0.read_text(encoding="utf-8")
     prod6a_live = PROD6A_LIVE.read_text(encoding="utf-8")
+    latency_live = LATENCY_LIVE.read_text(encoding="utf-8")
     aa_music = AA_MUSIC.read_text(encoding="utf-8")
     aa_audiobook = AA_AUDIOBOOK.read_text(encoding="utf-8")
     combined = "\n".join((live, checklist, report6c, api, sheet))
@@ -76,7 +78,16 @@ def main() -> int:
     check("active target used" not in live.casefold() or '"active_target_used": False' in live, "11 active PostgreSQL scan is prohibited")
     check(all(token in live for token in ("target=/media/Music,readonly", "target=/media/Audiobooks/Library,readonly", "target=/media/Books,readonly")), "12 final media is read-only to BM Radio")
     check("movies_tv_excluded" in live and "Movies and TV are excluded" in checklist, "13 Movies and TV are excluded from BM Radio")
-    check('"/api/library/scan/music"' in live and '"/api/audiobooks/scan"' in live and "real_scanners" in live and "concurrent_unconsumed_range_streams" in live and "database_pool_exhausted" in live, "14 real scanners and media-stream session-release proof are required")
+    latency_readiness = all(token in latency_live for token in (
+        'target_url = f"http://127.0.0.1:{web_port}/?bm_latency_acceptance=1"',
+        'item.get("url") == "about:blank"', 'cdp.call("Page.enable", {})', 'cdp.call("Runtime.enable", {})',
+        'cdp.call("Page.navigate", {"url": target_url})', '_wait_for_browser_ready(cdp, target_url)',
+        'probe.get("readyState") in {"interactive", "complete"}', 'probe.get("control") is True',
+        'error.code == -32000', '"execution context was destroyed" in error.message.casefold()',
+        'if not _is_pre_measurement_context_race(exc):\n                raise',
+        '"status": "PARTIAL; BROWSER MEASUREMENT PENDING; NOT A PASS"', '"partial": True',
+    )) and latency_live.index('_wait_for_browser_ready(cdp, target_url)') < latency_live.index('"awaitPromise": True')
+    check('"/api/library/scan/music"' in live and '"/api/audiobooks/scan"' in live and "real_scanners" in live and "concurrent_unconsumed_range_streams" in live and "database_pool_exhausted" in live and latency_readiness, "14 real scanners, media-session release, and synchronized latency harness are required")
     check(all(token in live for token in ("recording_id", "effective_track_id", "physical_occurrences", "logical_recordings")), "15 logical and physical identity checks exist")
     check(all(token in live for token in ("listener library exposes", "duplicate logical album", "song search", "album tracks")), "16 listener search and album duplicate checks exist")
     check("unique lossless source" in live and "lossless_vs_lossy" in live, "17 lossless versus lossy preferred source check exists")
