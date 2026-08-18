@@ -17,6 +17,9 @@ API = PROJECT / "frontend" / "src" / "api.ts"
 SHEET = PROJECT / "frontend" / "src" / "components" / "TrackActionSheet.tsx"
 PROD6A_LIVE = PROJECT / "scripts" / "check_prod6a_listener_playback_acceptance.py"
 LATENCY_LIVE = PROJECT / "scripts" / "check_prod6c_2_media_latency_acceptance.py"
+MEDIA_ROUTES = PROJECT / "backend" / "app" / "routes" / "media.py"
+NGINX = PROJECT / "frontend" / "nginx.conf"
+COMPOSE = PROJECT / "deploy" / "compose.local-production.example.yml"
 AA_MUSIC = PROJECT / "backend" / "scripts" / "check_aa_manifest_music_import.py"
 AA_AUDIOBOOK = PROJECT / "backend" / "scripts" / "check_aa_manifest_audiobook_import.py"
 PROD0 = PROJECT / "scripts" / "check_prod0_baseline.py"
@@ -61,6 +64,9 @@ def main() -> int:
     prod0 = PROD0.read_text(encoding="utf-8")
     prod6a_live = PROD6A_LIVE.read_text(encoding="utf-8")
     latency_live = LATENCY_LIVE.read_text(encoding="utf-8")
+    media_routes = MEDIA_ROUTES.read_text(encoding="utf-8")
+    nginx = NGINX.read_text(encoding="utf-8")
+    compose = COMPOSE.read_text(encoding="utf-8")
     aa_music = AA_MUSIC.read_text(encoding="utf-8")
     aa_audiobook = AA_AUDIOBOOK.read_text(encoding="utf-8")
     combined = "\n".join((live, checklist, report6c, api, sheet))
@@ -81,13 +87,32 @@ def main() -> int:
     latency_readiness = all(token in latency_live for token in (
         'target_url = f"http://127.0.0.1:{web_port}/?bm_latency_acceptance=1"',
         'item.get("url") == "about:blank"', 'cdp.call("Page.enable", {})', 'cdp.call("Runtime.enable", {})',
+        'cdp.call("Network.enable", {})', '_browser_network_trace(',
         'cdp.call("Page.navigate", {"url": target_url})', '_wait_for_browser_ready(cdp, target_url)',
         'probe.get("readyState") in {"interactive", "complete"}', 'probe.get("control") is True',
         'error.code == -32000', '"execution context was destroyed" in error.message.casefold()',
         'if not _is_pre_measurement_context_race(exc):\n                raise',
         '"status": "PARTIAL; BROWSER MEASUREMENT PENDING; NOT A PASS"', '"partial": True',
+        '"full_metadata_ranges": full_metadata_ranges', '"m4b_atom_inventory": _atom_inventory(m4b)',
+        '"ffprobe": ffprobe', 'minimal_comparison = _minimal_server_comparison(m4b)', '"minimal_range_server": minimal_comparison',
+        '"read_only_source": True', '"attachment": attachment', '"inline": inline',
     )) and latency_live.index('_wait_for_browser_ready(cdp, target_url)') < latency_live.index('"awaitPromise": True')
-    check('"/api/library/scan/music"' in live and '"/api/audiobooks/scan"' in live and "real_scanners" in live and "concurrent_unconsumed_range_streams" in live and "database_pool_exhausted" in live and latency_readiness, "14 real scanners, media-session release, and synchronized latency harness are required")
+    audiobook_delivery = all(token in media_routes for token in (
+        "AUDIOBOOK_ACCEL_PREFIX = '/__bm_audiobooks/'", "accel_prefix: str | None = None",
+        "'X-Accel-Redirect': accel_prefix + quote(relative, safe='/')", "accel_redirect=AUDIOBOOK_ACCEL_PREFIX + quote(relative, safe='/')",
+        "AUDIOBOOK_AUTH_CACHE_TTL_SECONDS = 2.0", "AUDIOBOOK_AUTH_CACHE_MAX_ENTRIES = 128",
+        "AUDIOBOOK_OPEN_RANGE_INITIAL_BYTES = 4 * 1024 * 1024", "AUDIOBOOK_OPEN_RANGE_BYTES = 64 * 1024",
+        "OPEN_ENDED_BYTE_RANGE.fullmatch", "safe_audiobook_file(cached_metadata, request)", "safe_audiobook_file(metadata, request)",
+        "'Content-Range': f'bytes {start}-{end}/{metadata.size}'", "'Accept-Ranges': 'bytes'",
+        "cached_audiobook_file_metadata(audiobook_id, chapter_id)", "cache_audiobook_file_metadata(audiobook_id, chapter_id, metadata)",
+        "validated_audiobook_file_metadata(chapter.path)", "with metadata.path.open('rb') as stream",
+        "path.is_file()", "is_approved_path(path, [root])", "resolved.relative_to(root.resolve())", "filename=path.name",
+    )) and all(token in nginx for token in (
+        "location ^~ /__bm_audiobooks/", "internal;", "alias /media/Audiobooks/Library/;", "sendfile on;",
+    )) and "bm-radio-audiobooks:/media/Audiobooks/Library:ro" in compose and all(
+        "target=/media/Audiobooks/Library,readonly" in source for source in (latency_live, live, prod6a_live)
+    ) and "content_disposition_type=" not in media_routes
+    check('"/api/library/scan/music"' in live and '"/api/audiobooks/scan"' in live and "real_scanners" in live and "concurrent_unconsumed_range_streams" in live and "database_pool_exhausted" in live and latency_readiness and audiobook_delivery, "14 real scanners, media-session release, synchronized latency harness, and bounded audiobook delivery are required")
     check(all(token in live for token in ("recording_id", "effective_track_id", "physical_occurrences", "logical_recordings")), "15 logical and physical identity checks exist")
     check(all(token in live for token in ("listener library exposes", "duplicate logical album", "song search", "album tracks")), "16 listener search and album duplicate checks exist")
     check("unique lossless source" in live and "lossless_vs_lossy" in live, "17 lossless versus lossy preferred source check exists")

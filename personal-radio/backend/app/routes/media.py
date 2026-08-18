@@ -1,6 +1,12 @@
+from collections import OrderedDict
+from dataclasses import dataclass
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+import re
+from threading import Lock
+import time
+from urllib.parse import quote
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from .. import models
 from ..availability import active_tracks, is_audiobook_available, is_chapter_available, is_track_available
@@ -18,6 +24,25 @@ COVER_NAMES = ('cover.jpg', 'cover.jpeg', 'cover.png', 'cover.webp', 'folder.jpg
 TRACK_UNAVAILABLE_MESSAGE = 'Track is unavailable in the current library'
 AUDIOBOOK_UNAVAILABLE_MESSAGE = 'Audiobook is unavailable in the current library'
 CHAPTER_UNAVAILABLE_MESSAGE = 'Audiobook chapter is unavailable in the current library'
+AUDIOBOOK_ACCEL_PREFIX = '/__bm_audiobooks/'
+AUDIOBOOK_AUTH_CACHE_TTL_SECONDS = 2.0
+AUDIOBOOK_AUTH_CACHE_MAX_ENTRIES = 128
+AUDIOBOOK_OPEN_RANGE_INITIAL_BYTES = 4 * 1024 * 1024
+AUDIOBOOK_OPEN_RANGE_BYTES = 64 * 1024
+OPEN_ENDED_BYTE_RANGE = re.compile(r'bytes=(\d+)-', re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class AudiobookFileMetadata:
+    path: Path
+    size: int
+    media_type: str
+    content_disposition: str
+    accel_redirect: str
+
+
+_audiobook_auth_cache: OrderedDict[tuple[int, int], tuple[float, AudiobookFileMetadata]] = OrderedDict()
+_audiobook_auth_cache_lock = Lock()
 
 
 def music_media_roots() -> list[Path]:
@@ -27,7 +52,31 @@ def music_media_roots() -> list[Path]:
     return roots
 
 
-def safe_file(path_value: str, roots: list[Path], types: dict[str, str]):
+def cached_audiobook_file_metadata(audiobook_id: int, chapter_id: int) -> AudiobookFileMetadata | None:
+    key = (audiobook_id, chapter_id)
+    now = time.monotonic()
+    with _audiobook_auth_cache_lock:
+        cached = _audiobook_auth_cache.get(key)
+        if cached is None:
+            return None
+        expires_at, metadata = cached
+        if expires_at <= now:
+            _audiobook_auth_cache.pop(key, None)
+            return None
+        _audiobook_auth_cache.move_to_end(key)
+    return metadata
+
+
+def cache_audiobook_file_metadata(audiobook_id: int, chapter_id: int, metadata: AudiobookFileMetadata) -> None:
+    key = (audiobook_id, chapter_id)
+    with _audiobook_auth_cache_lock:
+        _audiobook_auth_cache[key] = (time.monotonic() + AUDIOBOOK_AUTH_CACHE_TTL_SECONDS, metadata)
+        _audiobook_auth_cache.move_to_end(key)
+        while len(_audiobook_auth_cache) > AUDIOBOOK_AUTH_CACHE_MAX_ENTRIES:
+            _audiobook_auth_cache.popitem(last=False)
+
+
+def safe_file(path_value: str, roots: list[Path], types: dict[str, str], *, accel_prefix: str | None = None):
     path = Path(path_value)
     suffix = path.suffix.lower()
     if not path.is_file():
@@ -36,7 +85,70 @@ def safe_file(path_value: str, roots: list[Path], types: dict[str, str]):
         raise HTTPException(415, 'Unsupported file type')
     if not is_approved_path(path, roots):
         raise HTTPException(403, 'Path is outside the final library')
-    return FileResponse(path, media_type=types[suffix], filename=path.name, headers=CACHE_HEADERS if types is IMAGE_TYPES else None)
+    headers = CACHE_HEADERS if types is IMAGE_TYPES else None
+    if accel_prefix is not None:
+        relative = path.resolve().relative_to(roots[0].resolve()).as_posix()
+        headers = {'X-Accel-Redirect': accel_prefix + quote(relative, safe='/')}
+    return FileResponse(path, media_type=types[suffix], filename=path.name, headers=headers)
+
+
+def validated_audiobook_file_metadata(path_value: str) -> AudiobookFileMetadata:
+    path = Path(path_value)
+    suffix = path.suffix.lower()
+    root = Path(settings.AUDIOBOOKS_ROOT)
+    if not path.is_file():
+        raise HTTPException(404, 'File not found')
+    if suffix not in MEDIA_TYPES:
+        raise HTTPException(415, 'Unsupported file type')
+    if not is_approved_path(path, [root]):
+        raise HTTPException(403, 'Path is outside the final library')
+    resolved = path.resolve()
+    relative = resolved.relative_to(root.resolve()).as_posix()
+    return AudiobookFileMetadata(
+        path=resolved,
+        size=resolved.stat().st_size,
+        media_type=MEDIA_TYPES[suffix],
+        content_disposition=f"attachment; filename*=utf-8''{quote(resolved.name, safe='')}",
+        accel_redirect=AUDIOBOOK_ACCEL_PREFIX + quote(relative, safe='/'),
+    )
+
+
+def safe_audiobook_file(metadata: AudiobookFileMetadata, request: Request | None):
+    """Serve open-ended audiobook probes as bounded, reusable responses.
+
+    Chromium cancels a connection after reading the small portion it needs from
+    an open-ended M4B range. Docker Desktop makes hundreds of replacement TCP
+    connections expensive, so finish a bounded subset of the requested range
+    instead. Explicit and multipart ranges retain Nginx's native handling.
+    """
+    range_header = request.headers.get('range', '') if request is not None else ''
+    match = OPEN_ENDED_BYTE_RANGE.fullmatch(range_header.strip())
+    if match is None:
+        return FileResponse(
+            metadata.path, media_type=metadata.media_type, filename=metadata.path.name,
+            headers={'X-Accel-Redirect': metadata.accel_redirect},
+        )
+    start = int(match.group(1))
+    if start >= metadata.size:
+        raise HTTPException(
+            416, 'Requested range not satisfiable',
+            headers={'Content-Range': f'bytes */{metadata.size}', 'Accept-Ranges': 'bytes'},
+        )
+    limit = AUDIOBOOK_OPEN_RANGE_INITIAL_BYTES if start == 0 else AUDIOBOOK_OPEN_RANGE_BYTES
+    end = min(metadata.size - 1, start + limit - 1)
+    try:
+        with metadata.path.open('rb') as stream:
+            stream.seek(start)
+            content = stream.read(end - start + 1)
+    except FileNotFoundError:
+        raise HTTPException(404, 'File not found') from None
+    headers = {
+        'Accept-Ranges': 'bytes',
+        'Content-Range': f'bytes {start}-{end}/{metadata.size}',
+        'Content-Length': str(len(content)),
+        'Content-Disposition': metadata.content_disposition,
+    }
+    return Response(content, status_code=206, media_type=metadata.media_type, headers=headers)
 
 
 def find_cover(start: Path, roots: list[Path]) -> Path | None:
@@ -115,7 +227,10 @@ def album_cover(artist: str, album: str, db: Session = Depends(get_db, scope="fu
 
 
 @router.get('/audiobooks/{audiobook_id}/chapters/{chapter_id}/stream')
-def stream_audiobook_chapter(audiobook_id: int, chapter_id: int, db: Session = Depends(get_db, scope="function")):
+def stream_audiobook_chapter(audiobook_id: int, chapter_id: int, request: Request = None, db: Session = Depends(get_db, scope="function")):
+    cached_metadata = cached_audiobook_file_metadata(audiobook_id, chapter_id)
+    if cached_metadata is not None:
+        return safe_audiobook_file(cached_metadata, request)
     book = db.get(models.Audiobook, audiobook_id)
     if not book:
         raise HTTPException(404, 'Audiobook not found')
@@ -126,7 +241,10 @@ def stream_audiobook_chapter(audiobook_id: int, chapter_id: int, db: Session = D
         raise HTTPException(409, AUDIOBOOK_UNAVAILABLE_MESSAGE)
     if not is_chapter_available(chapter):
         raise HTTPException(409, CHAPTER_UNAVAILABLE_MESSAGE)
-    return safe_file(chapter.path, [Path(settings.AUDIOBOOKS_ROOT)], MEDIA_TYPES)
+    metadata = validated_audiobook_file_metadata(chapter.path)
+    response = safe_audiobook_file(metadata, request)
+    cache_audiobook_file_metadata(audiobook_id, chapter_id, metadata)
+    return response
 
 
 @router.get('/audiobooks/{audiobook_id}/cover')

@@ -578,7 +578,9 @@ def run_automated() -> dict[str, Any]:
         _require(_docker(
             "run", "--detach", "--name", web_name, "--network", network, "--network-alias", "frontend",
             "--read-only", "--security-opt", "no-new-privileges:true", "--tmpfs", "/tmp:rw,noexec,nosuid,size=32m",
-            "--publish", "127.0.0.1::8080", FRONTEND_IMAGE, timeout=300,
+            "--publish", "127.0.0.1::8080",
+            "--mount", f"type=bind,source={root / 'Audiobooks' / 'Library'},target=/media/Audiobooks/Library,readonly",
+            FRONTEND_IMAGE, timeout=300,
         ), "loopback production frontend creation")
         _wait_health(web_name)
         port = _dynamic_port(web_name, "8080/tcp")

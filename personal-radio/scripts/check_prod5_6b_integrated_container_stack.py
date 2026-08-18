@@ -728,6 +728,8 @@ def build_and_run() -> dict[str, Any]:
                 "/tmp:rw,noexec,nosuid,size=32m",
                 "--publish",
                 "127.0.0.1::8080",
+                "--mount",
+                f"type=bind,source={roots['audiobooks']},target=/media/Audiobooks/Library,readonly",
                 FRONTEND_IMAGE,
                 timeout=300,
             ),
