@@ -4,7 +4,7 @@ BM-PROD6B status: **RADIO-QUALITY PASS**
 
 Starting SHA: `387033a7cfad43ce42c9f8ba7fc0372c7b471b30`
 
-Ending SHA / working-tree state: HEAD remains `387033a7cfad43ce42c9f8ba7fc0372c7b471b30`; the intentional PROD6B implementation and evidence changes listed by final `git status --short` remain uncommitted for exact review.
+Implementation and accepted phase commit: `5e3b2be2e5163c37297881dd9d1fcd33d55bd129`.
 
 ## PROD6A final-commit documentation correction
 
@@ -81,8 +81,8 @@ Cleanup: disposable fixture database removed by temporary-directory cleanup; no 
 - Frontend build: PASS
 - Frontend lint: PASS — 0 errors, 8 existing warnings
 - `git diff --check`: PASS
-- Final git status: intentional PROD6B files and compatibility/documentation updates remain uncommitted for exact review; no unexpected generated files are present
+- Final git status at accepted phase commit: clean; no unexpected generated files were present
 
-Next action: review the exact PROD6B diff and create the phase commit if accepted. Then, only after explicit approval, proceed to BM-PROD6C Library, Playlist, Feedback, and Preferred-Source UX Acceptance.
+Next reviewed phase: BM-PROD6C Library, Playlist, Feedback, and Preferred-Source UX Acceptance.
 
 **STOP: BM-PROD6B RADIO-QUALITY PASS. No PROD6C, audiobook, TrueNAS, real-library import, or SQLite-retirement work was started.**

@@ -52,6 +52,27 @@ def main() -> None:
         }],
     }), encoding="utf-8")
 
+    unknown_album_dir = mp3_root / "Acceptance Artist" / "Unknown Date Album"
+    unknown_metadata_dir = unknown_album_dir / "metadata"
+    unknown_metadata_dir.mkdir(parents=True)
+    unknown_media_file = unknown_album_dir / "01 - Timeless Test.mp3"
+    unknown_media_file.write_bytes(b"not real audio")
+    (unknown_metadata_dir / "move_manifest.json").write_text(json.dumps({
+        "manifest_version": "v1",
+        "metadata_version": "test-unknown-year",
+        "summary": {
+            "album_artist": "Acceptance Artist",
+            "album_title": "Unknown Date Album",
+            "year": "Unknown Year",
+            "format": "MP3",
+        },
+        "confirmed_metadata": {
+            "album_artist": "Acceptance Artist",
+            "album_title": "Unknown Date Album",
+            "year": "Unknown Year",
+        },
+    }), encoding="utf-8")
+
     settings.MUSIC_ROOT = str(music_root)
     settings.MUSIC_MP3_ROOT = str(mp3_root)
     settings.MUSIC_FLAC_ROOT = str(flac_root)
@@ -66,7 +87,7 @@ def main() -> None:
 
     result = scan_music(db)
     assert result["errors"] == [], result["errors"]
-    track = db.query(models.Track).one()
+    track = db.query(models.Track).filter_by(path=str(media_file)).one()
     assert track.artist == "OutKast", track.artist
     assert track.album_artist == "OutKast", track.album_artist
     assert track.album == "Aquemini", track.album
@@ -82,6 +103,9 @@ def main() -> None:
     track_profile = db.query(models.TrackRadioProfile).filter_by(track_id=track.id).one()
     assert track_profile.primary_genre == "Hip-Hop", track_profile.primary_genre
     assert track_profile.source == "archive_assistant_manifest", track_profile.source
+    unknown_track = db.query(models.Track).filter_by(path=str(unknown_media_file)).one()
+    assert unknown_track.year is None, unknown_track.year
+    assert result["tracks_added"] == 2, result
     print("ok: AA music manifest import")
 
 

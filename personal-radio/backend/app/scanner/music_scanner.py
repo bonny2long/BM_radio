@@ -86,6 +86,13 @@ def read_metadata(path: Path) -> dict[str, Any]:
     return result
 
 
+def normalized_year(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    match = re.search(r'(?<!\d)((?:19|20)\d{2})(?!\d)', str(value).strip())
+    return int(match.group(1)) if match else None
+
+
 def generic(value):
     return not value or str(value).strip().lower() in {
         'unknown artist', 'unknown album', 'unknown year', 'cd1', 'cd2', 'track 01', 'various artists', 'unknown'
@@ -834,7 +841,10 @@ def scan_music(db: Session):
                     album_artist = aa_meta.get('album_artist') or fallback_album_artist or artist
                     fallback_album = path_data.get('album') if is_discography else (pick(side, path_data, tags, 'album') or path_data.get('album') or path.parent.name)
                     album = clean_album(aa_meta.get('album') or fallback_album)
-                    year = aa_meta.get('year') or (path_data.get('year') if is_discography else pick(side, path_data, tags, 'year'))
+                    year = normalized_year(
+                        aa_meta.get('year')
+                        or (path_data.get('year') if is_discography else pick(side, path_data, tags, 'year'))
+                    )
 
                     embedded_title = tags.get('title')
                     raw_title = embedded_title or path.stem

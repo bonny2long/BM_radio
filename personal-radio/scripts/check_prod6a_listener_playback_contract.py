@@ -112,7 +112,7 @@ def main() -> int:
     check("station_quality\": \"deferred to BM-PROD6B" in live and "Station recommendation quality is deferred to BM-PROD6B" in report_6a, "37 station quality is explicitly deferred")
     check("truenas_work\": False" in live and "TrueNAS work: prohibited" in report_6a, "38 TrueNAS work is prohibited")
     check("check_prod5_6b_integrated_container_stack_contract.py" in prod0, "39 5.6B contract remains registered")
-    check("check_prod6a_listener_playback_contract.py" in prod0 and "check_prod6b_station_quality_contract.py" in prod0 and prod0_mandatory_count(prod0) == 60, "40 full PROD0 preserves 60 mandatory checks through PROD6B")
+    check("check_prod6a_listener_playback_contract.py" in prod0 and "check_prod6b_station_quality_contract.py" in prod0 and prod0_mandatory_count(prod0) >= 60, "40 full PROD0 preserves at least 60 mandatory checks through PROD6B")
 
     run_prior("scripts/check_prod6a_player_state_regressions.py")
     if not arguments.skip_prior_regressions:

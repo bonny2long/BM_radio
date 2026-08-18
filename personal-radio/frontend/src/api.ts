@@ -13,7 +13,9 @@ function invalidateStationCaches(){invalidateCache('stations')}
 function invalidatePlaylistCaches(){invalidateCache('playlists');invalidateCache('smart-playlists')}
 export type LibrarySummary={tracks:number;artists:number;albums:number}
 export type AudiobookSummary={available:number;not_started:number;in_progress:number;finished:number;favorites:number;total_listening_seconds:number}
-export type Track={id:number;title:string;artist:string;album:string;year?:number|null;genre?:string|null;duration_seconds?:number;stream_url:string;cover_url?:string|null}
+export type Track={id:number;title:string;artist:string;album:string;year?:number|null;genre?:string|null;duration_seconds?:number;stream_url:string;cover_url?:string|null;recording_id?:number;effective_track_id?:number;source_resolution?:string;source_confidence?:string|null}
+export type RecordingSourceCandidate={track_id:number;track:{title:string;artist:string;album:string;file_ext?:string|null;library_availability?:string|null};technical?:{codec?:string|null;container?:string|null;is_lossless?:boolean|null;sample_rate_hz?:number|null;bit_depth_bits?:number|null;bitrate_bps?:number|null}|null;preference_flags:{is_auto_preferred:boolean;is_user_preferred:boolean;is_effective_source:boolean}}
+export type RecordingSourceControl={recording:{id:number;artist:string;title:string};preference?:{auto_preferred_track_id?:number|null;user_preferred_track_id?:number|null}|null;effective_source:{track_id?:number|null;source:string};candidates:RecordingSourceCandidate[]}
 export type Audiobook={id:number;title:string;author:string;narrator?:string|null;status:string;favorite:boolean;duration_seconds?:number;cover_url?:string|null}
 export type ContainedBook={series_index?:string|number;title:string;display_title?:string;chapter_id?:number}
 export type Chapter={id:number;title:string;sort_order:number;duration_seconds?:number;stream_url:string}
@@ -71,6 +73,9 @@ export const setTrackFeedback=(trackId:number,value:'thumbs_up'|'thumbs_down'|'n
 export const getTrackFeedback=(trackId:number)=>request<{value:string}>(`/playback/tracks/${trackId}/feedback`)
 export const setTrackFavorite=(trackId:number,favorite?:boolean)=>request<{favorite:boolean}>(`/playback/tracks/${trackId}/favorite`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({favorite})}).then(r=>{invalidateStationCaches();return r})
 export const getTrackFavorite=(trackId:number)=>request<{favorite:boolean}>(`/playback/tracks/${trackId}/favorite`)
+export const getRecordingSourceControl=(recordingId:number)=>request<RecordingSourceControl>(`/music/recordings/${recordingId}/control`)
+export const setRecordingPreferredTrack=(recordingId:number,trackId:number)=>request<RecordingSourceControl>(`/music/recordings/${recordingId}/preferred-track`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({track_id:trackId})})
+export const clearRecordingPreferredTrack=(recordingId:number)=>request<RecordingSourceControl>(`/music/recordings/${recordingId}/preferred-track`,{method:'DELETE'})
 export const getRecentPlayback=(limit=5)=>request<{items:RecentPlaybackItem[]}>(`/playback/recent?limit=${limit}`)
 export const logPlaybackEvent=(event:{event_type:string;track_id?:number;audiobook_id?:number;audiobook_chapter_id?:number;position_seconds?:number;completed_percent?:number;mode?:string;station_name?:string})=>request('/playback/event',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(event)})
 export const getTracksPage=(limit=100,offset=0)=>request<TrackPage>(`/library/tracks-page?limit=${limit}&offset=${offset}`)

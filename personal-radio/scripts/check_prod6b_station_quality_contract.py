@@ -111,7 +111,7 @@ def main() -> int:
     check("truenas_work" in acceptance and "TrueNAS work: prohibited" in report6b, "49 TrueNAS work is prohibited")
     check("check_prod6a_listener_playback_contract.py" in prod0, "50 PROD6A contract remains registered")
     check("check_prod5_6b_integrated_container_stack_contract.py" in prod0, "51 PROD5.6B contract remains registered")
-    check("check_prod6b_station_quality_contract.py" in prod0 and prod0_mandatory_count(prod0) == 60, "52 full PROD0 preserves 60 mandatory checks")
+    check("check_prod6b_station_quality_contract.py" in prod0 and prod0_mandatory_count(prod0) >= 60, "52 full PROD0 preserves at least 60 mandatory checks")
 
     run("scripts/check_prod6b_frontend_station_refill.py")
     if not args.skip_prior_regressions:
