@@ -175,6 +175,7 @@ def main() -> int:
         ("listener playback queue and media delivery contract", [sys.executable, "scripts/check_prod6a_listener_playback_contract.py", "--skip-prior-regressions"], PROJECT_ROOT),
         ("radio station behavior and recommendation quality contract", [sys.executable, "scripts/check_prod6b_station_quality_contract.py", "--skip-prior-regressions"], PROJECT_ROOT),
         ("local NAS pipeline library playlist feedback and source UX contract", [sys.executable, "scripts/check_prod6c_library_source_ux_contract.py", "--skip-prior-regressions"], PROJECT_ROOT),
+        ("audiobook listener progress resume and long-session contract", [sys.executable, "scripts/check_prod6d_audiobook_listener_contract.py", "--skip-prior-regressions"], PROJECT_ROOT),
         ("AA audiobook manifest import", [sys.executable, "scripts/check_aa_manifest_audiobook_import.py"], BACKEND),
         ("audiobook multi-book ordering", [sys.executable, "scripts/check_audiobook_multibook_ordering.py"], BACKEND),
         ("audiobook progress reset", [sys.executable, "scripts/check_audiobook_progress_reset.py"], BACKEND),

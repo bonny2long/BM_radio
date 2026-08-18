@@ -5,7 +5,7 @@ Status: **MEDIA-LATENCY PASS**
 ## Phase identity and safety boundary
 
 - Starting SHA: `9d7309a8c78ad5383631d37665c608b996b8ae44`.
-- Ending SHA: `9d7309a8c78ad5383631d37665c608b996b8ae44` plus the reviewed, uncommitted PROD6C.2 working-tree change described here.
+- Final accepted implementation commit: `b6d9a1b97c88e35f8774730ffcab2dafb4ce0428`.
 - Fixture classification: `copied_test_media=true`, `generated_by_acceptance_script=false`, `original_only_copy=false`.
 - Copied source inventory: 26 files. Final media inventory: 10 files.
 - Protected preflight SHA-256: `5fcaf1261e0dd11e5f342a77ed7ea656334c2cef8c9b547cb8cabf6a3e3728a3`.
@@ -62,7 +62,7 @@ The production correction is deliberately bounded:
 - Completed bounded responses allow connection reuse and avoid unnecessary bind-mount I/O. The final trace reused 131 responses across only five connections and observed about 11.7 MB before metadata instead of treating each request as the rest of the 287.6 MB file.
 - Music delivery and `Content-Disposition` were not changed.
 
-Rejected experiments are preserved in the evidence trail. A larger backend streaming chunk worsened startup to about 103 seconds. Internal Nginx offload alone improved startup to about 29.8 seconds; offload plus `sendfile` and the authorization cache improved it to about 19.7 seconds. A 1 MiB bounded response passed narrowly at 4.81 seconds. The evidence-based 256 KiB bound produced the accepted margin.
+Rejected experiments are preserved in the evidence trail. A larger backend streaming chunk worsened startup to about 103 seconds. Internal Nginx offload alone improved startup to about 29.8 seconds; offload plus `sendfile` and the authorization cache improved it to about 19.7 seconds. A 1 MiB bounded response passed narrowly at 4.81 seconds. A later 256 KiB experiment improved the margin but was superseded; the final accepted policy is 4 MiB for `bytes=0-` and 64 KiB for later open-ended audiobook probes.
 
 ## Post-fix browser acceptance
 

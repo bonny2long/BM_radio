@@ -70,11 +70,13 @@ export default function NowPlayingPage({
     currentTime,
     duration,
     volume,
+    playbackRate,
     togglePlayPause,
     next,
     previous,
     seek,
     setVolume,
+    setPlaybackRate,
   } = usePlayback()
 
   const [feedback, setFeedback] = useState('neutral')
@@ -231,6 +233,21 @@ export default function NowPlayingPage({
           <ProgressBar current={currentTime} duration={duration} onSeek={seek} />
         </div>
 
+        {!music && (
+          <label className="np-volume">
+            <span>Speed</span>
+            <select
+              aria-label="Audiobook playback speed"
+              value={playbackRate}
+              onChange={event => setPlaybackRate(Number(event.target.value))}
+              style={{ minHeight: 44, borderRadius: 10, padding: '0 12px', background: 'var(--bg-surface)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)' }}
+            >
+              {[0.75, 1, 1.25, 1.5, 1.75, 2].map(rate => <option key={rate} value={rate}>{rate.toFixed(rate === 1 || rate === 2 ? 1 : 2).replace(/0$/, '')}x</option>)}
+            </select>
+            <span>{playbackRate}x</span>
+          </label>
+        )}
+
         <label className="np-volume">
           <span>Volume</span>
           <input aria-label="Playback volume" type="range" min={0} max={1} step={0.05} value={volume} onChange={event => setVolume(Number(event.target.value))} />
@@ -243,7 +260,7 @@ export default function NowPlayingPage({
               <ThumbsDownIcon />
             </IconButton>
           ) : (
-            <button onClick={() => seek(Math.max(0, currentTime - 15))} className="np-skip-button">-15</button>
+            <button aria-label="Seek back 15 seconds" onClick={() => seek(Math.max(0, currentTime - 15))} className="np-skip-button">-15</button>
           )}
 
           <IconButton label="Previous" onClick={previous} disabled={!hasPrev} size={50}>
@@ -263,7 +280,7 @@ export default function NowPlayingPage({
               <ThumbsUpIcon />
             </IconButton>
           ) : (
-            <button onClick={() => seek(Math.min(duration, currentTime + 30))} className="np-skip-button">+30</button>
+            <button aria-label="Seek forward 30 seconds" onClick={() => seek(Math.min(duration, currentTime + 30))} className="np-skip-button">+30</button>
           )}
         </div>
 

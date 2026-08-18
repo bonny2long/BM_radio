@@ -19,7 +19,7 @@ export type RecordingSourceControl={recording:{id:number;artist:string;title:str
 export type Audiobook={id:number;title:string;author:string;narrator?:string|null;status:string;favorite:boolean;duration_seconds?:number;cover_url?:string|null}
 export type ContainedBook={series_index?:string|number;title:string;display_title?:string;chapter_id?:number}
 export type Chapter={id:number;title:string;sort_order:number;duration_seconds?:number;stream_url:string}
-export type AudiobookDetail=Audiobook&{contained_books?:ContainedBook[];latest_progress?:{chapter_id?:number;position_seconds:number;progress_percent:number;chapter_progress_percent?:number;overall_progress_percent?:number;updated_at?:string}|null;chapters:Chapter[]}
+export type AudiobookDetail=Audiobook&{contained_books?:ContainedBook[];latest_progress?:{chapter_id?:number;position_seconds:number;progress_percent:number;chapter_progress_percent?:number;overall_progress_percent?:number;completion_state?:string;checkpointed_at?:string;updated_at?:string}|null;chapters:Chapter[]}
 export type Station={id?:number;name:string;type:string;seed_value?:string|null;track_count:number;source?:'system'|'user';favorite?:boolean;family?:string|null;display_family?:string|null;featured?:boolean;is_family_station?:boolean}
 export type StationQueueResponse={queue:Track[];source_type?:string;seed_value?:string|null;requested_limit?:number;returned?:number;exclude_count?:number;exhausted?:boolean;remaining_estimate?:number}
 export type AlbumSummary={title:string;artist:string;year?:number|null;track_count:number;cover_url?:string|null}
@@ -56,7 +56,7 @@ export const deleteStation=(id:number)=>request<{deleted:boolean}>('/stations/'+
 export const favoriteStation=(id:number)=>request<{favorite:boolean}>(`/stations/${id}/favorite`,{method:'POST'}).then(r=>{invalidateStationCaches();return r})
 const stationQueueRequests=new Map<string,Promise<StationQueueResponse>>()
 export const getStationQueue=(type:string,seedValue?:string|null,limit=50,excludeTrackIds:number[]=[])=>{const cappedExcludeIds=excludeTrackIds.slice(-200);const key=JSON.stringify({type,seedValue:seedValue??null,limit,excludeTrackIds:cappedExcludeIds});const existing=stationQueueRequests.get(key);if(existing)return existing;const promise=request<StationQueueResponse>('/queue/station',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,seed_value:seedValue,limit,shuffle:true,exclude_track_ids:cappedExcludeIds})}).finally(()=>stationQueueRequests.delete(key));stationQueueRequests.set(key,promise);return promise}
-export const updateAudiobookProgress=(id:number,p:{chapter_id:number;position_seconds:number;progress_percent:number})=>request(`/audiobooks/${id}/progress`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)})
+export const updateAudiobookProgress=(id:number,p:{chapter_id:number;position_seconds:number;progress_percent:number;checkpointed_at:string})=>request(`/audiobooks/${id}/progress`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)})
 export const favoriteAudiobook=(id:number)=>request<{favorite:boolean}>(`/audiobooks/${id}/favorite`,{method:'POST'})
 export const getArtists=()=>request<ArtistSummary[]>('/library/artists')
 export const getArtistsPage=(limit=50,offset=0)=>cachedRequest<ArtistPage>(`artists-page:${limit}:${offset}`,`/library/artists-page?limit=${limit}&offset=${offset}`,30000)

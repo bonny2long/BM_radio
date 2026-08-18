@@ -30,8 +30,8 @@ def main() -> None:
     db.flush()
 
     now = datetime.now(timezone.utc)
-    db.add(models.AudiobookProgress(audiobook_id=book.id, chapter_id=chapter1.id, position_seconds=40, progress_percent=20, status="in_progress", updated_at=now - timedelta(minutes=5)))
-    db.add(models.AudiobookProgress(audiobook_id=book.id, chapter_id=other_chapter.id, position_seconds=80, progress_percent=80, status="in_progress", updated_at=now))
+    progress = models.AudiobookProgress(audiobook_id=book.id, chapter_id=chapter1.id, position_seconds=40, progress_percent=20, status="in_progress", checkpointed_at=now - timedelta(minutes=5), updated_at=now - timedelta(minutes=5))
+    db.add(progress)
     db.commit()
     db.refresh(book)
 
@@ -39,21 +39,30 @@ def main() -> None:
     assert detail["latest_progress"] is not None, detail
     assert detail["latest_progress"]["chapter_id"] == chapter1.id, detail["latest_progress"]
 
-    db.add(models.AudiobookProgress(audiobook_id=book.id, chapter_id=chapter2.id, position_seconds=0, progress_percent=0, status="available", updated_at=now + timedelta(minutes=1)))
+    progress.chapter_id = other_chapter.id
+    progress.position_seconds = 80
+    progress.progress_percent = 80
     db.commit()
     db.refresh(book)
     detail = as_detail(book)
-    assert detail["latest_progress"]["chapter_id"] == chapter1.id, detail["latest_progress"]
+    assert detail["latest_progress"] is None, detail["latest_progress"]
 
-    db.add(models.AudiobookProgress(audiobook_id=book.id, chapter_id=chapter2.id, position_seconds=1, progress_percent=0.1, status="in_progress", updated_at=now + timedelta(minutes=2)))
+    progress.chapter_id = chapter2.id
+    progress.position_seconds = 1
+    progress.progress_percent = 0.1
     db.commit()
     db.refresh(book)
     detail = as_detail(book)
-    assert detail["latest_progress"]["chapter_id"] == chapter1.id, detail["latest_progress"]
+    assert detail["latest_progress"] is None, detail["latest_progress"]
+
+    progress.chapter_id = chapter1.id
+    progress.position_seconds = 40
+    progress.progress_percent = 20
+    db.commit()
 
     response = reset_audiobook(book.id, db)
     assert response["book_status"] == "available", response
-    assert response["progress_deleted"] == 4, response
+    assert response["progress_deleted"] == 1, response
     assert response["latest_progress"] is None, response
     assert db.query(models.AudiobookProgress).filter_by(audiobook_id=book.id).count() == 0
     db.refresh(book)

@@ -345,11 +345,14 @@ class AudiobookProgress(Base):
     __tablename__ = "audiobook_progress"
 
     id = Column(Integer, primary_key=True, index=True)
-    audiobook_id = Column(Integer, ForeignKey("audiobooks.id"), index=True)
+    # There is one durable listener checkpoint per audiobook. The chapter
+    # identifies the physical part that owns position_seconds.
+    audiobook_id = Column(Integer, ForeignKey("audiobooks.id"), unique=True, index=True, nullable=False)
     chapter_id = Column(Integer, ForeignKey("audiobook_chapters.id"), nullable=True, index=True)
     position_seconds = Column(Float)
     progress_percent = Column(Float)
     status = Column(String) # in_progress, finished
+    checkpointed_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), index=True)
 
     audiobook = relationship("Audiobook", back_populates="progress")

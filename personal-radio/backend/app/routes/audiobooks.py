@@ -1,6 +1,7 @@
 from pathlib import Path
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 from .. import models
@@ -54,7 +55,16 @@ def progress_payload(book, progress):
     overall = ((before + position) / total * 100) if total else chapter_pct
     if overall <= 0:
         return None
-    return {'chapter_id': progress.chapter_id, 'position_seconds': position, 'chapter_progress_percent': min(100, max(0, chapter_pct)), 'overall_progress_percent': min(100, max(0, overall)), 'progress_percent': min(100, max(0, overall)), 'updated_at': str(progress.updated_at)}
+    return {
+        'chapter_id': progress.chapter_id,
+        'position_seconds': position,
+        'chapter_progress_percent': min(100, max(0, chapter_pct)),
+        'overall_progress_percent': min(100, max(0, overall)),
+        'progress_percent': min(100, max(0, overall)),
+        'completion_state': progress.status,
+        'checkpointed_at': str(progress.checkpointed_at),
+        'updated_at': str(progress.updated_at),
+    }
 
 
 def latest_valid_progress(book):
@@ -123,9 +133,16 @@ def scan_audiobooks(db: Session = Depends(get_db)):
 
 
 class ProgressUpdate(BaseModel):
-    position_seconds: float = 0
-    progress_percent: float = 0
+    position_seconds: float = Field(default=0, ge=0)
+    progress_percent: float = Field(default=0, ge=0, le=100)
     chapter_id: int | None = None
+    checkpointed_at: datetime | None = None
+
+
+def utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 @router.post('/{audiobook_id}/progress')
@@ -150,17 +167,40 @@ def update_progress(audiobook_id: int, payload: ProgressUpdate, db: Session = De
             break
         before += c.duration_seconds or 0
     position = max(0, float(payload.position_seconds or 0))
+    if chapter and chapter.duration_seconds:
+        position = min(position, float(chapter.duration_seconds))
     chapter_pct = max(0, float(payload.progress_percent or 0))
     if position < MIN_PROGRESS_SECONDS and chapter_pct < MIN_CHAPTER_PROGRESS_PERCENT:
-        book.status = 'available'
-        db.commit()
-        return {'status': 'ignored', 'book_status': book.status, 'overall_progress_percent': 0}
+        return {'status': 'ignored', 'book_status': book.status, 'overall_progress_percent': latest_valid_progress(book).get('overall_progress_percent', 0) if latest_valid_progress(book) else 0}
     overall = ((before + position) / total * 100) if total else chapter_pct
+    overall = min(100, max(0, overall))
     status = 'available' if overall <= 0 else 'finished' if overall >= 99 else 'in_progress'
+    checkpointed_at = utc(payload.checkpointed_at or datetime.now(timezone.utc))
+    progress = (
+        db.query(models.AudiobookProgress)
+        .filter_by(audiobook_id=audiobook_id)
+        .with_for_update()
+        .first()
+    )
+    if progress and progress.checkpointed_at and checkpointed_at <= utc(progress.checkpointed_at):
+        current = progress_payload(book, progress)
+        return {
+            'status': 'stale',
+            'book_status': book.status,
+            'overall_progress_percent': current.get('overall_progress_percent', 0) if current else 0,
+            'checkpointed_at': progress.checkpointed_at,
+        }
     book.status = status
-    db.add(models.AudiobookProgress(audiobook_id=audiobook_id, chapter_id=payload.chapter_id, position_seconds=payload.position_seconds, progress_percent=overall, status=status))
+    if progress is None:
+        progress = models.AudiobookProgress(audiobook_id=audiobook_id)
+        db.add(progress)
+    progress.chapter_id = payload.chapter_id
+    progress.position_seconds = position
+    progress.progress_percent = overall
+    progress.status = status
+    progress.checkpointed_at = checkpointed_at
     db.commit()
-    return {'status': 'ok', 'book_status': status, 'overall_progress_percent': overall}
+    return {'status': 'ok', 'book_status': status, 'overall_progress_percent': overall, 'checkpointed_at': checkpointed_at}
 
 
 @router.post('/{audiobook_id}/favorite')
@@ -178,9 +218,24 @@ def finish_audiobook(audiobook_id: int, db: Session = Depends(get_db)):
     book = db.get(models.Audiobook, audiobook_id)
     if not book:
         raise HTTPException(404, 'Audiobook not found')
+    if not is_audiobook_available(book):
+        raise HTTPException(409, AUDIOBOOK_UNAVAILABLE_MESSAGE)
+    chapters = playable_chapters(book)
+    if not chapters:
+        raise HTTPException(409, CHAPTER_UNAVAILABLE_MESSAGE)
+    progress = db.query(models.AudiobookProgress).filter_by(audiobook_id=audiobook_id).first()
+    chapter = chapters[-1]
+    if progress is None:
+        progress = models.AudiobookProgress(audiobook_id=audiobook_id)
+        db.add(progress)
+    progress.chapter_id = chapter.id
+    progress.position_seconds = float(chapter.duration_seconds or 0)
+    progress.progress_percent = 100
+    progress.status = 'finished'
+    progress.checkpointed_at = datetime.now(timezone.utc)
     book.status = 'finished'
     db.commit()
-    return {'book_status': book.status}
+    return {'book_status': book.status, 'latest_progress': progress_payload(book, progress)}
 
 
 @router.post('/{audiobook_id}/not-started')

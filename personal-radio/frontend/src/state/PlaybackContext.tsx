@@ -37,6 +37,7 @@ type Playback = {
   currentTime: number
   duration: number
   volume: number
+  playbackRate: number
   error: string | null
   queueSource: QueueSource | null
   playItem: (item: NowPlaying, queue?: NowPlaying[]) => void
@@ -46,6 +47,7 @@ type Playback = {
   previous: () => void
   seek: (seconds: number) => void
   setVolume: (volume: number) => void
+  setPlaybackRate: (rate: number) => void
   removeQueueItem: (index: number) => void
   clearQueue: () => void
   moveQueueItem: (from: number, to: number) => void
@@ -79,8 +81,9 @@ type LatencyAcceptanceWindow = Window & {
     next: Playback['next']
     previous: Playback['previous']
     seek: Playback['seek']
+    setPlaybackRate: Playback['setPlaybackRate']
     togglePlayPause: Playback['togglePlayPause']
-    snapshot: () => Pick<Playback, 'nowPlaying' | 'queueIndex' | 'isPlaying' | 'currentTime' | 'duration'>
+    snapshot: () => Pick<Playback, 'nowPlaying' | 'queueIndex' | 'isPlaying' | 'currentTime' | 'duration' | 'playbackRate'>
   }
 }
 
@@ -107,6 +110,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const latencyLoadId = useRef(0)
   const activeLatencyLoad = useRef<LatencyLoad | null>(null)
   const volumeRef = useRef(clampVolume(Number(window.localStorage.getItem('bm-radio-volume') ?? .8)))
+  const storedAudiobookRate = Number(window.localStorage.getItem('bm-radio-audiobook-rate') ?? 1)
+  const audiobookRateRef = useRef([0.75, 1, 1.25, 1.5, 1.75, 2].includes(storedAudiobookRate) ? storedAudiobookRate : 1)
 
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null)
   const [queue, setQueue] = useState<NowPlaying[]>([])
@@ -115,6 +120,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolumeState] = useState(volumeRef.current)
+  const [playbackRate, setPlaybackRateState] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [queueSource, setQueueSource] = useState<QueueSource | null>(null)
 
@@ -157,6 +163,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       chapter_id: item.chapterId,
       position_seconds: el.currentTime,
       progress_percent: el.duration ? (el.currentTime / el.duration) * 100 : 0,
+      checkpointed_at: new Date().toISOString(),
     }).catch(() => {})
   }, [])
 
@@ -191,6 +198,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setError(null)
     el.src = item.streamUrl
     el.volume = volumeRef.current
+    el.playbackRate = item.mode === 'audiobook' ? audiobookRateRef.current : 1
+    setPlaybackRateState(el.playbackRate)
     el.load()
     sourceTransition.current = false
     void el.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false))
@@ -256,6 +265,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
     if (next >= 0) {
       if (step > 0 && userInitiated) event('skip')
+      saveProgress()
       indexRef.current = next
       setQueueIndex(next)
       load(queueRef.current[next])
@@ -271,7 +281,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
 
     setIsPlaying(false)
-  }, [event, load, maybePrefetchStation, refillStationQueue])
+  }, [event, load, maybePrefetchStation, refillStationQueue, saveProgress])
 
   useEffect(() => {
     const el = new Audio()
@@ -320,6 +330,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       setIsPlaying(false)
       setError('Unable to play this file')
     }
+    const checkpointSeek = () => {
+      if (itemRef.current?.mode !== 'audiobook') return
+      lastSaved.current = el.currentTime
+      saveProgress()
+    }
     const latencyHandlers = Object.fromEntries(
       LATENCY_EVENTS.map(eventName => [eventName, () => recordLatencyEvent(eventName)]),
     ) as Record<(typeof LATENCY_EVENTS)[number], () => void>
@@ -329,6 +344,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     el.addEventListener('play', play)
     el.addEventListener('pause', pause)
     el.addEventListener('ended', ended)
+    el.addEventListener('seeked', checkpointSeek)
     el.addEventListener('error', fail)
     for (const eventName of LATENCY_EVENTS) el.addEventListener(eventName, latencyHandlers[eventName])
 
@@ -339,6 +355,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       el.removeEventListener('play', play)
       el.removeEventListener('pause', pause)
       el.removeEventListener('ended', ended)
+      el.removeEventListener('seeked', checkpointSeek)
       el.removeEventListener('error', fail)
       for (const eventName of LATENCY_EVENTS) el.removeEventListener(eventName, latencyHandlers[eventName])
     }
@@ -385,6 +402,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem('bm-radio-volume', String(safe))
   }
 
+  const updatePlaybackRate = (value: number) => {
+    const allowed = [0.75, 1, 1.25, 1.5, 1.75, 2]
+    const rate = allowed.includes(value) ? value : 1
+    audiobookRateRef.current = rate
+    window.localStorage.setItem('bm-radio-audiobook-rate', String(rate))
+    if (itemRef.current?.mode === 'audiobook' && audioRef.current) {
+      audioRef.current.playbackRate = rate
+      setPlaybackRateState(rate)
+    }
+  }
+
   const removeQueueItem = (index: number) => {
     if (index <= indexRef.current || index < 0 || index >= queueRef.current.length) return
     const updated = removeQueueEntry(queueRef.current, index)
@@ -420,13 +448,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       seek: (seconds: number) => {
         if (audioRef.current) audioRef.current.currentTime = seconds
       },
+      setPlaybackRate: updatePlaybackRate,
       togglePlayPause: () => {
         const el = audioRef.current
         if (!el || !itemRef.current) return
         if (el.paused) void el.play()
         else el.pause()
       },
-      snapshot: () => ({ nowPlaying, queueIndex, isPlaying, currentTime, duration }),
+      snapshot: () => ({ nowPlaying, queueIndex, isPlaying, currentTime, duration, playbackRate }),
     } satisfies NonNullable<LatencyAcceptanceWindow['__BM_RADIO_LATENCY_CONTROL__']>
     acceptanceWindow.__BM_RADIO_LATENCY_CONTROL__ = control
     return () => {
@@ -443,6 +472,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       currentTime,
       duration,
       volume,
+      playbackRate,
       error,
       queueSource,
       playItem,
@@ -457,6 +487,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         }
       },
       setVolume: updateVolume,
+      setPlaybackRate: updatePlaybackRate,
       removeQueueItem,
       clearQueue,
       moveQueueItem,
