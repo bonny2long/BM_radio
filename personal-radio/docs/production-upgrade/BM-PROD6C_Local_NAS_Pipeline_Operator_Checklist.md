@@ -4,8 +4,9 @@ This checklist is the live, cross-repository portion of BM-PROD6C. It uses a con
 
 ## Safety boundary
 
-- Use copied or generated, regenerable acceptance media only. Production/original media is prohibited.
-- Keep immutable source copies in `$NAS_LOCAL_ROOT/_TEST_FIXTURES/prod6c_source` and working copies in `$NAS_LOCAL_ROOT/_INGEST/incoming`.
+- Use real media copied from the existing local final library. An original-only copy and any media created by an acceptance script are prohibited.
+- Set `PROD6C_COPIED_MEDIA_SOURCE` to the copied source outside the pipeline root; keep working copies in `$NAS_LOCAL_ROOT/_INGEST/incoming`.
+- Require `copied_test_media=true`, `generated_by_acceptance_script=false`, and `original_only_copy=false`. If the copied source is unavailable, stop as blocked; never synthesize a replacement.
 - Never reset Archive Assistant. Use its normal SQLite state and normal review/approval flow.
 - Cleaner is report/dry-run only: deletion is prohibited, final-library media and quarantine must never be selected.
 - BM Radio must use disposable PostgreSQL 16, run Alembic to head, and mount final Music, Audiobooks, and Books read-only. Never scan into the active PostgreSQL database. Movies and TV are excluded from BM Radio.
@@ -14,10 +15,10 @@ This checklist is the live, cross-repository portion of BM-PROD6C. It uses a con
 ## 1. Preflight and copied fixture
 
 - Record branch, HEAD, and `git status --short` for BM Radio, Archive Assistant, Intake Watcher, and Cleaner.
-- Set `NAS_LOCAL_ROOT` only in the operator shell.
+- Set `NAS_LOCAL_ROOT`, `PROD6C_COPIED_MEDIA_SOURCE`, and the three classification values only in the operator shell.
 - Verify `_INGEST`, `_QUARANTINE`, `_REPORTS`, `_STAGING`, `Audiobooks`, `Backups`, `Books`, `Documents`, `Movies`, `Music`, `Photos`, `Projects`, and `TV` exist below that root.
-- Choose a bounded copied fixture: 8–30 music tracks across 2–4 artists/albums with one multi-track album, one multi-file audiobook, and one EPUB. A FLAC/MP3 logical pair and artwork are preferred.
-- Inventory and hash every immutable source file before copying. Save privacy-safe evidence in `$NAS_LOCAL_ROOT/_REPORTS/prod6c`; paths in evidence must be relative to `$NAS_LOCAL_ROOT`.
+- Choose a bounded copied source: music from at least two real albums with multiple tracks, plus one real audiobook and one real EPUB where available. A naturally existing FLAC/MP3 logical pair and artwork are optional; do not create variants.
+- Inventory and hash every copied source file before pipeline use. Save privacy-safe evidence in `$NAS_LOCAL_ROOT/_REPORTS/prod6c`; committed paths must use `$PROD6C_COPIED_MEDIA_SOURCE` or `$NAS_LOCAL_ROOT` placeholders.
 
 ## 2. Intake Watcher
 
@@ -64,8 +65,8 @@ This checklist is the live, cross-repository portion of BM-PROD6C. It uses a con
 
 ## 7. Final equality and cleanup
 
-- Re-hash immutable source fixtures and require exact equality with the before hashes.
+- Re-hash the copied source and require exact hash/size/mtime equality with the before inventory.
 - Require BM Radio active PostgreSQL, SQLite fallback, `backend/.env`, and transfer/adoption/backup/recovery evidence to equal their before snapshots.
 - Run `python scripts/check_prod6c_library_source_ux_acceptance.py --cleanup`. Cleanup may remove only `bm-prod6c-*` containers/network/volume and task runtime credentials; it must not delete copied source or final library evidence.
 - Run the permanent 6C contract, PROD6B contract, PROD6A contract, full PROD0, frontend build/lint, `git diff --check`, and `git status --short`.
-- Stop at `BM-PROD6C LOCAL-LIBRARY-UX PASS`. Do not begin PROD6D, TrueNAS work, Cleaner deletion, real production import, or SQLite retirement.
+- Stop at `BM-PROD6C LOCAL-LIBRARY-UX PASS`. Do not begin PROD6D, TrueNAS work, Cleaner deletion, original-only import, or SQLite retirement.

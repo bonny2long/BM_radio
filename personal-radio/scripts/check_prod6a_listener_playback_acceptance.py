@@ -4,7 +4,6 @@ import argparse
 import hashlib
 import importlib.util
 import json
-import math
 import os
 from pathlib import Path
 import secrets
@@ -14,8 +13,8 @@ import sys
 import time
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
-import wave
 
 from sqlalchemy.engine import URL
 
@@ -46,7 +45,7 @@ FRONTEND_IMAGE = "bm-radio-frontend:prod6a-100d81e"
 FRONTEND_DOCKERFILE = FRONTEND / "Dockerfile"
 TASK_ROOT = LOCAL_STATE_DIR / "bm-prod6a-acceptance"
 STATE_PATH = TASK_ROOT / "state.json"
-FIXTURE_SENTINEL = "BM-PROD6A GENERATED REGENERABLE TEST AUDIO"
+REAL_AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".m4b", ".aac", ".ogg", ".opus"}
 MANUAL_CHECKS = [
     "audio is audible and the displayed song is the one playing",
     "pause actually pauses; resume continues without restarting",
@@ -86,6 +85,28 @@ def _git_head() -> str:
     return _require(_run(["git", "rev-parse", "HEAD"]), "Git HEAD inspection")
 
 
+def _copied_media_source() -> Path:
+    value = os.environ.get("PROD6C_COPIED_MEDIA_SOURCE", "").strip()
+    if not value:
+        raise ListenerAcceptanceBlocked("PROD6C_COPIED_MEDIA_SOURCE is required; real copied media cannot be synthesized")
+    return Path(value).resolve()
+
+
+def _source_classification() -> dict[str, bool]:
+    classification = {
+        "copied_test_media": os.environ.get("PROD6C_COPIED_TEST_MEDIA", "").strip().lower() == "true",
+        "generated_by_acceptance_script": os.environ.get("PROD6C_GENERATED_BY_ACCEPTANCE_SCRIPT", "").strip().lower() == "true",
+        "original_only_copy": os.environ.get("PROD6C_ORIGINAL_ONLY_COPY", "").strip().lower() == "true",
+    }
+    if classification != {"copied_test_media": True, "generated_by_acceptance_script": False, "original_only_copy": False}:
+        raise ListenerAcceptanceBlocked(f"real copied-media classification is not accepted: {classification}")
+    return classification
+
+
+def _source_media_files(source: Path) -> list[Path]:
+    return sorted(path for path in source.rglob("*") if path.is_file() and path.suffix.lower() in REAL_AUDIO_EXTENSIONS)
+
+
 def _resource_inventory() -> dict[str, list[str]]:
     return {
         "containers": sorted(filter(None, _require(_docker("container", "ls", "-a", "--filter", f"name={RESOURCE_PREFIX}", "--format", "{{.Names}}"), "container inventory").splitlines())),
@@ -97,8 +118,20 @@ def _resource_inventory() -> dict[str, list[str]]:
 def preflight() -> dict[str, Any]:
     blockers: list[str] = []
     head = _git_head()
-    if head != STARTING_COMMIT:
-        blockers.append("Git HEAD is not the accepted BM-PROD5.6B implementation commit")
+    if _run(["git", "merge-base", "--is-ancestor", STARTING_COMMIT, "HEAD"]).returncode != 0:
+        blockers.append("Git HEAD does not descend from the accepted BM-PROD5.6B implementation commit")
+    source_files: list[Path] = []
+    classification: dict[str, bool] = {}
+    try:
+        source = _copied_media_source()
+        classification = _source_classification()
+        source_files = _source_media_files(source)
+        if not source.is_dir() or not (source / "Music").is_dir():
+            blockers.append("copied-media source must contain a Music tree")
+        if len(source_files) < 3:
+            blockers.append("copied-media source has fewer than three real audio files")
+    except ListenerAcceptanceBlocked as exc:
+        blockers.append(str(exc))
     docker = docker_context_status()
     if not (docker.get("available") and docker.get("local") and docker.get("linux")):
         blockers.append("a reachable local Docker Linux engine is required")
@@ -130,7 +163,9 @@ def preflight() -> dict[str, Any]:
         "gate": "PASS" if not blockers else "BLOCKED",
         "blockers": blockers,
         "source_commit": head,
-        "media_classification": "script-generated, regenerable development WAV fixture; never archive/NAS media",
+        "media_source": "$PROD6C_COPIED_MEDIA_SOURCE",
+        "media_classification": classification,
+        "real_audio_files": len(source_files),
         "docker": {"context": docker.get("context"), "local": docker.get("local"), "linux": docker.get("linux")},
         "active_postgresql": active,
         "quiescence": quiescence,
@@ -139,37 +174,21 @@ def preflight() -> dict[str, Any]:
     }
 
 
-def _write_fixture(root: Path) -> list[Path]:
-    music = root / "media" / "Music" / "Library" / "FLAC"
-    layout = [
-        ("Acceptance Artist One", "First Signals", 4, 220),
-        ("Acceptance Artist Two", "Second Signals", 4, 330),
-        ("Acceptance Artist Three", "Third Signals", 4, 440),
-    ]
-    selected: list[Path] = []
-    sample_rate = 22050
-    duration_seconds = 8
-    amplitude = 6500
-    for artist, album, count, base_frequency in layout:
-        album_root = music / artist / album
-        album_root.mkdir(parents=True, exist_ok=True)
-        for number in range(1, count + 1):
-            path = album_root / f"{number:02d} - Acceptance Tone {number}.wav"
-            frequency = base_frequency + number * 17
-            with wave.open(str(path), "wb") as output:
-                output.setnchannels(1)
-                output.setsampwidth(2)
-                output.setframerate(sample_rate)
-                frames = bytearray()
-                for sample in range(sample_rate * duration_seconds):
-                    value = int(amplitude * math.sin(2 * math.pi * frequency * sample / sample_rate))
-                    frames.extend(value.to_bytes(2, byteorder="little", signed=True))
-                output.writeframes(bytes(frames))
-            selected.append(path)
-    sentinel = root / "media" / "Music" / "BM-PROD6A-TEST-MEDIA.txt"
-    sentinel.write_text(FIXTURE_SENTINEL + "\n", encoding="utf-8")
-    for path in (root / "media" / "Audiobooks" / "Library", root / "media" / "Books", root / "cache" / "artwork"):
-        path.mkdir(parents=True, exist_ok=True)
+def _copy_real_fixture(root: Path) -> list[Path]:
+    source = _copied_media_source()
+    _source_classification()
+    media = root / "media"
+    for name in ("Music", "Audiobooks", "Books"):
+        source_child = source / name
+        destination = media / name
+        if source_child.is_dir():
+            shutil.copytree(source_child, destination)
+        else:
+            destination.mkdir(parents=True, exist_ok=True)
+    (root / "cache" / "artwork").mkdir(parents=True, exist_ok=True)
+    selected = sorted(path for path in (media / "Music").rglob("*") if path.is_file() and path.suffix.lower() in REAL_AUDIO_EXTENSIONS)
+    if len(selected) < 3:
+        raise ListenerAcceptanceBlocked("copied real fixture has fewer than three music files")
     return selected
 
 
@@ -181,6 +200,18 @@ def _media_snapshot(paths: list[Path]) -> dict[str, dict[str, Any]]:
             "mtime_ns": path.stat().st_mtime_ns,
         }
         for path in sorted(paths)
+    }
+
+
+def _source_snapshot(root: Path) -> dict[str, dict[str, Any]]:
+    return {
+        str(path.relative_to(root)).replace("\\", "/"): {
+            "sha256": _sha(path),
+            "size": path.stat().st_size,
+            "mtime_ns": path.stat().st_mtime_ns,
+        }
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
     }
 
 
@@ -266,34 +297,26 @@ def _assert_topology(db_name: str, api_name: str, web_name: str, network: str) -
 
 def _automated_http_proof(port: int, api_name: str, fixture: list[Path]) -> dict[str, Any]:
     scan = _json(port, "/api/library/scan/music", method="POST")
-    if scan.get("status") not in {"ok", "succeeded"} or scan.get("scan_run_status") != "succeeded" or scan.get("tracks_scanned") != 12:
-        raise ListenerAcceptanceBlocked(f"real scanner did not ingest 12 tracks: {scan}")
+    expected_tracks = len(fixture)
+    if scan.get("status") not in {"ok", "succeeded"} or scan.get("scan_run_status") != "succeeded" or scan.get("tracks_scanned") != expected_tracks:
+        raise ListenerAcceptanceBlocked(f"real scanner did not ingest all {expected_tracks} copied tracks: {scan}")
     summary = _json(port, "/api/library/summary")
-    if summary.get("tracks") != 12 or summary.get("artists") < 3 or summary.get("albums") < 3:
+    if summary.get("tracks") != expected_tracks or summary.get("artists", 0) < 1 or summary.get("albums", 0) < 2:
         raise ListenerAcceptanceBlocked(f"fixture shape is invalid: {summary}")
     tracks = _json(port, "/api/library/tracks?limit=100")
-    if not isinstance(tracks, list) or len(tracks) != 12:
-        raise ListenerAcceptanceBlocked("listener track projection did not return 12 tracks")
+    if not isinstance(tracks, list) or len(tracks) != expected_tracks:
+        raise ListenerAcceptanceBlocked("listener track projection did not return every copied track")
     track = tracks[0]
     stream = track["stream_url"]
-    source = next(
-        (
-            path for path in fixture
-            if track["artist"] in path.parts
-            and track["album"] in path.parts
-            and path.stem.lower().endswith(str(track["title"]).lower())
-        ),
-        None,
-    )
-    if source is None:
-        raise ListenerAcceptanceBlocked("scanner result could not be mapped to the bounded host fixture")
     full_status, full_headers, full_body = _http(port, stream, headers={"Accept": "audio/*"})
-    if full_status != 200 or full_headers.get("content-type", "").split(";", 1)[0] != "audio/wav":
+    if full_status != 200 or not full_headers.get("content-type", "").lower().startswith("audio/"):
         raise ListenerAcceptanceBlocked("full media stream status or type is incorrect")
     if int(full_headers.get("content-length", "-1")) != len(full_body) or full_headers.get("accept-ranges") != "bytes":
         raise ListenerAcceptanceBlocked("full media stream length/range headers are incorrect")
-    if len(full_body) != source.stat().st_size:
-        source = next((path for path in fixture if path.stat().st_size == len(full_body)), source)
+    body_sha = hashlib.sha256(full_body).hexdigest()
+    source = next((path for path in fixture if path.stat().st_size == len(full_body) and _sha(path) == body_sha), None)
+    if source is None:
+        raise ListenerAcceptanceBlocked("streamed bytes could not be mapped to the bounded copied-real-media fixture")
     expected = source.read_bytes()
     if full_body != expected:
         raise ListenerAcceptanceBlocked("full media stream bytes differ from copied test media")
@@ -309,7 +332,7 @@ def _automated_http_proof(port: int, api_name: str, fixture: list[Path]) -> dict
     if invalid_status != 416 or invalid_headers.get("content-range") not in {f"*/{len(expected)}", f"bytes */{len(expected)}"}:
         raise ListenerAcceptanceBlocked(f"invalid range was not controlled: {invalid_status} {invalid_body[:100]!r}")
 
-    search = _json(port, "/api/search?q=Acceptance%20Tone%201")
+    search = _json(port, f"/api/search?q={quote(str(track['title']))}")
     if not search.get("tracks"):
         raise ListenerAcceptanceBlocked("search-to-play returned no track")
     search_track = search["tracks"][0]
@@ -318,7 +341,7 @@ def _automated_http_proof(port: int, api_name: str, fixture: list[Path]) -> dict
 
     album_payload = {"artist": track["artist"], "album": track["album"], "limit": 20, "shuffle": False}
     album_queue = _json(port, "/api/queue/album", method="POST", payload=album_payload)["queue"]
-    if len(album_queue) != 4 or len({item["id"] for item in album_queue}) != 4:
+    if len(album_queue) < 2 or len({item["id"] for item in album_queue}) != len(album_queue):
         raise ListenerAcceptanceBlocked("album queue order/identity is invalid")
     if _http(port, album_queue[0]["stream_url"], headers={"Range": "bytes=0-31"})[0] != 206:
         raise ListenerAcceptanceBlocked("album first track is not playable")
@@ -332,11 +355,11 @@ def _automated_http_proof(port: int, api_name: str, fixture: list[Path]) -> dict
     reordered = _json(port, f"/api/playlists/{playlist_id}/tracks/reorder", method="PATCH", payload={"track_ids": reversed_ids})
     if [item["id"] for item in reordered["tracks"]] != reversed_ids:
         raise ListenerAcceptanceBlocked("playlist reorder did not persist")
-    middle = reordered["tracks"][1]
+    middle = reordered["tracks"][len(reordered["tracks"]) // 2]
     if _http(port, middle["stream_url"], headers={"Range": "bytes=0-31"})[0] != 206:
         raise ListenerAcceptanceBlocked("playlist middle item is not playable")
     after_remove = _json(port, f"/api/playlists/{playlist_id}/tracks/{middle['id']}", method="DELETE")
-    if len(after_remove["tracks"]) != 2:
+    if len(after_remove["tracks"]) != len(reordered["tracks"]) - 1:
         raise ListenerAcceptanceBlocked("playlist remove failed")
     _json(port, f"/api/playlists/{playlist_id}", method="DELETE")
 
@@ -346,7 +369,7 @@ def _automated_http_proof(port: int, api_name: str, fixture: list[Path]) -> dict
         {"event_type": "pause", "mode": "music", "track_id": event_track["id"], "position_seconds": 1},
         {"event_type": "resume", "mode": "music", "track_id": event_track["id"], "position_seconds": 1},
         {"event_type": "seek", "mode": "music", "track_id": event_track["id"], "position_seconds": 3},
-        {"event_type": "finish", "mode": "music", "track_id": event_track["id"], "position_seconds": 8},
+        {"event_type": "finish", "mode": "music", "track_id": event_track["id"], "completed_percent": 100},
     ):
         _json(port, "/api/playback/event", method="POST", payload=payload)
     history = _db_evidence(api_name)
@@ -369,14 +392,14 @@ def _automated_http_proof(port: int, api_name: str, fixture: list[Path]) -> dict
         raise ListenerAcceptanceBlocked("restored copied fixture did not become playable")
 
     return {
-        "scan": {"real_scanner": True, "tracks": 12, "artists": summary["artists"], "albums": summary["albums"]},
+        "scan": {"real_scanner": True, "tracks": expected_tracks, "artists": summary["artists"], "albums": summary["albums"]},
         "stream": {"full": "PASS", "range": "PASS", "mid_file": "PASS", "invalid_range": "PASS", "missing_file": "PASS", "path_disclosure": False},
-        "artwork": "not_applicable (generated fixture intentionally contains no artwork)",
+        "artwork": "not_applicable when copied releases contain no embedded artwork",
         "search_to_play": "PASS",
         "album_to_play": {"result": "PASS", "tracks": len(album_queue), "order": [item["title"] for item in album_queue]},
         "playlist": {"create_order_middle_next_reorder_remove_delete": "PASS"},
         "history": {"result": "PASS", "event_types": event_types, "recording_identity": True},
-        "source_selection": "not_applicable (no alternate physical sources in bounded fixture)",
+        "source_selection": "not_applicable when copied releases contain no alternate physical sources",
         "missing_player_policy": "controlled error; no automatic retry or queue loop",
     }
 
@@ -402,8 +425,10 @@ def run_automated() -> dict[str, Any]:
     if gate["gate"] != "PASS":
         raise ListenerAcceptanceBlocked("preflight blocked: " + "; ".join(gate["blockers"]))
     protected_before = _protected_state()
+    copied_source = _copied_media_source()
+    source_before = _source_snapshot(copied_source)
     TASK_ROOT.mkdir(parents=True, exist_ok=False)
-    fixture = _write_fixture(TASK_ROOT)
+    fixture = _copy_real_fixture(TASK_ROOT)
     media_before = _media_snapshot(fixture)
     run_id = secrets.token_hex(5)
     network = f"{RESOURCE_PREFIX}{run_id}"
@@ -484,6 +509,9 @@ def run_automated() -> dict[str, Any]:
         media_after = _media_snapshot(fixture)
         if media_after != media_before:
             raise ListenerAcceptanceBlocked("acceptance media content, size, or mtime changed")
+        source_after = _source_snapshot(copied_source)
+        if source_after != source_before:
+            raise ListenerAcceptanceBlocked("external copied-media source content, size, or mtime changed")
         protected_after = _protected_state()
         if protected_after != protected_before:
             raise ListenerAcceptanceBlocked("protected active PostgreSQL, SQLite, environment, or evidence changed")
@@ -492,7 +520,7 @@ def run_automated() -> dict[str, Any]:
             "status": "AUTOMATED PASS; MANUAL CONFIRMATION REQUIRED",
             "source_commit": STARTING_COMMIT,
             "frontend_url": f"http://127.0.0.1:{port}",
-            "fixture": {"classification": "generated/regenerable development audio", "tracks": 12, "artists": 3, "releases": 3, "media_before": media_before, "media_after_equal": True},
+            "fixture": {"copied_test_media": True, "generated_by_acceptance_script": False, "original_only_copy": False, "source": "$PROD6C_COPIED_MEDIA_SOURCE", "tracks": len(fixture), "artists": automated["scan"]["artists"], "releases": automated["scan"]["albums"], "media_before": media_before, "media_after_equal": True, "source_before_sha256": _canonical_sha(source_before), "source_after_equal": True},
             "database": {"postgresql": "16", "alembic_head": "PASS", "isolated": True, "active_target_used": False},
             "containers": {"backend_contract": BACKEND_IMAGE, "frontend_contract": FRONTEND_IMAGE, **topology},
             "automated": automated,
@@ -506,7 +534,7 @@ def run_automated() -> dict[str, Any]:
             "truenas_work": False,
             "station_quality": "deferred to BM-PROD6B",
         }
-        state.update({"port": port, "proof": proof, "fixture_paths": [str(path) for path in fixture], "media_before": media_before})
+        state.update({"port": port, "proof": proof, "fixture_paths": [str(path) for path in fixture], "media_before": media_before, "copied_source": str(copied_source), "source_before": source_before})
         STATE_PATH.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
         return proof
     except Exception:
@@ -553,17 +581,20 @@ def cleanup() -> dict[str, Any]:
         raise ListenerAcceptanceBlocked("acceptance fixture is incomplete before final hash comparison")
     media_after = _media_snapshot(fixture)
     media_equal = media_after == state["media_before"]
+    copied_source = Path(state["copied_source"])
+    source_equal = copied_source.is_dir() and _source_snapshot(copied_source) == state["source_before"]
     protected_equal = _canonical_sha(_protected_state()) == state["proof"]["protected_before_sha256"]
     manual = state["proof"].get("manual_result")
     resources = _cleanup_resources(state, remove_task_root=False)
     result = {
         "manual_result": manual,
         "media_hash_size_mtime_equal": media_equal,
+        "copied_source_hash_size_mtime_equal": source_equal,
         "protected_state_equal": protected_equal,
         "cleanup": resources,
     }
     shutil.rmtree(TASK_ROOT, ignore_errors=True)
-    if not media_equal or not protected_equal or resources["result"] != "PASS":
+    if not media_equal or not source_equal or not protected_equal or resources["result"] != "PASS":
         raise ListenerAcceptanceBlocked(f"final equality or cleanup failed: {result}")
     return result
 

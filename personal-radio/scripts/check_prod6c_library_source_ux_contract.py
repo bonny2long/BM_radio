@@ -15,6 +15,9 @@ REPORT6B = PROJECT / "docs" / "production-upgrade" / "BM-PROD6B_Radio_Station_Be
 REPORT6C = PROJECT / "docs" / "production-upgrade" / "BM-PROD6C_Local_NAS_Pipeline_Library_Playlist_Feedback_and_Preferred_Source_UX_Acceptance.md"
 API = PROJECT / "frontend" / "src" / "api.ts"
 SHEET = PROJECT / "frontend" / "src" / "components" / "TrackActionSheet.tsx"
+PROD6A_LIVE = PROJECT / "scripts" / "check_prod6a_listener_playback_acceptance.py"
+AA_MUSIC = PROJECT / "backend" / "scripts" / "check_aa_manifest_music_import.py"
+AA_AUDIOBOOK = PROJECT / "backend" / "scripts" / "check_aa_manifest_audiobook_import.py"
 PROD0 = PROJECT / "scripts" / "check_prod0_baseline.py"
 CHECKS: list[str] = []
 
@@ -55,13 +58,16 @@ def main() -> int:
     api = API.read_text(encoding="utf-8")
     sheet = SHEET.read_text(encoding="utf-8")
     prod0 = PROD0.read_text(encoding="utf-8")
+    prod6a_live = PROD6A_LIVE.read_text(encoding="utf-8")
+    aa_music = AA_MUSIC.read_text(encoding="utf-8")
+    aa_audiobook = AA_AUDIOBOOK.read_text(encoding="utf-8")
     combined = "\n".join((live, checklist, report6c, api, sheet))
 
     check("5e3b2be2e5163c37297881dd9d1fcd33d55bd129" in report6b and "remain uncommitted" not in report6b, "1 PROD6B report records accepted implementation commit")
     check(all(token in checklist for token in ("BM Radio remains PostgreSQL", "Archive Assistant remains SQLite", "lightweight filesystem/report")), "2 database architecture lock documented")
     check("NAS_LOCAL_ROOT" in live and "NAS_LOCAL_ROOT" in checklist and "def nas_root" in live, "3 local NAS root is configurable")
     check(not re.search(r"[A-Za-z]:\\\\Users\\\\", combined) and "BonnyMakaniankhondo" not in combined, "4 no personal absolute path or username committed")
-    check("_TEST_FIXTURES" in live and "_source_snapshot" in live and "immutable source" in checklist, "5 copied source fixture protection exists")
+    check("PROD6C_COPIED_MEDIA_SOURCE" in live and "_source_snapshot" in live and "copied source" in checklist, "5 copied source fixture protection exists")
     check(all(token in checklist for token in ("not promoted early", "no metadata edits", "no final-library writes", "no deletion")), "6 Intake acceptance checklist exists")
     check(all(token in checklist for token in ("normal scan", "Review metadata", "Explicitly approve", "approved task batch moves")), "7 AA classification review approval and move checklist exists")
     check("Never reset Archive Assistant" in checklist and "Do not use a reset" in checklist, "8 AA reset is prohibited")
@@ -70,7 +76,7 @@ def main() -> int:
     check("active target used" not in live.casefold() or '"active_target_used": False' in live, "11 active PostgreSQL scan is prohibited")
     check(all(token in live for token in ("target=/media/Music,readonly", "target=/media/Audiobooks/Library,readonly", "target=/media/Books,readonly")), "12 final media is read-only to BM Radio")
     check("movies_tv_excluded" in live and "Movies and TV are excluded" in checklist, "13 Movies and TV are excluded from BM Radio")
-    check('"/api/library/scan/music"' in live and '"/api/audiobooks/scan"' in live and "real_scanners" in live, "14 real BM Radio scanners are required")
+    check('"/api/library/scan/music"' in live and '"/api/audiobooks/scan"' in live and "real_scanners" in live and "concurrent_unconsumed_range_streams" in live and "database_pool_exhausted" in live, "14 real scanners and media-stream session-release proof are required")
     check(all(token in live for token in ("recording_id", "effective_track_id", "physical_occurrences", "logical_recordings")), "15 logical and physical identity checks exist")
     check(all(token in live for token in ("listener library exposes", "duplicate logical album", "song search", "album tracks")), "16 listener search and album duplicate checks exist")
     check("unique lossless source" in live and "lossless_vs_lossy" in live, "17 lossless versus lossy preferred source check exists")
@@ -89,13 +95,15 @@ def main() -> int:
     check("Rerun Intake" in checklist and "no duplicate promoted fixture" in checklist, "30 Intake rerun duplicate check exists")
     check("Rescan/restart Archive Assistant" in checklist and "no duplicate final media" in checklist, "31 AA rescan duplicate check exists")
     check("BM Radio rescan changed" in live and "logical_equal" in live and "physical_equal" in live, "32 BM Radio rescan duplicate check exists")
-    check("_source_snapshot(root) != source_before" in live and "source_hashes_equal" in live, "33 source fixture hash equality is required")
+    check("_source_snapshot(copied_source) != source_before" in live and "source_hashes_equal" in live, "33 source fixture hash equality is required")
     check("active PostgreSQL" in live and "protected_after != protected_before" in live, "34 active PostgreSQL is protected")
     check("SQLite" in live and "protected_after != protected_before" in live, "35 SQLite fallback is protected")
     check(".env/durable evidence" in live and "protected_before_sha256" in live, "36 environment and durable evidence are protected")
     check("$NAS_LOCAL_ROOT/" in live and '"nas_root": "$NAS_LOCAL_ROOT"' in live, "37 evidence privacy guard exists")
     check('"truenas_work": False' in live and "TrueNAS work" in checklist, "38 TrueNAS work is prohibited")
-    check("Production/original media is prohibited" in checklist and "real production import" in checklist, "39 production/original media is prohibited")
+    prohibited = ("not real audio", "wave.open", "math.sin", "Acceptance Tone", "_write_fixture")
+    applicable = "\n".join((live, prod6a_live, aa_music, aa_audiobook))
+    check(not any(token in applicable for token in prohibited) and ".write_bytes(" not in aa_music and ".write_bytes(" not in aa_audiobook and all(token in live for token in ('"copied_test_media": True', '"generated_by_acceptance_script": False', '"original_only_copy": False')), "39 fake/generated live media is prohibited and copied-real classification is enforced")
     check("check_prod6b_station_quality_contract.py" in prod0 and "check_prod6a_listener_playback_contract.py" in prod0, "40 PROD6B and PROD6A contracts remain registered")
     check("check_prod6c_library_source_ux_contract.py" in prod0 and prod0_mandatory_count(prod0) == 61, "41 full PROD0 registers only the non-live 6C contract and has 61 mandatory checks")
 

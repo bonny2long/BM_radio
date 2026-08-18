@@ -1,87 +1,78 @@
-# BM-PROD6C Local NAS Pipeline, Library, Playlist, Feedback, and Preferred-Source UX Acceptance
+# BM-PROD6C.1 Real Copied Media Revalidation and Fixture Policy Hardening
 
-BM-PROD6C status: **LOCAL-LIBRARY-UX PASS**
+BM-PROD6C.1 status: **REAL-COPIED-MEDIA PASS**
 
-Starting BM Radio SHA: `5e3b2be2e5163c37297881dd9d1fcd33d55bd129`
+Correction starting BM Radio SHA: `9b8cc2cf48a619422b3d25983bc61267149fdaa5`
 
-Implementation commit at human-review entry / ending HEAD at final validation: `84afc0699b8db89de49b65b3d5a95dfc9493eafc`. The final completion-result update to this report is the only post-commit evidence edit expected at handoff.
+Ending working-tree state: 12 reviewed BM Radio files modified on the starting SHA; no runtime or build artifact is present. The exact diff is held uncommitted for review before PROD6D.
 
-## PROD6B documentation correction
+## Corrected media policy
 
-The PROD6B report now records implementation/accepted phase commit `5e3b2be2e5163c37297881dd9d1fcd33d55bd129` and no longer describes the accepted implementation as uncommitted. Its real-library subjective station review remains deferred.
+The earlier PROD6C fixture-policy result is superseded by this correction. Live pipeline, scanner, player, and listener acceptance now blocks unless an external `$PROD6C_COPIED_MEDIA_SOURCE` is present with this exact classification:
 
-## Cross-repository preflight
+- `copied_test_media=true`
+- `generated_by_acceptance_script=false`
+- `original_only_copy=false`
 
-| Application | Branch | HEAD | Entry status |
-|---|---|---|---|
-| BM Radio | `main` | `5e3b2be2e5163c37297881dd9d1fcd33d55bd129` | clean |
-| Archive Assistant | `master` | `e19dc4281a0c984a21daae41499be0d27eed40c4` | pre-existing `frontend/package-lock.json` modification; not touched by this task |
-| Intake Watcher | `main` | `6d6434595489ca1a13924089d5db69dd4ba32088` | clean |
-| Cleaner | `main` | `d0a9fc8467241c1891d8138355b52fc61a035f24` | clean |
+No personal source path is committed. Acceptance code cannot create audio or random media-shaped bytes. The permanent AA music/audiobook regressions use virtual scanner inputs and synthetic database-only fixtures; they do not write fake media files. Missing real copied media is a blocking result.
 
-No other repository will be patched by BM-PROD6C. If Intake Watcher or Archive Assistant requires a code change, this phase stops for a separately reviewed task.
+## Copied source and cross-application pipeline
 
-## Architecture and local NAS root contract
+- Copied source: 26 hash-inventoried files outside the task pipeline root, including 8 valid FLAC tracks from two albums, one valid M4B audiobook, and one valid EPUB. Mutagen validated all nine audio files; the shortest duration was 161.39 seconds.
+- Original-to-copied-source SHA-256 equality: PASS for every file.
+- Intake initial run: four drops were held as `first_seen` and none was promoted early.
+- Intake stable run: four drops / 26 files promoted to ready. Source/ready hashes matched, there were no failures, and the immediate rerun returned zero items.
+- Archive Assistant normal SQLite state was retained; reset/dev tools remained disabled. Its checksum ledger correctly refused duplicate batches for the two already-AA-processed albums and EPUB. Their copied AA-final trees were reused under the runbook's real-evidence reuse rule; duplicate working copies were preserved in `leftover-review`.
+- A copied final-library M4B directory initially classified as unknown because it contained nested prior-AA metadata. The stale task row was rejected, the metadata was preserved in `leftover-review`, and the unchanged M4B bytes were rerun through Intake as a supported top-level file.
+- Archive Assistant batch 69 classified as `audiobook`, received explicit metadata review/unknown-year and narrator acceptance, was explicitly approved, and moved one M4B with zero failed moves.
+- Ready was empty after the move/reuse accounting. Archive Assistant rescans before and after restart returned zero created and zero skipped; quarantine remained empty.
+- No Intake Watcher, Archive Assistant, or Cleaner source code changed.
+- Cleaner ran with `dry_run=true` and `destructive_actions_enabled=false`. All five fresh leftovers were blocked by the 14-day gate; final media and quarantine were not selected and nothing was deleted.
 
-BM Radio uses PostgreSQL. Archive Assistant remains SQLite. Intake Watcher and Cleaner retain lightweight filesystem/report state. `NAS_LOCAL_ROOT` is supplied at runtime; no personal absolute path or username is committed.
-
-The acceptance root is task-scoped so unrelated real files already present in the normal shared intake/ready lanes cannot be promoted or scanned accidentally. Immutable copied/generated sources live below `$NAS_LOCAL_ROOT/_TEST_FIXTURES/prod6c_source`, working copies enter `$NAS_LOCAL_ROOT/_INGEST/incoming`, and privacy-safe evidence is written below `$NAS_LOCAL_ROOT/_REPORTS/prod6c`.
-
-## Copied fixture and Intake Watcher
-
-- Immutable source: 18 generated/regenerable files, stored outside the pipeline working lane. The canonical fixture-inventory JSON SHA-256 is `45685aa20feec40e0caa36e0e2476ec7752287d3af6ef3e88ec7c2b260c78591`; the inventory contains an individual SHA-256 and size for every file.
-- Shape: 14 music occurrences / 10 logical songs, three artists, three albums, four FLAC+MP3 logical pairs, one live-titled track, three MP3 audiobook chapters, and one EPUB.
-- First Intake run: six top-level inputs returned `first_seen`; none was promoted.
-- Stable run using the existing two-second test override: six inputs / 18 files promoted to `_INGEST/ready`.
-- Exact source/ready content hashes matched. Intake made no metadata edits, final-library writes, or deletions.
-- Immediate Intake rerun: zero items; no duplicate promotion.
-
-## Archive Assistant and Cleaner
-
-- Archive Assistant remained on its normal SQLite state with `DATA_ROOT`/`INGEST_ROOT` pointed only at the task root and dev/reset tools disabled.
-- Scan created six task batches: four music albums, one audiobook, and one book; there were no movie, TV, unknown, or unsupported batches.
-- Music warnings were reviewed and explicitly accepted. All six batches were explicitly approved through the normal flow. The FLAC/MP3 pair triggered the intended duplicate review and was resolved as `keep_separate` because its FLAC and MP3 destination previews were distinct.
-- Selected-move preflight: six ready, zero blocked, 18 source files. Execution: six batches moved, 18 files moved, zero failed moves/errors. Destinations were Music/Library/FLAC or MP3, Audiobooks/Library, and Books/EPUB. Six move manifests were written.
-- Ready contained zero files after move; quarantine contained zero files and was never selected.
-- AA rescan after move and again after restart created zero batches. The same six task batches remained singular and moved.
-- Cleaner ran with `dry_run=true` and `destructive_actions_enabled=false`. It proposed only five `blocked_no_action` records for fresh empty ready folders under the 14-day age gate. No final media or quarantine was selected and no deletion occurred.
-
-## BM Radio isolated acceptance
+## Isolated BM Radio acceptance
 
 - Disposable PostgreSQL 16, Alembic head, private backend/database networking, loopback-only production frontend, and read-only Music/Audiobooks/Books mounts: PASS.
-- Movies and TV were not mounted or scanned. The active 1,257-row PostgreSQL database was not used.
-- The first live scan exposed a BM Radio interoperability defect: AA's explicit unknown-year text reached a fallback scanner path and was passed to an integer column. BM Radio now normalizes only plausible four-digit years and treats unknown/non-numeric values as missing. `check_aa_manifest_music_import.py` permanently covers the AA `Unknown Year` case.
-- Real music scan: 14 tracks, 10 recordings, 14 identities/technical profiles, zero probe failures, and four FLAC/MP3 recording pairs preserved as physical sources.
-- Real audiobook scan: one audiobook, three chapters, zero errors. EPUB remained mounted under Books but is not presented as audiobook media.
-- Listener projection: 10 logical songs, three artists, three albums, zero listener/artist/album duplicates. Search, artist, album, album ordering, search-to-play, and audiobook entry playback passed.
-- Preferred source: unique lossless FLAC was automatically chosen for the tested pair; manual MP3/FLAC override took effect; unset resumed automatic selection. One listener song represented two retained physical occurrences. Single-source behavior remains covered and prior synthetic source-policy regressions remain registered.
-- Feedback: favorite/unfavorite and thumbs up/down passed; refresh persistence passed; feedback remained recording-level across a source switch; later thumbs-down removed Favorites-station eligibility. The observed up/favorite debug score delta was `+1.15`.
-- Playlist: create, rename, add, order, play first, play middle, reorder, remove, and delete passed. Duplicate logical playlist entries remain intentionally allowed.
-- Queue/source continuity: album, search, and playlist logical identities remained stable; source override did not corrupt the queue. Existing PROD6A next/previous contracts remain passing.
-- Artwork: `not_applicable`. AA reported and moved no artwork from this bounded fixture, and BM Radio presented the clean missing-art fallback.
-- BM Radio rescan: logical count 10, physical count 14, and audiobook count 1 remained equal.
+- Movies and TV were excluded. The active PostgreSQL database and SQLite fallback were not used or changed.
+- Music scanner: 8 tracks, 7 logical recordings, 2 albums, 1 artist, 8 successful technical probes, no probe failures.
+- One album exposed one logical song backed by two identical physical occurrences; the other exposed six tracks. Listener, artist, and album duplicate counts were zero.
+- Audiobook scanner: one valid M4B audiobook and one playable chapter entry, with no scan errors.
+- Search, album queues, playlist create/rename/order/play/reorder/remove/delete, favorite/unfavorite, thumbs up/down, refresh persistence, feedback-to-station scoring, preferred-source override/unset, queue/source continuity, artwork, and rescans: PASS.
+- Source hash/size/mtime equality and final-media hash/size/mtime equality before/after BM Radio: PASS.
+- Exact classification in live evidence: `copied_test_media=true`, `generated_by_acceptance_script=false`, `original_only_copy=false`.
 
-## Human review, equality, and cleanup
+## Manual findings and corrections during review
 
-- Human operator result: **PASS**, supplied after reviewing the retained production-style frontend and checklist. Automation did not fabricate the result.
-- Immutable source hashes: exact before/after equality PASS.
-- Final AA-cleaned media: exact hash/size/mtime equality before/after BM Radio PASS.
-- Protected active PostgreSQL, SQLite fallback, `backend/.env`, and transfer/adoption/backup/recovery evidence: canonical before/after SHA-256 `5fcaf1261e0dd11e5f342a77ed7ea656334c2cef8c9b547cb8cabf6a3e3728a3`; equality PASS.
-- Cleanup: zero remaining `bm-prod6c-*` containers, networks, or volumes; task runtime credentials removed. Privacy-safe task evidence remains under `$NAS_LOCAL_ROOT/_REPORTS/prod6c`.
+Human result: **PASS**, recorded at `2026-08-18T02:48:03Z`. Automation did not fabricate the result.
+
+The operator observed one artist, two albums, one logical song in one album, and six tracks in the other. Audible music transitions took approximately 5–8 seconds. The audiobook initially appeared broken but audible sound began after approximately 3 minutes. These are report-only observations; no additional playback behavior change was requested.
+
+The manual browser console exposed a blocked Google Fonts request: the page imported a remote stylesheet while the production CSP correctly allowed styles only from self. The remote import was removed, the existing system-font stack was retained, and the production container contract now prohibits remote CSS font imports. The strict CSP was not weakened.
+
+Repeated M4B byte-range requests also exposed database-pool exhaustion: file responses retained request-scoped database sessions while large streams remained open. All five media routes now use function-scoped database dependencies, closing the session before the file response is sent. A permanent live proof holds 18 unconsumed range streams open—more than the 15-connection pool limit—while requiring the library API to remain healthy. The corrected stack passed with `database_pool_exhausted=false`.
+
+After both corrections, frontend build and lint passed, served CSS contained no remote font reference, the CSP remained self-only, the 18-stream live proof passed, and the backend/frontend containers remained healthy. The operator's PASS remained authoritative; no further manual behavior change was requested.
+
+## Cleanup and equality
+
+- Copied source equality: PASS.
+- Final media equality: PASS.
+- Protected active PostgreSQL, SQLite fallback, environment, and durable evidence equality: PASS; canonical SHA-256 before/after `5fcaf1261e0dd11e5f342a77ed7ea656334c2cef8c9b547cb8cabf6a3e3728a3`.
+- Cleanup: zero remaining `bm-prod6c-*` containers, networks, or volumes; runtime credentials removed.
+- TrueNAS work, Cleaner deletion, original-only import, active-database scanning, and SQLite retirement were not performed.
 
 ## Final validation
 
-- Python compile: PASS.
-- PROD6C contract: PASS (41 checks), including prior-regression execution.
-- PROD6B contract: PASS (52 checks).
-- PROD6A contract: PASS (40 checks).
-- The first full PROD0 run exposed the superseded PROD1.4D1 static boundary that prohibited every frontend recording-control reference. The permanent check now permits the PROD6C route literal only in `frontend/src/api.ts` and its advanced consumer only in `TrackActionSheet`, while continuing to prohibit broad listener participation controls.
-- PROD0 final rerun: PASS — `61 passed / 0 failed / 4 skipped`.
+- Python compile/compileall: PASS.
+- AA music and audiobook manifest regressions: PASS without media-file writes.
+- PROD5.6B integrated production stack contract: PASS (34 checks).
+- PROD6A listener playback contract: PASS (40 checks).
+- PROD6B station quality contract: PASS (52 checks).
+- PROD6C copied-real-media/source UX contract: PASS (41 checks), including prior-regression execution.
+- PROD0: PASS — `61 passed / 0 failed / 4 skipped`.
 - Frontend production build: PASS.
 - Frontend lint: PASS — 0 errors, 8 existing warnings.
 - `git diff --check`: PASS.
-- Final working tree: only the post-`84afc0699b8db89de49b65b3d5a95dfc9493eafc` completion-report update and forward-compatible PROD1.4D1 static-boundary update remain for the next repository checkpoint; no generated build/runtime files are present.
+- Final policy/privacy audit: PASS; no personal path committed, no remote font import, and applicable live/AA scripts contain no fake-media creation pattern.
+- Working tree contains only the reviewed PROD6C.1 BM Radio code, contract, checklist, and report changes; no runtime/build artifacts.
 
-TrueNAS work, Cleaner deletion, production/original media, active-database scanning, real production-library import, and SQLite retirement are prohibited.
-
-**STOP: BM-PROD6C LOCAL-LIBRARY-UX PASS. Do not begin PROD6D, TrueNAS work, Cleaner deletion, real production import, or SQLite retirement.**
+**STOP: BM-PROD6C.1 REAL-COPIED-MEDIA PASS. Do not begin PROD6D.**

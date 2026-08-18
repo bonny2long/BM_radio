@@ -12,7 +12,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app import models
 from app.config import settings
-from app.scanner.music_scanner import scan_music
+from app.scanner import music_scanner
+from app.scanner.music_scanner import normalized_year
 
 
 def approved(value):
@@ -35,7 +36,6 @@ def main() -> None:
     flac_root.mkdir(parents=True)
     disc_root.mkdir(parents=True)
     media_file = album_dir / "04 - Skew It On The Bar-B.mp3"
-    media_file.write_bytes(b"not real audio")
     (metadata_dir / "music-album.json").write_text(json.dumps({
         "metadata_version": "test-1",
         "metadata_contract": {"fields": {
@@ -56,7 +56,6 @@ def main() -> None:
     unknown_metadata_dir = unknown_album_dir / "metadata"
     unknown_metadata_dir.mkdir(parents=True)
     unknown_media_file = unknown_album_dir / "01 - Timeless Test.mp3"
-    unknown_media_file.write_bytes(b"not real audio")
     (unknown_metadata_dir / "move_manifest.json").write_text(json.dumps({
         "manifest_version": "v1",
         "metadata_version": "test-unknown-year",
@@ -85,7 +84,41 @@ def main() -> None:
     db.add(models.ArtistRadioProfile(artist="OutKast", primary_genre="Manual Genre", source="manual"))
     db.commit()
 
-    result = scan_music(db)
+    virtual_media = (media_file, unknown_media_file)
+    original_safe_media_files = music_scanner.safe_media_files
+    original_read_metadata = music_scanner.read_metadata
+
+    def virtual_safe_media_files(root: Path, _extensions, _roots):
+        return [path for path in virtual_media if path.is_relative_to(root)]
+
+    def virtual_read_metadata(path: Path):
+        if path == media_file:
+            return {
+                "duration_seconds": 180.0,
+                "title": "Wrong Embedded Title",
+                "artist": "Wrong Embedded Artist",
+                "album": "Wrong Embedded Album",
+                "album_artist": "Wrong Embedded Artist",
+                "genre": "Wrong Embedded Genre",
+                "year": 2000,
+            }
+        return {
+            "duration_seconds": 181.0,
+            "title": "Timeless Test",
+            "artist": "Acceptance Artist",
+            "album": "Unknown Date Album",
+            "album_artist": "Acceptance Artist",
+            "genre": None,
+            "year": None,
+        }
+
+    music_scanner.safe_media_files = virtual_safe_media_files
+    music_scanner.read_metadata = virtual_read_metadata
+    try:
+        result = music_scanner.scan_music(db)
+    finally:
+        music_scanner.safe_media_files = original_safe_media_files
+        music_scanner.read_metadata = original_read_metadata
     assert result["errors"] == [], result["errors"]
     track = db.query(models.Track).filter_by(path=str(media_file)).one()
     assert track.artist == "OutKast", track.artist
@@ -106,6 +139,14 @@ def main() -> None:
     unknown_track = db.query(models.Track).filter_by(path=str(unknown_media_file)).one()
     assert unknown_track.year is None, unknown_track.year
     assert result["tracks_added"] == 2, result
+    assert normalized_year("Unknown Year") is None
+    assert normalized_year("1998") == 1998
+    assert normalized_year("Released 1998") == 1998
+    assert normalized_year("1898") is None
+    assert normalized_year("not a year") is None
+    assert normalized_year(True) is None
+    assert normalized_year(None) is None
+    assert not media_file.exists() and not unknown_media_file.exists()
     print("ok: AA music manifest import")
 
 

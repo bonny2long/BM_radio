@@ -13,6 +13,7 @@ FRONTEND = PROJECT / "frontend"
 DOCKERFILE = FRONTEND / "Dockerfile"
 DOCKERIGNORE = FRONTEND / ".dockerignore"
 NGINX = FRONTEND / "nginx.conf"
+BASE_CSS = FRONTEND / "src" / "styles" / "base.css"
 API = FRONTEND / "src" / "api.ts"
 VITE = FRONTEND / "vite.config.ts"
 COMPOSE = PROJECT / "deploy" / "compose.local-production.example.yml"
@@ -76,6 +77,7 @@ def main() -> int:
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
     dockerignore = DOCKERIGNORE.read_text(encoding="utf-8")
     nginx = NGINX.read_text(encoding="utf-8")
+    base_css = BASE_CSS.read_text(encoding="utf-8")
     api = API.read_text(encoding="utf-8")
     vite = VITE.read_text(encoding="utf-8")
     compose = COMPOSE.read_text(encoding="utf-8")
@@ -103,7 +105,7 @@ def main() -> int:
     check("location ^~ /api/" in nginx and "proxy_pass http://backend:8094" in nginx, "9 /api reverse proxy exists")
     check("/api/media" in nginx and "try_files $uri =404" in nginx and "location ^~ /api/" in nginx, "10 audited media routes cannot fall into SPA fallback")
     check("location = /healthz" in nginx and "/healthz" in dockerfile, "11 frontend-local health endpoint exists")
-    check(all(token in nginx for token in ("X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options", "Content-Security-Policy", "must-revalidate", "immutable")), "12 security and cache policies exist")
+    check(all(token in nginx for token in ("X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options", "Content-Security-Policy", "must-revalidate", "immutable")) and "fonts.googleapis.com" not in base_css and "@import url(" not in base_css, "12 security/cache policies exist and CSS has no blocked remote font import")
     check(all(f"  {name}:" in compose for name in ("postgres", "backend", "frontend")), "13 generic three-service local-production template exists")
     check("bonnymakaniankhondo" not in compose.lower() and "c:\\users\\" not in compose.lower() and "set an external local-production password" in compose, "14 template contains placeholders rather than real secrets or personal paths")
     check("ports:" not in postgres and "ports:" not in backend and "ports:" in frontend and "127.0.0.1:" in frontend, "15 only frontend is intended for host publication")

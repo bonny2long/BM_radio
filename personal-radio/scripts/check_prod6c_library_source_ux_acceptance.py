@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from http.client import HTTPConnection, HTTPResponse
 import importlib.util
 import json
 import os
@@ -37,7 +38,7 @@ from app.postgres_backup_restore import _process_quiescence  # noqa: E402
 from app.postgres_recovery import EXPECTED_SOURCE_ROWS  # noqa: E402
 
 
-STARTING_COMMIT = "5e3b2be2e5163c37297881dd9d1fcd33d55bd129"
+STARTING_COMMIT = "9b8cc2cf48a619422b3d25983bc61267149fdaa5"
 RESOURCE_PREFIX = "bm-prod6c-"
 POSTGRES_IMAGE = "postgres:16"
 BACKEND_IMAGE = "bm-radio-backend:prod6c-local"
@@ -76,6 +77,25 @@ def nas_root() -> Path:
     if not value:
         raise Prod6CAcceptanceBlocked("NAS_LOCAL_ROOT must name the task-scoped local NAS root")
     return Path(value).resolve()
+
+
+def copied_media_source() -> Path:
+    value = os.environ.get("PROD6C_COPIED_MEDIA_SOURCE", "").strip()
+    if not value:
+        raise Prod6CAcceptanceBlocked("PROD6C_COPIED_MEDIA_SOURCE is required; acceptance media cannot be synthesized")
+    return Path(value).resolve()
+
+
+def source_classification() -> dict[str, bool]:
+    classification = {
+        "copied_test_media": os.environ.get("PROD6C_COPIED_TEST_MEDIA", "").strip().lower() == "true",
+        "generated_by_acceptance_script": os.environ.get("PROD6C_GENERATED_BY_ACCEPTANCE_SCRIPT", "").strip().lower() == "true",
+        "original_only_copy": os.environ.get("PROD6C_ORIGINAL_ONLY_COPY", "").strip().lower() == "true",
+    }
+    required = {"copied_test_media": True, "generated_by_acceptance_script": False, "original_only_copy": False}
+    if classification != required:
+        raise Prod6CAcceptanceBlocked(f"copied-real-media classification is not accepted: {classification}")
+    return classification
 
 
 def evidence_dir(root: Path) -> Path:
@@ -119,9 +139,14 @@ def _snapshot(root: Path, paths: list[Path]) -> dict[str, dict[str, Any]]:
     }
 
 
-def _source_snapshot(root: Path) -> dict[str, dict[str, Any]]:
-    source = root / "_TEST_FIXTURES" / "prod6c_source"
-    return _snapshot(root, [path for path in source.rglob("*") if path.is_file()]) if source.is_dir() else {}
+def _source_snapshot(source: Path) -> dict[str, dict[str, Any]]:
+    return {
+        "$PROD6C_COPIED_MEDIA_SOURCE/" + path.relative_to(source).as_posix(): {
+            "sha256": _sha(path), "size": path.stat().st_size, "mtime_ns": path.stat().st_mtime_ns,
+        }
+        for path in sorted(source.rglob("*"))
+        if path.is_file()
+    } if source.is_dir() else {}
 
 
 def _git_head() -> str:
@@ -143,16 +168,30 @@ def preflight() -> dict[str, Any]:
     except Prod6CAcceptanceBlocked as exc:
         return {"gate": "BLOCKED", "blockers": [str(exc)]}
     head = _git_head()
-    if head != STARTING_COMMIT:
-        blockers.append("Git HEAD is not the accepted BM-PROD6B implementation commit")
+    if _run(["git", "merge-base", "--is-ancestor", STARTING_COMMIT, "HEAD"]).returncode != 0:
+        blockers.append("Git HEAD does not descend from the accepted PROD6C correction starting commit")
     if not root.is_dir():
         blockers.append("NAS_LOCAL_ROOT does not exist")
     missing = [name for name in EXPECTED_CHILDREN if not (root / name).is_dir()]
     if missing:
         blockers.append("local NAS root is missing required children: " + ", ".join(missing))
-    source = _source_snapshot(root)
-    if not source:
-        blockers.append("immutable copied fixture source is absent")
+    source: dict[str, dict[str, Any]] = {}
+    classification: dict[str, bool] = {}
+    try:
+        copied_source = copied_media_source()
+        classification = source_classification()
+        source = _source_snapshot(copied_source)
+        copied_files = [path for path in copied_source.rglob("*") if path.is_file()] if copied_source.is_dir() else []
+        if not copied_source.is_dir() or not (copied_source / "Music").is_dir():
+            blockers.append("copied-media source must contain a Music tree")
+        if not any(path.suffix.lower() == ".epub" for path in copied_files):
+            blockers.append("copied-media source does not contain a real EPUB")
+        if not any(path.suffix.lower() in {".mp3", ".m4a", ".m4b", ".flac", ".ogg", ".opus", ".aac"} and "Audiobooks" in path.parts for path in copied_files):
+            blockers.append("copied-media source does not contain a real audiobook")
+        if len([path for path in copied_files if path.suffix.lower() in {".flac", ".mp3", ".m4a", ".ogg", ".opus", ".aac"} and "Music" in path.parts]) < 3:
+            blockers.append("copied-media source has fewer than three real music tracks")
+    except Prod6CAcceptanceBlocked as exc:
+        blockers.append(str(exc))
     docker = docker_context_status()
     if not (docker.get("available") and docker.get("local") and docker.get("linux")):
         blockers.append("a reachable local Docker Linux engine is required")
@@ -185,6 +224,8 @@ def preflight() -> dict[str, Any]:
         "source_commit": head,
         "nas_root": "$NAS_LOCAL_ROOT",
         "fixture_source_files": len(source),
+        "fixture_source": "$PROD6C_COPIED_MEDIA_SOURCE",
+        "media_classification": classification,
         "docker": {"context": docker.get("context"), "local": docker.get("local"), "linux": docker.get("linux")},
         "active_postgresql": active,
         "quiescence": quiescence,
@@ -263,6 +304,26 @@ def _score(debug: dict[str, Any], recording_id: int) -> float | None:
     return None
 
 
+def _media_stream_pool_proof(port: int, path: str, count: int = 18) -> dict[str, Any]:
+    held: list[tuple[HTTPConnection, HTTPResponse]] = []
+    try:
+        for _index in range(count):
+            connection = HTTPConnection("127.0.0.1", port, timeout=20)
+            connection.request("GET", path, headers={"Range": "bytes=0-", "Accept": "audio/*"})
+            response = connection.getresponse()
+            if response.status != 206:
+                raise Prod6CAcceptanceBlocked(f"held range stream returned {response.status}")
+            held.append((connection, response))
+        summary = _json(port, "/api/library/summary")
+        if summary.get("tracks", 0) < 1:
+            raise Prod6CAcceptanceBlocked("library API failed while more than the DB pool limit of media streams remained open")
+        return {"result": "PASS", "concurrent_unconsumed_range_streams": count, "database_pool_exhausted": False}
+    finally:
+        for connection, response in held:
+            response.close()
+            connection.close()
+
+
 def _automated_http_proof(port: int, final_files: list[Path]) -> dict[str, Any]:
     music_scan = _json(port, "/api/library/scan/music", method="POST")
     if music_scan.get("status") not in {"ok", "succeeded"} or music_scan.get("scan_run_status") != "succeeded":
@@ -316,6 +377,7 @@ def _automated_http_proof(port: int, final_files: list[Path]) -> dict[str, Any]:
     audiobook = _json(port, f"/api/audiobooks/{audiobooks[0]['id']}")
     if not audiobook.get("chapters") or _http(port, audiobook["chapters"][0]["stream_url"], headers={"Range": "bytes=0-31"})[0] != 206:
         raise Prod6CAcceptanceBlocked("audiobook playback entry point failed")
+    media_pool = _media_stream_pool_proof(port, audiobook["chapters"][0]["stream_url"])
 
     controls = {int(item["recording_id"]): _json(port, f"/api/music/recordings/{item['recording_id']}/control") for item in tracks}
     variant = next((item for item in tracks if len(controls[int(item["recording_id"])]["candidates"]) > 1), None)
@@ -429,6 +491,7 @@ def _automated_http_proof(port: int, final_files: list[Path]) -> dict[str, Any]:
         "library": {"tracks": len(tracks), "artists": len(artists), "albums": len(albums), "audiobooks": len(audiobooks), "final_media_files": len(final_files)},
         "identity": {"logical_recordings": len(tracks), "physical_occurrences": physical_before, "listener_duplicates": 0, "artist_duplicates": 0, "album_duplicates": 0},
         "search_album_audiobook": "PASS",
+        "media_stream_session_release": media_pool,
         "preferred_source": source_result,
         "feedback": {"favorite_unfavorite": "PASS", "thumbs_up_down": "PASS", "refresh_persistence": "PASS", "recording_level_across_source": cross_source, "down_excluded_favorites": "PASS", "up_favorite_score_delta": up_score - base_score},
         "playlist": {"create_rename_add_reorder_play_first_middle_remove_delete": "PASS", "duplicate_policy": "duplicate logical entries are intentionally allowed"},
@@ -454,6 +517,8 @@ def _cleanup_resources(state: dict[str, Any]) -> dict[str, Any]:
 
 def run_automated() -> dict[str, Any]:
     root = nas_root()
+    copied_source = copied_media_source()
+    classification = source_classification()
     gate = preflight()
     if gate["gate"] != "PASS":
         raise Prod6CAcceptanceBlocked("preflight blocked: " + "; ".join(gate["blockers"]))
@@ -464,7 +529,7 @@ def run_automated() -> dict[str, Any]:
         raise Prod6CAcceptanceBlocked("AA-cleaned final Audiobook fixture is absent")
     if not any(path.suffix.lower() == ".epub" and "Books" in path.parts for path in final_files):
         raise Prod6CAcceptanceBlocked("AA-cleaned final EPUB fixture is absent")
-    source_before = _source_snapshot(root)
+    source_before = _source_snapshot(copied_source)
     final_before = _snapshot(root, final_files)
     protected_before = _protected_state()
     run_id = secrets.token_hex(5)
@@ -522,7 +587,7 @@ def run_automated() -> dict[str, Any]:
         automated = _automated_http_proof(port, final_files)
         if _snapshot(root, final_files) != final_before:
             raise Prod6CAcceptanceBlocked("BM Radio modified read-only final media")
-        if _source_snapshot(root) != source_before:
+        if _source_snapshot(copied_source) != source_before:
             raise Prod6CAcceptanceBlocked("immutable source fixture hashes changed")
         protected_after = _protected_state()
         if protected_after != protected_before:
@@ -534,7 +599,7 @@ def run_automated() -> dict[str, Any]:
             "nas_root": "$NAS_LOCAL_ROOT",
             "database": {"postgresql": "16", "alembic_head": "PASS", "isolated": True, "active_target_used": False},
             "topology": topology,
-            "fixture": {"source_files": len(source_before), "final_files": len(final_files), "source_hashes_equal": True, "final_media_unchanged_by_bm_radio": True},
+            "fixture": {**classification, "source": "$PROD6C_COPIED_MEDIA_SOURCE", "source_files": len(source_before), "final_files": len(final_files), "source_hashes_equal": True, "final_media_unchanged_by_bm_radio": True},
             "automated": automated,
             "protected_before_sha256": _canonical_sha(protected_before),
             "protected_after_sha256": _canonical_sha(protected_after),
@@ -543,7 +608,7 @@ def run_automated() -> dict[str, Any]:
             "truenas_work": False,
             "cleaner_deletion": False,
         }
-        state.update({"port": port, "proof": proof, "source_before": source_before, "final_before": final_before})
+        state.update({"port": port, "proof": proof, "copied_source": str(copied_source), "source_before": source_before, "final_before": final_before})
         state_path(root).write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
         (evidence_dir(root) / "bm_radio_automated_evidence.json").write_text(json.dumps(proof, indent=2, sort_keys=True), encoding="utf-8")
         return proof
@@ -567,6 +632,22 @@ def manual_url() -> dict[str, Any]:
     if not web:
         raise Prod6CAcceptanceBlocked("retained frontend container identity is missing")
     port = _dynamic_port(web, "8080/tcp")
+    evidence_changed = int(state.get("port", 0)) != port
+    if evidence_changed:
+        state["port"] = port
+        state["proof"]["frontend_url"] = f"http://127.0.0.1:{port}"
+    if "media_stream_session_release" not in state["proof"]["automated"]:
+        audiobooks = _json(port, "/api/audiobooks/")
+        if not audiobooks:
+            raise Prod6CAcceptanceBlocked("retained stack has no audiobook for media-session proof")
+        audiobook = _json(port, f"/api/audiobooks/{audiobooks[0]['id']}")
+        if not audiobook.get("chapters"):
+            raise Prod6CAcceptanceBlocked("retained audiobook has no chapter stream for media-session proof")
+        state["proof"]["automated"]["media_stream_session_release"] = _media_stream_pool_proof(port, audiobook["chapters"][0]["stream_url"])
+        evidence_changed = True
+    if evidence_changed:
+        state_path(root).write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
+        (evidence_dir(root) / "bm_radio_automated_evidence.json").write_text(json.dumps(state["proof"], indent=2, sort_keys=True), encoding="utf-8")
     _wait_origin(port, timeout=30)
     return {"frontend_url": f"http://127.0.0.1:{port}", "human_checklist": list(MANUAL_CHECKS), "recorded_result": state["proof"].get("human_result")}
 
@@ -587,7 +668,7 @@ def cleanup() -> dict[str, Any]:
     root = nas_root()
     state = _load_state(root)
     human = state["proof"].get("human_result")
-    source_equal = _source_snapshot(root) == state["source_before"]
+    source_equal = _source_snapshot(Path(state["copied_source"])) == state["source_before"]
     final_equal = _snapshot(root, _media_files(root)) == state["final_before"]
     protected_equal = _canonical_sha(_protected_state()) == state["proof"]["protected_before_sha256"]
     resources = _cleanup_resources(state)

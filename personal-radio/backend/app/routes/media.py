@@ -62,7 +62,7 @@ def find_cover(start: Path, roots: list[Path]) -> Path | None:
 
 
 @router.get('/tracks/{track_id}/stream')
-def stream_track(track_id: int, db: Session = Depends(get_db)):
+def stream_track(track_id: int, db: Session = Depends(get_db, scope="function")):
     track = db.get(models.Track, track_id)
     if not track:
         raise HTTPException(404, 'Track not found')
@@ -73,7 +73,7 @@ def stream_track(track_id: int, db: Session = Depends(get_db)):
 
 
 @router.get('/tracks/{track_id}/cover')
-def track_cover(track_id: int, db: Session = Depends(get_db)):
+def track_cover(track_id: int, db: Session = Depends(get_db, scope="function")):
     track = db.get(models.Track, track_id)
     if not track:
         raise HTTPException(404, 'Track not found')
@@ -94,7 +94,7 @@ def track_cover(track_id: int, db: Session = Depends(get_db)):
 
 
 @router.get('/albums/cover')
-def album_cover(artist: str, album: str, db: Session = Depends(get_db)):
+def album_cover(artist: str, album: str, db: Session = Depends(get_db, scope="function")):
     tracks = active_tracks(db).filter_by(artist=artist, album=album).all()
     if not tracks:
         raise HTTPException(404, 'Album not found')
@@ -115,7 +115,7 @@ def album_cover(artist: str, album: str, db: Session = Depends(get_db)):
 
 
 @router.get('/audiobooks/{audiobook_id}/chapters/{chapter_id}/stream')
-def stream_audiobook_chapter(audiobook_id: int, chapter_id: int, db: Session = Depends(get_db)):
+def stream_audiobook_chapter(audiobook_id: int, chapter_id: int, db: Session = Depends(get_db, scope="function")):
     book = db.get(models.Audiobook, audiobook_id)
     if not book:
         raise HTTPException(404, 'Audiobook not found')
@@ -130,7 +130,7 @@ def stream_audiobook_chapter(audiobook_id: int, chapter_id: int, db: Session = D
 
 
 @router.get('/audiobooks/{audiobook_id}/cover')
-def audiobook_cover(audiobook_id: int, db: Session = Depends(get_db)):
+def audiobook_cover(audiobook_id: int, db: Session = Depends(get_db, scope="function")):
     book = db.get(models.Audiobook, audiobook_id)
     if not book:
         raise HTTPException(404, 'Audiobook not found')
