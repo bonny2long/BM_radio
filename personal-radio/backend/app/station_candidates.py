@@ -53,8 +53,12 @@ def _track_rows_by_id(db: Session, track_ids: Iterable[int | None]) -> dict[int,
     ids = unique_ints(track_ids)
     if not ids:
         return {}
-    return {row.id: row for row in db.query(models.Track).filter(models.Track.id.in_(ids)).all()}
-
+    out: dict[int, models.Track] = {}
+    for index in range(0, len(ids), 1000):
+        chunk = ids[index:index + 1000]
+        for row in db.query(models.Track).filter(models.Track.id.in_(chunk)).all():
+            out[row.id] = row
+    return out
 
 
 def _attach_candidate_metadata(track: models.Track, candidate: StationRecordingCandidate) -> models.Track:
@@ -131,7 +135,12 @@ def validate_song_seed_track(db: Session, track: models.Track) -> tuple[int | No
 def _recording_rows_by_id(db: Session, recording_ids: list[int]) -> dict[int, models.MusicRecording]:
     if not recording_ids:
         return {}
-    return {row.id: row for row in db.query(models.MusicRecording).filter(models.MusicRecording.id.in_(recording_ids)).all()}
+    out: dict[int, models.MusicRecording] = {}
+    for index in range(0, len(recording_ids), 1000):
+        chunk = recording_ids[index:index + 1000]
+        for row in db.query(models.MusicRecording).filter(models.MusicRecording.id.in_(chunk)).all():
+            out[row.id] = row
+    return out
 
 
 def select_station_recording_ids(
@@ -227,27 +236,30 @@ def _select_station_recording_ids_by_intent_filters(
         return select_station_recording_ids(db, limit=bounded, excluded_recording_ids=excluded_recording_ids)
 
     query = _eligible_recording_query(db, excluded_recording_ids=excluded_recording_ids)
-    genre_columns = [_sql_text_token(models.Track.genre), _sql_text_token(models.Track.primary_genre)]
-    if _has_table(db, 'track_radio_profiles'):
-        query = query.outerjoin(models.TrackRadioProfile, models.TrackRadioProfile.track_id == models.Track.id)
-        genre_columns.append(_sql_text_token(models.TrackRadioProfile.primary_genre))
-    if _has_table(db, 'artist_radio_profiles'):
-        artist_match = or_(
-            _sql_text_token(models.ArtistRadioProfile.artist) == _sql_text_token(models.Track.artist),
-            _sql_text_token(models.ArtistRadioProfile.artist) == _sql_text_token(models.Track.album_artist),
-        )
-        query = query.outerjoin(models.ArtistRadioProfile, artist_match)
-        genre_columns.append(_sql_text_token(models.ArtistRadioProfile.primary_genre))
-    if _has_table(db, 'album_radio_profiles'):
-        album_match = and_(
-            _sql_text_token(models.AlbumRadioProfile.album) == _sql_text_token(models.Track.album),
-            or_(
-                _sql_text_token(models.AlbumRadioProfile.artist) == _sql_text_token(models.Track.artist),
-                _sql_text_token(models.AlbumRadioProfile.artist) == _sql_text_token(models.Track.album_artist),
-            ),
-        )
-        query = query.outerjoin(models.AlbumRadioProfile, album_match)
-        genre_columns.append(_sql_text_token(models.AlbumRadioProfile.primary_genre))
+    has_genre_filter = bool(exact_values or family_values)
+    genre_columns = []
+    if has_genre_filter:
+        genre_columns = [_sql_text_token(models.Track.genre), _sql_text_token(models.Track.primary_genre)]
+        if _has_table(db, 'track_radio_profiles'):
+            query = query.outerjoin(models.TrackRadioProfile, models.TrackRadioProfile.track_id == models.Track.id)
+            genre_columns.append(_sql_text_token(models.TrackRadioProfile.primary_genre))
+        if _has_table(db, 'artist_radio_profiles'):
+            artist_match = or_(
+                _sql_text_token(models.ArtistRadioProfile.artist) == _sql_text_token(models.Track.artist),
+                _sql_text_token(models.ArtistRadioProfile.artist) == _sql_text_token(models.Track.album_artist),
+            )
+            query = query.outerjoin(models.ArtistRadioProfile, artist_match)
+            genre_columns.append(_sql_text_token(models.ArtistRadioProfile.primary_genre))
+        if _has_table(db, 'album_radio_profiles'):
+            album_match = and_(
+                _sql_text_token(models.AlbumRadioProfile.album) == _sql_text_token(models.Track.album),
+                or_(
+                    _sql_text_token(models.AlbumRadioProfile.artist) == _sql_text_token(models.Track.artist),
+                    _sql_text_token(models.AlbumRadioProfile.artist) == _sql_text_token(models.Track.album_artist),
+                ),
+            )
+            query = query.outerjoin(models.AlbumRadioProfile, album_match)
+            genre_columns.append(_sql_text_token(models.AlbumRadioProfile.primary_genre))
 
     filters = []
     if artist_values:
@@ -384,21 +396,26 @@ def select_intent_station_recording_ids(
 def _deterministic_profile_track_ids(db: Session, recording_ids: list[int]) -> dict[int, int]:
     if not recording_ids:
         return {}
-    row_number = func.row_number().over(
-        partition_by=models.MusicTrackIdentity.recording_id,
-        order_by=(models.Track.created_at.asc(), models.Track.relative_path.asc(), models.Track.id.asc()),
-    ).label("rn")
-    subq = (
-        db.query(
-            models.MusicTrackIdentity.recording_id.label("recording_id"),
-            models.Track.id.label("track_id"),
-            row_number,
+    out: dict[int, int] = {}
+    for index in range(0, len(recording_ids), 2000):
+        chunk = recording_ids[index:index + 2000]
+        row_number = func.row_number().over(
+            partition_by=models.MusicTrackIdentity.recording_id,
+            order_by=(models.Track.created_at.asc(), models.Track.relative_path.asc(), models.Track.id.asc()),
+        ).label("rn")
+        subq = (
+            db.query(
+                models.MusicTrackIdentity.recording_id.label("recording_id"),
+                models.Track.id.label("track_id"),
+                row_number,
+            )
+            .join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id)
+            .filter(models.MusicTrackIdentity.recording_id.in_(chunk), models.Track.library_availability == LIBRARY_AVAILABLE)
+            .subquery()
         )
-        .join(models.Track, models.Track.id == models.MusicTrackIdentity.track_id)
-        .filter(models.MusicTrackIdentity.recording_id.in_(recording_ids), models.Track.library_availability == LIBRARY_AVAILABLE)
-        .subquery()
-    )
-    return {int(row.recording_id): int(row.track_id) for row in db.query(subq).filter(subq.c.rn == 1).all()}
+        for row in db.query(subq).filter(subq.c.rn == 1).all():
+            out[int(row.recording_id)] = int(row.track_id)
+    return out
 
 
 def _projection_metrics(

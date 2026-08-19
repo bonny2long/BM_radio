@@ -263,11 +263,10 @@ def score_tracks(
     albums = album_counts(tracks)
     scored = []
 
+    is_deep_cuts = station_type == 'deep_cuts'
     for t in tracks:
         rating = fb.get(t.id)
         plays = counts.get(t.id, 0)
-        num = track_number_guess(t)
-        album_total = albums.get((t.artist or '', t.album or ''), 0)
         score = random.random()
         score -= min(plays, 20) * 0.08
         if rating == 'up':
@@ -276,7 +275,9 @@ def score_tracks(
             score -= 5.0
         if t.id in recent:
             score -= 0.45
-        if station_type == 'deep_cuts':
+        if is_deep_cuts:
+            num = track_number_guess(t)
+            album_total = albums.get((t.artist or '', t.album or ''), 0)
             if plays == 0:
                 score += 1.0
             else:
@@ -309,6 +310,11 @@ def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Tr
     recent = recent_set if recent_set is not None else recent_ids(db, tracks=candidates)
     favs = favorite_set if favorite_set is not None else favorite_ids(db, candidates)
 
+    seed_subgenres = set(seed_profile.get('subgenres', []))
+    seed_moods = set(seed_profile.get('moods', []))
+    seed_energy = seed_profile.get('energy')
+    related_artists = {normalize_token(name) for name in seed_profile.get('related_artists', []) if name}
+
     scored: list[tuple[float, models.Track]] = []
     for t in candidates:
         if t.id == seed.id:
@@ -320,14 +326,20 @@ def score_song_radio(db: Session, seed: models.Track, candidates: list[models.Tr
             continue
         score = random.random() * 0.5
 
-        score += overlap_score(seed_profile.get('subgenres', []), candidate_profile.get('subgenres', []), 5.0)
-        score += overlap_score(seed_profile.get('moods', []), candidate_profile.get('moods', []), 3.0)
+        if seed_subgenres:
+            cand_sub = set(candidate_profile.get('subgenres', []))
+            if cand_sub:
+                score += min(len(seed_subgenres & cand_sub), 3) * 5.0
+        if seed_moods:
+            cand_mood = set(candidate_profile.get('moods', []))
+            if cand_mood:
+                score += min(len(seed_moods & cand_mood), 3) * 3.0
 
-        if seed_profile.get('energy') and seed_profile.get('energy') == candidate_profile.get('energy'):
+        if seed_energy and seed_energy == candidate_profile.get('energy'):
             score += 1.5
         if seed_genre and candidate_genre == seed_genre:
             score += 3.0
-        if is_related_artist(seed_profile, t):
+        if related_artists and (normalize_token(t.artist) in related_artists or normalize_token(t.album_artist) in related_artists):
             score += 1.0
 
         t_artist = (t.artist or '').strip().lower()

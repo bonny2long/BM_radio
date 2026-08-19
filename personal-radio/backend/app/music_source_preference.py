@@ -11,7 +11,7 @@ from .perf import perf_segment
 from .scan_runs import LIBRARY_AVAILABLE
 
 PREFERENCE_POLICY_VERSION = 1
-PREFERENCE_BATCH_CHUNK_SIZE = 500
+PREFERENCE_BATCH_CHUNK_SIZE = 2000
 
 DECISION_PREFERRED = "preferred"
 DECISION_AMBIGUOUS = "ambiguous"
@@ -195,15 +195,16 @@ def _load_candidates(db: Session, recording_ids: list[int]) -> dict[int, list[Ca
             .all()
         )
         for row in rows:
-            candidates.setdefault(row.recording_id, []).append(Candidate(
-                recording_id=row.recording_id,
-                track_id=row.id,
-                path=row.path or "",
-                library_availability=row.library_availability,
-                probe_status=row.probe_status,
-                codec=row.codec,
-                is_lossless=row.is_lossless,
-                bitrate_bps=row.bitrate_bps,
+            rec_id, track_id, path, avail, probe, codec, lossless, bitrate = row
+            candidates.setdefault(rec_id, []).append(Candidate(
+                recording_id=rec_id,
+                track_id=track_id,
+                path=path or "",
+                library_availability=avail,
+                probe_status=probe,
+                codec=codec,
+                is_lossless=lossless,
+                bitrate_bps=bitrate,
             ))
     return candidates
 

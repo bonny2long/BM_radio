@@ -319,7 +319,7 @@ def seed_default_radio_profiles(db: Session) -> None:
     if changed:
         db.commit()
 
-PROFILE_SCOPE_CHUNK_SIZE = 500
+PROFILE_SCOPE_CHUNK_SIZE = 2000
 
 
 def _chunked(values: list[Any], size: int = PROFILE_SCOPE_CHUNK_SIZE):
@@ -395,12 +395,9 @@ def load_radio_profile_cache_for_tracks(
     }
 
     artists: dict[str, dict[str, Any]] = {}
-    artist_key_list = sorted(artist_keys)
-    for chunk in _chunked(artist_key_list):
-        if not chunk:
-            continue
-        metrics['artist_profile_queries'] += 1
-        rows = db.query(models.ArtistRadioProfile).filter(_sql_normalized(models.ArtistRadioProfile.artist).in_(chunk)).all()
+    if artist_keys:
+        metrics['artist_profile_queries'] = 1
+        rows = db.query(models.ArtistRadioProfile).all()
         for row in rows:
             key = normalize_token(row.artist)
             if key and key in artist_keys:
@@ -408,20 +405,10 @@ def load_radio_profile_cache_for_tracks(
     metrics['artist_profile_rows_loaded'] = len(artists)
 
     albums: dict[tuple[str, str], dict[str, Any]] = {}
-    album_key_list = sorted(album_keys)
-    for chunk in _chunked(album_key_list):
-        if not chunk:
-            continue
-        metrics['album_profile_queries'] += 1
-        artist_chunk = sorted({artist for artist, _album in chunk})
-        album_chunk = sorted({album for _artist, album in chunk})
-        rows = (
-            db.query(models.AlbumRadioProfile)
-            .filter(_sql_normalized(models.AlbumRadioProfile.artist).in_(artist_chunk))
-            .filter(_sql_normalized(models.AlbumRadioProfile.album).in_(album_chunk))
-            .all()
-        )
-        requested = set(chunk)
+    if album_keys:
+        metrics['album_profile_queries'] = 1
+        rows = db.query(models.AlbumRadioProfile).all()
+        requested = set(album_keys)
         for row in rows:
             key = (normalize_token(row.artist), normalize_token(row.album))
             if key[0] and key[1] and key in requested:
@@ -429,7 +416,7 @@ def load_radio_profile_cache_for_tracks(
     metrics['album_profile_rows_loaded'] = len(albums)
 
     track_profiles: dict[int, dict[str, Any]] = {}
-    for chunk in _chunked(track_ids):
+    for chunk in _chunked(track_ids, 2000):
         if not chunk:
             continue
         metrics['track_profile_queries'] += 1
