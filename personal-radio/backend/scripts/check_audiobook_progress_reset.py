@@ -30,7 +30,7 @@ def main() -> None:
     db.flush()
 
     now = datetime.now(timezone.utc)
-    progress = models.AudiobookProgress(audiobook_id=book.id, chapter_id=chapter1.id, position_seconds=40, progress_percent=20, status="in_progress", checkpointed_at=now - timedelta(minutes=5), updated_at=now - timedelta(minutes=5))
+    progress = models.AudiobookProgress(audiobook_id=book.id, chapter_id=chapter1.id, position_seconds=40, progress_percent=20, status="in_progress", updated_at=now - timedelta(minutes=5))
     db.add(progress)
     db.commit()
     db.refresh(book)

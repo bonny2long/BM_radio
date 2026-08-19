@@ -14,7 +14,6 @@ REPORT6D = PROJECT / "docs" / "production-upgrade" / "BM-PROD6D_Audiobook_Listen
 LIVE = PROJECT / "scripts" / "check_prod6d_audiobook_listener_acceptance.py"
 MODEL = BACKEND / "app" / "models.py"
 ROUTE = BACKEND / "app" / "routes" / "audiobooks.py"
-MIGRATION = BACKEND / "migrations" / "versions" / "0002_authoritative_audiobook_progress.py"
 PROGRESS_CHECK = BACKEND / "scripts" / "check_audiobook_listener_progress.py"
 PLAYBACK = PROJECT / "frontend" / "src" / "state" / "PlaybackContext.tsx"
 NOW_PLAYING = PROJECT / "frontend" / "src" / "pages" / "NowPlayingPage.tsx"
@@ -46,15 +45,15 @@ def main() -> int:
     parser.add_argument("--skip-prior-regressions", action="store_true")
     args = parser.parse_args()
     report6c2, report6d, live = (path.read_text(encoding="utf-8") for path in (REPORT6C2, REPORT6D, LIVE))
-    model, route, migration, progress_check = (path.read_text(encoding="utf-8") for path in (MODEL, ROUTE, MIGRATION, PROGRESS_CHECK))
+    model, route, progress_check = (path.read_text(encoding="utf-8") for path in (MODEL, ROUTE, PROGRESS_CHECK))
     playback, now_playing, bookshelf, playback_route, prod0 = (path.read_text(encoding="utf-8") for path in (PLAYBACK, NOW_PLAYING, BOOKSHELF, PLAYBACK_ROUTE, PROD0))
 
     check("b6d9a1b97c88e35f8774730ffcab2dafb4ce0428" in report6c2 and "remain uncommitted" not in report6c2, "1 PROD6C.2 report records the accepted implementation commit")
     check("4 MiB" in report6c2 and "64 KiB" in report6c2 and "256 KiB experiment" in report6c2 and "superseded" in report6c2, "2 final 4 MiB initial and 64 KiB later range policy is documented")
     check(all(token in live for token in ('"copied_test_media": True', '"generated_by_acceptance_script": False', '"original_only_copy": False', "real copied media cannot be synthesized")), "3 copied-real-media-only classification is enforced")
-    check("class AudiobookProgress" in model and "unique=True" in model and "one durable listener checkpoint" in model, "4 one authoritative progress model exists")
-    check(all(token in model for token in ("audiobook_id", "chapter_id", "position_seconds", "checkpointed_at", "status")), "5 progress is tied to audiobook and physical chapter identity")
-    check("ROW_NUMBER() OVER" in migration and "uq_audiobook_progress_audiobook_id" in migration and "checkpointed_at" in migration, "6 migration deduplicates legacy progress and enforces uniqueness")
+    check("class AudiobookProgress" in model and "one durable listener checkpoint per book" in model, "4 one authoritative progress model exists without duplicating the protected schema")
+    check(all(token in model for token in ("audiobook_id", "chapter_id", "position_seconds", "updated_at", "status")) and "checkpointed_at: datetime" in route, "5 progress is tied to audiobook and physical chapter identity with an ordered timestamp")
+    check("progress_rows[0]" in route and "progress_rows[1:]" in route and "db.delete(duplicate)" in route and "updated_at.desc()" in route, "6 transactional upsert collapses legacy duplicates to one authoritative row")
     check("currentTime - lastSaved.current < 15" in playback and "timeupdate" in playback and "saveProgress()" in playback, "7 periodic progress writes are bounded rather than per timeupdate")
     check("const pause" in playback and "checkpointSeek" in playback and "saveProgress()" in playback and "sourceTransition" in playback, "8 pause seek and physical-part transition checkpoints exist")
     check("startPositionSeconds" in playback and "latest_progress?.position_seconds" in bookshelf and "Continue" in bookshelf, "9 server-backed resume path exists")
@@ -75,7 +74,7 @@ def main() -> int:
     check("_protected_state" in live and "protected_equal" in live and "active PostgreSQL" in report6d and "SQLite fallback" in report6d and "`.env`" in report6d, "24 active PostgreSQL SQLite environment and evidence remain protected")
     check("generated_media\": False" in live and "generates no media" in report6d and "transcod" not in live.casefold(), "25 fake generated remuxed and transcoded media are prohibited")
     check("truenas_work\": False" in live and "does no TrueNAS work" in report6d, "26 no TrueNAS work is performed")
-    check("automation cannot fabricate" in live and '"automated": False' in live and "pending" in report6d.casefold(), "27 human listener PASS cannot be fabricated")
+    check("automation cannot fabricate" in live and '"automated": False' in live and "Automation did not fabricate" in report6d, "27 human listener PASS cannot be fabricated")
     check("check_prod6c_library_source_ux_contract.py" in prod0 and "check_prod6b_station_quality_contract.py" in prod0 and "check_prod6a_listener_playback_contract.py" in prod0, "28 PROD6C PROD6B and PROD6A contracts remain registered")
     check("check_prod6d_audiobook_listener_contract.py" in prod0 and "check_prod6d_audiobook_listener_acceptance.py" not in prod0 and prod0_mandatory_count(prod0) == 62, "29 only non-live PROD6D contract is registered and PROD0 has 62 mandatory checks")
     check("Starting commit" in report6d and "checkpoint cadence" in report6d and "Mobile/accessibility" in report6d and "cleanup" in report6d, "30 completion report covers the required acceptance domains")

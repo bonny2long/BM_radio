@@ -62,7 +62,7 @@ def progress_payload(book, progress):
         'overall_progress_percent': min(100, max(0, overall)),
         'progress_percent': min(100, max(0, overall)),
         'completion_state': progress.status,
-        'checkpointed_at': str(progress.checkpointed_at),
+        'checkpointed_at': str(progress.updated_at),
         'updated_at': str(progress.updated_at),
     }
 
@@ -176,19 +176,21 @@ def update_progress(audiobook_id: int, payload: ProgressUpdate, db: Session = De
     overall = min(100, max(0, overall))
     status = 'available' if overall <= 0 else 'finished' if overall >= 99 else 'in_progress'
     checkpointed_at = utc(payload.checkpointed_at or datetime.now(timezone.utc))
-    progress = (
+    progress_rows = (
         db.query(models.AudiobookProgress)
         .filter_by(audiobook_id=audiobook_id)
+        .order_by(models.AudiobookProgress.updated_at.desc(), models.AudiobookProgress.id.desc())
         .with_for_update()
-        .first()
+        .all()
     )
-    if progress and progress.checkpointed_at and checkpointed_at <= utc(progress.checkpointed_at):
+    progress = progress_rows[0] if progress_rows else None
+    if progress and progress.updated_at and checkpointed_at <= utc(progress.updated_at):
         current = progress_payload(book, progress)
         return {
             'status': 'stale',
             'book_status': book.status,
             'overall_progress_percent': current.get('overall_progress_percent', 0) if current else 0,
-            'checkpointed_at': progress.checkpointed_at,
+            'checkpointed_at': progress.updated_at,
         }
     book.status = status
     if progress is None:
@@ -198,7 +200,9 @@ def update_progress(audiobook_id: int, payload: ProgressUpdate, db: Session = De
     progress.position_seconds = position
     progress.progress_percent = overall
     progress.status = status
-    progress.checkpointed_at = checkpointed_at
+    progress.updated_at = checkpointed_at
+    for duplicate in progress_rows[1:]:
+        db.delete(duplicate)
     db.commit()
     return {'status': 'ok', 'book_status': status, 'overall_progress_percent': overall, 'checkpointed_at': checkpointed_at}
 
@@ -232,7 +236,7 @@ def finish_audiobook(audiobook_id: int, db: Session = Depends(get_db)):
     progress.position_seconds = float(chapter.duration_seconds or 0)
     progress.progress_percent = 100
     progress.status = 'finished'
-    progress.checkpointed_at = datetime.now(timezone.utc)
+    progress.updated_at = datetime.now(timezone.utc)
     book.status = 'finished'
     db.commit()
     return {'book_status': book.status, 'latest_progress': progress_payload(book, progress)}

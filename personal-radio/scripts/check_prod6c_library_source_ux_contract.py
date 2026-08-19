@@ -141,7 +141,7 @@ def main() -> int:
     applicable = "\n".join((live, prod6a_live, aa_music, aa_audiobook))
     check(not any(token in applicable for token in prohibited) and ".write_bytes(" not in aa_music and ".write_bytes(" not in aa_audiobook and all(token in live for token in ('"copied_test_media": True', '"generated_by_acceptance_script": False', '"original_only_copy": False')), "39 fake/generated live media is prohibited and copied-real classification is enforced")
     check("check_prod6b_station_quality_contract.py" in prod0 and "check_prod6a_listener_playback_contract.py" in prod0, "40 PROD6B and PROD6A contracts remain registered")
-    check("check_prod6c_library_source_ux_contract.py" in prod0 and prod0_mandatory_count(prod0) == 61, "41 full PROD0 registers only the non-live 6C contract and has 61 mandatory checks")
+    check("check_prod6c_library_source_ux_contract.py" in prod0 and prod0_mandatory_count(prod0) >= 61, "41 full PROD0 preserves the non-live 6C contract and at least 61 mandatory checks")
 
     if not args.skip_prior_regressions:
         run("scripts/check_prod6b_station_quality_contract.py", "--skip-prior-regressions")

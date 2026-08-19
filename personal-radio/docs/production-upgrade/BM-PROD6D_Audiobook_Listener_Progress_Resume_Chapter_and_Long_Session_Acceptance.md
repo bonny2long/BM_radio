@@ -2,7 +2,7 @@
 
 Date: 2026-08-18  
 Starting commit: `b6d9a1b97c88e35f8774730ffcab2dafb4ce0428`  
-Ending commit: pending final acceptance commit
+Ending implementation commit: pending — the validated correction is in the working tree atop `09702e6ab69ce93ef42ce9e47bed8f29f50e4376`, but the repository metadata write was blocked by the approval service usage limit.
 
 ## Entry correction
 
@@ -25,9 +25,9 @@ No duplicate progress subsystem was added.
 
 ## Implemented contract
 
-Progress is one authoritative PostgreSQL row per audiobook, tied to the current physical `chapter_id`. It stores position seconds, overall percentage, completion state, server update time, and client checkpoint time. Migration `0002_authoritative_audiobook_progress` keeps the newest legacy row before adding uniqueness.
+Progress is one authoritative row per audiobook, tied to the current physical `chapter_id`. It stores position seconds, overall percentage, completion state, and the ordered checkpoint in the existing `updated_at` column. No schema migration was added, so the accepted active PostgreSQL and protected SQLite fallback remain compatible and unchanged.
 
-The API updates that row in place under a row lock. A checkpoint with an older or equal `checkpointed_at` returns `stale` and cannot move the listener backward. The frontend checkpoints at a bounded 15-second cadence and on pause, seek completion, natural end, and physical-part change; it does not write on every `timeupdate`.
+The API updates that row in place under a row lock and collapses any legacy duplicates to the newest row. A checkpoint with an older or equal `checkpointed_at` returns `stale` and cannot move the listener backward. The frontend checkpoints at a bounded 15-second cadence and on pause, seek completion, natural end, and physical-part change; it does not write on every `timeupdate`.
 
 The listener exposes audiobook-only 0.75x, 1x, 1.25x, 1.5x, 1.75x, and 2x speeds. Loading music explicitly restores 1x. Rate changes update the existing audio element and do not reload the source. -15, +30, and timeline seeking remain audiobook-friendly and accessible.
 
@@ -49,17 +49,27 @@ The harness uses disposable PostgreSQL 16, Alembic head, the real scanner, loopb
 
 ## Automated and human results
 
-Automated PostgreSQL/real-media result: PASS on isolated PostgreSQL 16 at Alembic `0002_audiobook_progress`.  
+Automated PostgreSQL/real-media result: PASS on isolated PostgreSQL 16 at the accepted Alembic head, including the final schema-preserving rerun.
 Scanner identity/rescan duplicates: PASS — 1 audiobook, 1 physical M4B part, 0 rescan duplicates.  
 Refresh/new session/frontend/backend/PostgreSQL restart resume: PASS.  
 Failure recovery: PASS — database outage returned controlled 500, absent stream returned controlled 404, and progress remained intact through recovery.  
 Long-session writes/duplicate rows/out-of-order safety: PASS — 41 bounded checkpoints simulated 7,380 seconds, exactly 1 progress row remained, and the late checkpoint was rejected.  
 Completion/replay: PASS — explicit/natural-compatible completion stored `finished`, history remained until explicit Reset, and Replay returned to `in_progress`.  
 Physical chapter/part navigation: `not_applicable_single_physical_m4b`; no fake physical parts were created.  
-PROD6C.2 latency and DB pool: PASS — M4B initial 2,477.6 ms, metadata 2,458.9 ms, resume 31.1 ms, seek 30.1 ms, music cold 861.0 ms, music transition p95 801.7 ms, and 18 open streams without pool exhaustion.  
+PROD6C.2 latency and DB pool: PASS — final M4B initial 3,043.2 ms, metadata 3,022.7 ms, resume 25.9 ms, seek 25.8 ms, music cold 937.3 ms, music transition p95 777.8 ms, and 18 open streams without pool exhaustion.
 Copied-source equality, final-media equality, and protected-state equality: PASS.  
-Mobile/accessibility and operator listener review: pending; automation cannot fabricate PASS.
+Mobile/accessibility and operator listener review: PASS — the operator tested playback, pause/resume, seeks, every requested speed, refresh/Continue, audiobook/music switching, keyboard controls, and mobile layout; all worked. Automation did not fabricate this result.
+Cleanup: PASS — copied source, final media, and protected state remained exactly equal; zero task containers, networks, or volumes remain.
 
 ## Final validation
 
-Compile, permanent contract, prior 6C/6B/6A contracts, PROD0 62/0/4, frontend build/lint, diff check, equality, cleanup, ending SHA, and final status will be recorded after the human listener result.
+Python compileall: PASS.
+Permanent PROD6D contract: PASS, 30 checks.
+Prior PROD6C/PROD6B/PROD6A contracts: PASS.
+Full PROD0: PASS, 62 passed / 0 failed / 4 skipped.
+Frontend production build: PASS.
+Frontend lint: PASS with 0 errors and 8 existing warnings.
+Git diff check: PASS.
+Media/protected-state equality and task-resource cleanup: PASS.
+Human listener/mobile acceptance: PASS.
+Final commit/status: BLOCKED only on repository metadata write approval; do not label the phase final until the correction commit is created and its SHA is inserted above.

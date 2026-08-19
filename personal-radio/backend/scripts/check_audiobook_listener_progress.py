@@ -32,6 +32,9 @@ def main() -> None:
     first = update_progress(book.id, ProgressUpdate(chapter_id=chapters[0].id, position_seconds=65, progress_percent=1, checkpointed_at=base), db)
     assert first["status"] == "ok"
     assert db.query(models.AudiobookProgress).filter_by(audiobook_id=book.id).count() == 1
+    db.add(models.AudiobookProgress(audiobook_id=book.id, chapter_id=chapters[0].id, position_seconds=30, progress_percent=0.2, status="in_progress", updated_at=base - timedelta(minutes=1)))
+    db.commit()
+    assert db.query(models.AudiobookProgress).filter_by(audiobook_id=book.id).count() == 2
 
     # Simulate more than two hours of listener activity with bounded 3-minute
     # checkpoints. Each save updates the authoritative row rather than adding history.
