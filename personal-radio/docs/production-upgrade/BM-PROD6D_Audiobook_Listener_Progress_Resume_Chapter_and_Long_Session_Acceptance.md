@@ -2,7 +2,7 @@
 
 Date: 2026-08-18  
 Starting commit: `b6d9a1b97c88e35f8774730ffcab2dafb4ce0428`  
-Ending implementation commit: pending — the validated correction is in the working tree atop `09702e6ab69ce93ef42ce9e47bed8f29f50e4376`, but the repository metadata write was blocked by the approval service usage limit.
+Ending implementation commit: `91ee891ba0d8e86d51acc76c0ed1665e4776de24`
 
 ## Entry correction
 
@@ -72,4 +72,4 @@ Frontend lint: PASS with 0 errors and 8 existing warnings.
 Git diff check: PASS.
 Media/protected-state equality and task-resource cleanup: PASS.
 Human listener/mobile acceptance: PASS.
-Final commit/status: BLOCKED only on repository metadata write approval; do not label the phase final until the correction commit is created and its SHA is inserted above.
+Final commit/status: BM-PROD6D AUDIOBOOK-LISTENER PASS.
