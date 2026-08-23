@@ -4,6 +4,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from sqlalchemy import text
@@ -127,10 +128,7 @@ def assert_physical_variant_exclusion(db) -> None:
 
 
 def main() -> int:
-    base = Path("tmp_tests") / "prod4_1_smoke"
-    if base.exists():
-        shutil.rmtree(base)
-    base.mkdir(parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix="bm-prod4-1-smoke-"))
     try:
         before_real = real_db_state()
         assert_real_db_ready(before_real)

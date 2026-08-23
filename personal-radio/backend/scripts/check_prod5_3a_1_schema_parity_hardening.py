@@ -7,6 +7,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 from typing import Any, Callable
 
 from alembic.config import Config
@@ -343,10 +344,7 @@ def assert_startup_unchanged() -> None:
 def main() -> int:
     before = real_db_state()
     assert_real_db_expected(before)
-    base = BACKEND / 'tmp_tests' / 'prod5_3a_1_schema_parity_hardening'
-    if base.exists():
-        shutil.rmtree(base)
-    base.mkdir(parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix='bm-prod5-3a1-'))
     try:
         assert_layout_and_safety()
         assert_fresh_and_legacy_compatible(base)

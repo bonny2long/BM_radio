@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 from typing import Any
 
 from alembic.config import Config
@@ -309,10 +310,7 @@ def assert_gate_entries() -> None:
 def main() -> int:
     before = real_db_state()
     assert_real_db_expected(before)
-    base = BACKEND / 'tmp_tests' / 'prod5_3a_migration_framework'
-    if base.exists():
-        shutil.rmtree(base)
-    base.mkdir(parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix='bm-prod5-3a-'))
     try:
         assert_layout()
         assert_url_safety()

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import random
 import shutil
+import tempfile
 import sys
 from typing import Any
 
@@ -110,10 +111,7 @@ def assert_large_library_coverage(base: Path) -> None:
 
 
 def main() -> int:
-    base = Path('tmp_tests') / 'prod4_2c_intent_coverage'
-    if base.exists():
-        shutil.rmtree(base)
-    base.mkdir(parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix='bm-prod4-2c-'))
     assert_below_cap_equivalence(base)
     assert_large_library_coverage(base)
     print('PASS: BM-PROD4.2C station intent-aware large-library candidate coverage')

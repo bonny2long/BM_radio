@@ -6,6 +6,7 @@ import inspect
 import asyncio
 import shutil
 import sys
+import tempfile
 
 from fastapi import HTTPException
 from sqlalchemy import create_engine, event
@@ -298,10 +299,7 @@ def case_structural_scope() -> None:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_5a_recording_first_station_candidates"
-    if tmp.exists():
-        shutil.rmtree(tmp)
-    tmp.mkdir(parents=True)
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-5a-"))
     try:
         case_candidates_and_sources(tmp)
         case_participation_seed_and_exclusions(tmp)

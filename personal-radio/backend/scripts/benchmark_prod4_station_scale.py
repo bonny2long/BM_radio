@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import shutil
 import sys
+import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -42,10 +43,7 @@ def main() -> int:
     parser.add_argument('--refill-count', type=int, default=4)
     args = parser.parse_args()
 
-    base = Path('tmp_tests') / 'perf' / 'prod4_1_station_scale'
-    if base.exists():
-        shutil.rmtree(base)
-    base.mkdir(parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix='bm-prod4-station-scale-'))
 
     all_runs = []
     try:
@@ -108,6 +106,8 @@ def main() -> int:
         write_report(args.output, partial)
         print(json.dumps({'status': 'ABORTED DUE RUNTIME', 'output': str(args.output)}, indent=2))
         return 130
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
 
 
 if __name__ == '__main__':

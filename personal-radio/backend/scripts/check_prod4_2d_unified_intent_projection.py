@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import random
 import shutil
+import tempfile
 import sys
 from typing import Any, Callable
 
@@ -191,10 +192,7 @@ def assert_large_metrics(db, seeds) -> None:
 
 
 def main() -> int:
-    base = Path('tmp_tests') / 'prod4_2d_unified_projection'
-    if base.exists():
-        shutil.rmtree(base)
-    base.mkdir(parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix='bm-prod4-2d-'))
     try:
         for size in (1000, 10000, 50000):
             engine, db = build_ctx(base, f'size_{size}', size)

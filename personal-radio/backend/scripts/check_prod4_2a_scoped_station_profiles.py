@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import random
 import shutil
+import tempfile
 import subprocess
 import sys
 from typing import Any
@@ -157,10 +158,7 @@ def run_script(script: str) -> None:
 
 
 def main() -> int:
-    base = Path('tmp_tests') / 'prod4_2a_smoke'
-    if base.exists():
-        shutil.rmtree(base)
-    base.mkdir(parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix='bm-prod4-2a-'))
     try:
         engine, db, summary = build_ctx(base, 'primary', 5000)
         try:

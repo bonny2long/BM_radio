@@ -7,6 +7,7 @@ import inspect
 import random
 import shutil
 import sys
+import tempfile
 
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
@@ -322,10 +323,7 @@ def case_existing_15a_regression_still_referenced() -> None:
 
 
 def main() -> None:
-    base = Path("tmp_prod1_5b_checks")
-    if base.exists():
-        shutil.rmtree(base)
-    base.mkdir()
+    base = Path(tempfile.mkdtemp(prefix="bm-prod1-5b-"))
     try:
         case_affinity_derivation_and_matrix(base)
         case_focused_affinity_and_fallback(base)

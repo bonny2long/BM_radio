@@ -116,19 +116,48 @@ def station_exclude_set(req: StationQueueRequest) -> set[int]:
     return set((req.exclude_track_ids or [])[:MAX_EXCLUDE_IDS])
 
 
+def station_candidate_budget(db: Session, req: StationQueueRequest, *, requested_limit: int) -> int:
+    override = db.info.get('station_candidate_budget_override')
+    if override is not None:
+        budget = max(requested_limit, min(int(override), MAX_STATION_CANDIDATE_POOL))
+        initial_budget = budget
+        policy = 'benchmark_override'
+    else:
+        budget = max(500, requested_limit * 10)
+        budget = max(requested_limit, min(budget, MAX_STATION_CANDIDATE_POOL))
+        initial_budget = budget
+        recording_count_hint = int(db.query(func.count(models.MusicRecording.id)).scalar() or 0)
+        expanded = budget < 750 and recording_count_hint <= 750
+        if expanded:
+            budget = 750
+        policy = 'queue_scaled_10x_floor_500_small_library_750'
+    db.info['station_candidate_budget_metrics'] = {
+        'policy': policy,
+        'requested_queue_limit': requested_limit,
+        'initial_budget': initial_budget,
+        'final_budget': budget,
+        'ceiling': MAX_STATION_CANDIDATE_POOL,
+        'recording_count_hint': recording_count_hint if override is None else None,
+        'expansion_count': 1 if override is None and expanded else 0,
+        'expanded': bool(override is None and expanded),
+    }
+    return budget
+
+
 def station_candidate_intent_for_request(
     db: Session,
     req: StationQueueRequest,
     *,
     limit: int,
+    candidate_limit: int = MAX_STATION_CANDIDATE_POOL,
     seed_track: models.Track | None = None,
 ):
     if req.type == 'song' and seed_track is not None:
-        return song_intent(db, seed_track=seed_track, requested_queue_limit=limit, candidate_limit=MAX_STATION_CANDIDATE_POOL)
+        return song_intent(db, seed_track=seed_track, requested_queue_limit=limit, candidate_limit=candidate_limit)
     if req.type == 'artist':
-        return artist_intent(db, seed_artist=req.seed_value, requested_queue_limit=limit, candidate_limit=MAX_STATION_CANDIDATE_POOL)
+        return artist_intent(db, seed_artist=req.seed_value, requested_queue_limit=limit, candidate_limit=candidate_limit)
     if req.type == 'genre':
-        return genre_intent(target_genre=req.seed_value, requested_queue_limit=limit, candidate_limit=MAX_STATION_CANDIDATE_POOL)
+        return genre_intent(target_genre=req.seed_value, requested_queue_limit=limit, candidate_limit=candidate_limit)
     return None
 
 
@@ -1160,9 +1189,17 @@ def _station_queue_impl(req: StationQueueRequest, db: Session) -> dict:
     include_play_counts = req.type in {'deep_cuts', 'favorites', 'genre'}
     include_recent = req.type == 'artist'
     include_favorites = req.type in {'song', 'artist', 'favorites', 'genre', 'deep_cuts'}
-    candidate_intent = station_candidate_intent_for_request(db, req, limit=limit, seed_track=seed_track)
+    candidate_limit = station_candidate_budget(db, req, requested_limit=limit)
+    candidate_intent = station_candidate_intent_for_request(
+        db,
+        req,
+        limit=limit,
+        candidate_limit=candidate_limit,
+        seed_track=seed_track,
+    )
     context = build_station_request_context(
         db,
+        limit=candidate_limit,
         exclude_track_ids=exclude_set,
         seed_track=seed_track,
         include_feedback=True,

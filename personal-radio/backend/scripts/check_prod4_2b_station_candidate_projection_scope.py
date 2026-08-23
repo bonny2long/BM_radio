@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import random
 import shutil
+import tempfile
 import subprocess
 import sys
 from typing import Any
@@ -152,10 +153,7 @@ def assert_projection_count(operation) -> dict[str, list[float]]:
 
 
 def main() -> int:
-    base = Path('tmp_tests') / 'prod4_2b_scope'
-    if base.exists():
-        shutil.rmtree(base)
-    base.mkdir(parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix='bm-prod4-2b-'))
 
     source = Path('app/station_candidates.py').read_text(encoding='utf-8')
     assert 'bounded * 3' not in source

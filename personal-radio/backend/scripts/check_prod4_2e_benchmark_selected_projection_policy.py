@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import random
 import shutil
+import tempfile
 import sqlite3
 import sys
 from typing import Any, Callable
@@ -306,10 +307,7 @@ def assert_docs_and_gate() -> None:
 def main() -> int:
     before_real = real_db_state()
     assert_real_db_ready(before_real)
-    base = Path('tmp_tests') / 'prod4_2e_projection_policy'
-    if base.exists():
-        shutil.rmtree(base)
-    base.mkdir(parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix='bm-prod4-2e-'))
     try:
         small_engine, small_db = build_ctx(base, 'below_cap_1000', 1000)
         try:

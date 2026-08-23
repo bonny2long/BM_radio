@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import random
 import shutil
+import tempfile
 import sqlite3
 import sys
 from typing import Any
@@ -197,10 +198,7 @@ def assert_thumbs_down_authoritative(db, seeds) -> None:
 def main() -> int:
     before_real = real_db_state()
     assert_real_db_ready(before_real)
-    base = Path('tmp_tests') / 'prod4_2c_1_refill_closure'
-    if base.exists():
-        shutil.rmtree(base)
-    base.mkdir(parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix='bm-prod4-2c1-'))
     engine, db = build_ctx(base, 'closure', 10000)
     try:
         seeds = select_station_seeds(db)
