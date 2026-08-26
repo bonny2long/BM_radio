@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import tempfile
 import inspect
 import shutil
 import sys
@@ -376,7 +377,7 @@ def case_recent_query_bounds_and_readonly(tmp: Path) -> None:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_4d3b_playback_recording_identity"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-4d3b-playback-recording-identity-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

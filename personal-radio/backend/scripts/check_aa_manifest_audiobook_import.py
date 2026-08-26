@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+import tempfile
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -20,9 +21,7 @@ def approved(value):
 
 
 def main() -> None:
-    tmp_base = Path(__file__).resolve().parents[1] / "tmp_tests"
-    tmp_base.mkdir(exist_ok=True)
-    base = tmp_base / "audiobook_manifest"
+    base = Path(tempfile.mkdtemp(prefix="bm-aa-audiobook-manifest-"))
     if base.exists():
         shutil.rmtree(base)
     root = base / "Audiobooks" / "Library"
@@ -68,6 +67,9 @@ def main() -> None:
     assert audiobook.narrator == "Jonathan Davis", audiobook.narrator
     assert audiobook.metadata_source == "archive_assistant_manifest", audiobook.metadata_source
     assert not virtual_chapter.exists()
+    db.close()
+    engine.dispose()
+    shutil.rmtree(base, ignore_errors=True)
     print("ok: AA audiobook manifest import")
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import tempfile
 import shutil
 import sys
 
@@ -270,7 +271,7 @@ def case_j_audiobook_progress_separation(tmp: Path) -> None:
 
 
 def main() -> None:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_3a_scan_run_foundation"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-3a-scan-run-foundation-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
+import tempfile
 import inspect
 import shutil
 import sys
@@ -459,7 +460,7 @@ def case_r_s_counters_and_state(tmp: Path) -> None:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_4c2_scanner_preference_reevaluation"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-4c2-scanner-preference-reevaluation-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

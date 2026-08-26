@@ -3,6 +3,7 @@
 Date: 2026-08-22  
 Starting commit: `74b1b707d6478fcfd4a7ab2b1a57bcad6457fb6c`  
 Ending implementation commit: `0189dbaa8caf5f5a2a3ac6a140d19887b4dd507e`  
+Report commit: `fa384a007cadd80d3195035e6d01f5b2bf29fdfb`
 Final status: **PASS — PostgreSQL 16 production station thresholds met**
 
 ## Outcome
@@ -241,4 +242,3 @@ backend/tmp_tests/perf/prod6e1_sqlite_post_diagnostic.json
 PostgreSQL 16 normal 10K station generation is below the required initial and refill thresholds for every measured family. BM-PROD6E.1 therefore stops with **PASS**.
 
 The 60-minute soak was not started. PROD6F was not started.
-

@@ -76,7 +76,7 @@ def main() -> int:
     check("truenas_work\": False" in live and "does no TrueNAS work" in report6d, "26 no TrueNAS work is performed")
     check("automation cannot fabricate" in live and '"automated": False' in live and "Automation did not fabricate" in report6d, "27 human listener PASS cannot be fabricated")
     check("check_prod6c_library_source_ux_contract.py" in prod0 and "check_prod6b_station_quality_contract.py" in prod0 and "check_prod6a_listener_playback_contract.py" in prod0, "28 PROD6C PROD6B and PROD6A contracts remain registered")
-    check("check_prod6d_audiobook_listener_contract.py" in prod0 and "check_prod6d_audiobook_listener_acceptance.py" not in prod0 and prod0_mandatory_count(prod0) == 62, "29 only non-live PROD6D contract is registered and PROD0 has 62 mandatory checks")
+    check("check_prod6d_audiobook_listener_contract.py" in prod0 and "check_prod6d_audiobook_listener_acceptance.py" not in prod0 and prod0_mandatory_count(prod0) >= 62, "29 only non-live PROD6D contract is registered and PROD0 preserves at least 62 mandatory checks")
     check("Starting commit" in report6d and "checkpoint cadence" in report6d and "Mobile/accessibility" in report6d and "cleanup" in report6d, "30 completion report covers the required acceptance domains")
 
     run([sys.executable, "scripts/check_audiobook_listener_progress.py"], BACKEND)

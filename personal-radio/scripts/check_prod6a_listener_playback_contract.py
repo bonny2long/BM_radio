@@ -81,7 +81,7 @@ def main() -> int:
     check('BACKEND_IMAGE = "bm-radio-backend:prod5.6a-bc444f3"' in live and 'FRONTEND_DOCKERFILE = FRONTEND / "Dockerfile"' in live, "6 accepted production backend/frontend contracts are used")
     check('"/api/library/scan/music", method="POST"' in live and '"real_scanner": True' in live, "7 real scanner path is used")
     check(all(token in live for token in ("target=/media/Music,readonly", "target=/media/Audiobooks/Library,readonly", "target=/media/Books,readonly", 'item.get("RW") is not False')), "8 all media mounts are read-only")
-    check("full media stream" in live and 'full_status != 200' in live and 'content-length' in live and media_route.count('Depends(get_db, scope="function")') == 5, "9 full stream regression exists and DB sessions close before file streaming")
+    check("full media stream" in live and 'full_status != 200' in live and 'content-length' in live and media_route.count('Depends(get_db, scope="function")') == 4 and all(token in media_route for token in ("resolve_audiobook_file_metadata", "with SessionLocal() as db", "await run_in_threadpool(resolve_audiobook_file_metadata")), "9 full stream regression exists and DB sessions close before file streaming")
     check('"Range": "bytes=0-127"' in live and "range_status != 206" in live and "content-range" in live, "10 byte-range regression exists")
     check("invalid_status != 416" in live and "invalid range" in live, "11 invalid-range behavior is tested")
     check("missing_path" in live and "missing-file response" in live and "restored copied fixture" in live, "12 missing-file behavior is tested and restored")

@@ -4,6 +4,7 @@ from contextlib import contextmanager
 import inspect
 import json
 from pathlib import Path
+import tempfile
 import shutil
 import sys
 from typing import Any, Iterator
@@ -523,7 +524,7 @@ def case_t_u_v_static_boundaries() -> None:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_4d1_recording_control_api"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-4d1-recording-control-api-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

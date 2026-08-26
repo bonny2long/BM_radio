@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -153,6 +154,9 @@ def assert_projection_count(operation) -> dict[str, list[float]]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="BM-PROD4.2B candidate projection contract")
+    parser.add_argument("--skip-prior-regressions", action="store_true")
+    args = parser.parse_args()
     base = Path(tempfile.mkdtemp(prefix='bm-prod4-2b-'))
 
     source = Path('app/station_candidates.py').read_text(encoding='utf-8')
@@ -315,10 +319,11 @@ def main() -> int:
 
     gate_source = Path('../scripts/check_prod0_baseline.py').read_text(encoding='utf-8')
     assert 'check_prod4_2b_station_candidate_projection_scope.py' in gate_source
-    run_script('scripts/check_prod4_2a_scoped_station_profiles.py')
-    run_script('scripts/check_prod4_1_station_scale_benchmark.py')
-    run_script('scripts/check_prod1_5a_recording_first_station_candidates.py')
-    run_script('scripts/check_prod1_5b_station_version_affinity.py')
+    if not args.skip_prior_regressions:
+        run_script('scripts/check_prod4_2a_scoped_station_profiles.py')
+        run_script('scripts/check_prod4_1_station_scale_benchmark.py')
+        run_script('scripts/check_prod1_5a_recording_first_station_candidates.py')
+        run_script('scripts/check_prod1_5b_station_version_affinity.py')
     print('PASS: BM-PROD4.2B station candidate projection and source-resolution scope')
     return 0
 

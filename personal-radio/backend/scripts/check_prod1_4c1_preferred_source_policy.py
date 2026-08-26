@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 from pathlib import Path
+import tempfile
 import shutil
 import sys
 
@@ -334,7 +335,7 @@ def case_u_v_w_x_non_goals_and_state(tmp: Path) -> None:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_4c1_preferred_source_policy"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-4c1-preferred-source-policy-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

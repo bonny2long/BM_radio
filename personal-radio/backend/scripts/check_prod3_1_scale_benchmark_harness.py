@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import shutil
 import sys
+import tempfile
 
 from sqlalchemy import text
 
@@ -37,7 +38,7 @@ def build_ctx(base: Path, name: str, size: int = 1000):
 
 
 def main() -> int:
-    base = Path("tmp_tests") / "prod3_1_smoke"
+    base = Path(tempfile.mkdtemp(prefix="bm-prod3-1-smoke-"))
     if base.exists():
         shutil.rmtree(base)
     base.mkdir(parents=True, exist_ok=True)
@@ -108,7 +109,7 @@ def main() -> int:
         assert "bm_radio.db" not in combined
         assert "NAS" not in fixture_source
         assert "BM_RADIO_MUSIC_ROOT" not in benchmark_source
-        assert str(base).startswith("tmp_tests")
+        assert Path(tempfile.gettempdir()).resolve() in base.resolve().parents
         gate_source = Path("../scripts/check_prod0_baseline.py").read_text(encoding="utf-8")
         assert "check_prod3_1_scale_benchmark_harness.py" in gate_source
         assert Path("../.gitignore").read_text(encoding="utf-8").find("backend/tmp_tests/") >= 0

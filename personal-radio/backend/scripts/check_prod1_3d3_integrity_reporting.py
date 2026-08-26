@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import inspect
 from pathlib import Path
+import tempfile
 import shutil
 import sys
 
@@ -81,7 +82,7 @@ def add_chapter(db, book, title: str, *, availability: str = "available", sort_o
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_3d3_integrity_reporting"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-3d3-integrity-reporting-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

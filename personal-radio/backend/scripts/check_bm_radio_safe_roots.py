@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+import tempfile
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -10,9 +11,7 @@ from app.scanner.path_safety import is_approved_path, safe_media_files
 
 
 def main() -> None:
-    tmp_base = Path(__file__).resolve().parents[1] / "tmp_tests"
-    tmp_base.mkdir(exist_ok=True)
-    base = tmp_base / "safe_roots"
+    base = Path(tempfile.mkdtemp(prefix="bm-safe-roots-"))
     if base.exists():
         shutil.rmtree(base)
     root = base / "Music" / "Library" / "MP3"
@@ -31,6 +30,7 @@ def main() -> None:
     assert not is_approved_path(bad_quarantine, roots)
     found = list(safe_media_files(root, {".mp3"}, roots))
     assert found == [good], found
+    shutil.rmtree(base, ignore_errors=True)
     print("ok: BM Radio safe roots")
 
 

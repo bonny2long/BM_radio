@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import shutil
 import sqlite3
 import subprocess
@@ -128,6 +129,9 @@ def assert_physical_variant_exclusion(db) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="BM-PROD4.1 station scale contract")
+    parser.add_argument("--skip-prior-regressions", action="store_true")
+    args = parser.parse_args()
     base = Path(tempfile.mkdtemp(prefix="bm-prod4-1-smoke-"))
     try:
         before_real = real_db_state()
@@ -237,8 +241,9 @@ def main() -> int:
             db.close()
             engine.dispose()
 
-        run_prior_station_regression("scripts/check_prod1_5a_recording_first_station_candidates.py")
-        run_prior_station_regression("scripts/check_prod1_5b_station_version_affinity.py")
+        if not args.skip_prior_regressions:
+            run_prior_station_regression("scripts/check_prod1_5a_recording_first_station_candidates.py")
+            run_prior_station_regression("scripts/check_prod1_5b_station_version_affinity.py")
         after_real = real_db_state()
         assert before_real == after_real, {'before': before_real, 'after': after_real}
         print("PASS: BM-PROD4.1 station generation and refill scale benchmark baseline")

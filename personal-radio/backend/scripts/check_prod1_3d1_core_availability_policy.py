@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
+import tempfile
 import shutil
 import sys
 from typing import Iterator
@@ -71,6 +72,15 @@ def expect_http(status_code: int, func, *args, **kwargs) -> HTTPException:
     raise AssertionError(f"expected HTTPException {status_code}")
 
 
+def expect_http_async(status_code: int, func, *args, **kwargs) -> HTTPException:
+    try:
+        run_async(func(*args, **kwargs))
+    except HTTPException as exc:
+        assert exc.status_code == status_code, f"expected {status_code}, got {exc.status_code}: {exc.detail}"
+        return exc
+    raise AssertionError(f"expected HTTPException {status_code}")
+
+
 def run_async(value):
     return asyncio.run(value)
 
@@ -104,7 +114,7 @@ def add_progress(db, *, audiobook_id: int, chapter_id: int | None, seconds: floa
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_3d1_core_availability_policy"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-3d1-core-availability-policy-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)
@@ -238,9 +248,16 @@ def main() -> int:
                 assert response.status_code == 200
                 assert Path(response.path) == available_cover
 
-                expect_http(409, media.stream_audiobook_chapter, unavailable_book.id, ghost_chapter.id, db=db)
-                expect_http(409, media.stream_audiobook_chapter, active_book.id, ch2.id, db=db)
-                assert media.stream_audiobook_chapter(active_book.id, ch1.id, db=db).status_code == 200
+                original_session_local = media.SessionLocal
+                media.SessionLocal = Session
+                media._audiobook_auth_cache.clear()
+                try:
+                    expect_http_async(409, media.stream_audiobook_chapter, unavailable_book.id, ghost_chapter.id)
+                    expect_http_async(409, media.stream_audiobook_chapter, active_book.id, ch2.id)
+                    assert run_async(media.stream_audiobook_chapter(active_book.id, ch1.id)).status_code == 200
+                finally:
+                    media._audiobook_auth_cache.clear()
+                    media.SessionLocal = original_session_local
                 expect_http(409, media.audiobook_cover, unavailable_book.id, db=db)
 
                 assert serializers.track_item(unavailable_track)["library_availability"] == "unavailable"

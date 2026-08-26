@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tempfile
 import inspect
 import shutil
 import sys
@@ -452,7 +453,7 @@ def case_ab_benchmark_uses_production_helpers(tmp: Path) -> None:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod3_3_listener_occurrence_query_optimization"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod3-3-listener-occurrence-query-optimization-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True, exist_ok=True)

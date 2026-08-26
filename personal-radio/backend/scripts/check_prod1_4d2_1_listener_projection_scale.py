@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import tempfile
 import inspect
 import shutil
 import sys
@@ -281,7 +282,7 @@ def case_m_static_guards() -> None:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_4d2_1_listener_projection_scale"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-4d2-1-listener-projection-scale-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

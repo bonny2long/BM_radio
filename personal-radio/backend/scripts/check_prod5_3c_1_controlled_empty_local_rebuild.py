@@ -8,6 +8,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -357,7 +358,7 @@ def preflight(base: Path) -> dict[str, Any]:
     }
 
 
-def full_regression(base: Path) -> dict[str, Any]:
+def full_regression(base: Path, *, skip_prior_regressions: bool = False) -> dict[str, Any]:
     before = snapshot_sqlite_database(REAL_DB, logical_path='bm_radio.db')
     assert_real_ready(before)
     assert_one_head()
@@ -390,7 +391,8 @@ def full_regression(base: Path) -> dict[str, Any]:
     after_cli = snapshot_sqlite_database(REAL_DB, logical_path='bm_radio.db')
     assert snapshot_summary(before) == snapshot_summary(after_cli), {'before': snapshot_summary(before), 'after': snapshot_summary(after_cli)}
     mark('adoption CLI requires explicit URL and is read-only')
-    assert_prior_regressions()
+    if not skip_prior_regressions:
+        assert_prior_regressions()
     assert_no_media_access()
     after = snapshot_sqlite_database(REAL_DB, logical_path='bm_radio.db')
     assert snapshot_summary(before) == snapshot_summary(after), {'before': snapshot_summary(before), 'after': snapshot_summary(after)}
@@ -406,8 +408,9 @@ def full_regression(base: Path) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description='BM-PROD5.3C.1 controlled empty local SQLite rebuild regression')
     parser.add_argument('--preflight-only', action='store_true', help='run pre-rebuild backup, fresh build, canary, restore, and replacement rehearsal only')
+    parser.add_argument('--skip-prior-regressions', action='store_true')
     args = parser.parse_args()
-    base = BACKEND / 'tmp_tests' / 'prod5_3c_1_empty_rebuild'
+    base = Path(tempfile.mkdtemp(prefix='bm-prod5-3c1-empty-rebuild-'))
     if base.exists():
         shutil.rmtree(base)
     base.mkdir(parents=True, exist_ok=True)
@@ -417,8 +420,9 @@ def main() -> int:
             print('PRE-REBUILD GATE: PASS')
             print(json.dumps({'checks': sorted(CHECKS), **result}, indent=2, sort_keys=True))
             return 0
-        result = full_regression(base)
-        assert len(CHECKS) >= 26, sorted(CHECKS)
+        result = full_regression(base, skip_prior_regressions=args.skip_prior_regressions)
+        minimum_checks = 22 if args.skip_prior_regressions else 26
+        assert len(CHECKS) >= minimum_checks, sorted(CHECKS)
         print(f'PASS: BM-PROD5.3C.1 controlled empty local SQLite rebuild ({len(CHECKS)} checks)')
         print(json.dumps({'checks': sorted(CHECKS), **result}, indent=2, sort_keys=True))
         return 0

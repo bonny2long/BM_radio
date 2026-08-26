@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
+import tempfile
 import inspect
 import shutil
 import sys
@@ -378,7 +379,7 @@ def case_r_s_t_u_benchmark_contract(tmp: Path) -> None:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod3_2_scanner_index_optimization"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod3-2-scanner-index-optimization-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True, exist_ok=True)

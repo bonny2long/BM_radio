@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
+import tempfile
 import inspect
 import shutil
 import sys
@@ -437,7 +438,7 @@ def case_t_no_media_mutation(tmp: Path) -> None:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_4a2_scanner_identity_integration"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-4a2-scanner-identity-integration-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

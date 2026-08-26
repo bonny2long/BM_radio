@@ -3,6 +3,7 @@ from __future__ import annotations
 from hashlib import sha256
 import inspect
 from pathlib import Path
+import tempfile
 import shutil
 import sys
 
@@ -115,7 +116,7 @@ def link_for(db, track):
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_4a1_music_identity_graph"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-4a1-music-identity-graph-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
+import tempfile
 import inspect
 import shutil
 import sys
@@ -99,7 +100,7 @@ def queue_ids(response: dict) -> list[int]:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_3d2_active_playback_candidates"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-3d2-active-playback-candidates-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

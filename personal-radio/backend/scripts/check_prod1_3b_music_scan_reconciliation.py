@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
+import tempfile
 import shutil
 import sys
 from typing import Iterator
@@ -428,7 +429,7 @@ def case_o_no_file_mutation(tmp: Path) -> None:
 
 
 def main() -> None:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_3b_music_scan_reconciliation"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-3b-music-scan-reconciliation-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

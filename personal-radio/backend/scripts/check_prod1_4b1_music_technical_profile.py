@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
+import tempfile
 import shutil
 import sys
 import types
@@ -407,7 +408,7 @@ def case_u_v_w_batch_and_non_goals(tmp: Path) -> None:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_4b1_music_technical_profile"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-4b1-music-technical-profile-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

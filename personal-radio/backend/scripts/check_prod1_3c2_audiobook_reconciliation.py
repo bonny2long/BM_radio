@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from hashlib import sha256
 import json
 from pathlib import Path
+import tempfile
 import shutil
 import sqlite3
 import sys
@@ -510,7 +511,7 @@ def case_q_chapter_indexes_exist(tmp: Path) -> None:
 
 
 def main() -> None:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_3c2_audiobook_reconciliation"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-3c2-audiobook-reconciliation-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

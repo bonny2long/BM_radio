@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 import json
 from pathlib import Path
+import tempfile
 import shutil
 import sys
 from typing import Iterator
@@ -523,7 +524,7 @@ def case_r_no_media_file_mutation(tmp: Path) -> None:
 
 
 def main() -> None:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_3c1_audiobook_scan_progress_safety"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-3c1-audiobook-scan-progress-safety-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

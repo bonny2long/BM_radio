@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import shutil
 import sys
+import tempfile
 from typing import Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -140,9 +141,7 @@ def assert_case_e_scanner_result_policy(base: Path) -> None:
 
 
 def main() -> None:
-    tmp_base = Path(__file__).resolve().parents[1] / "tmp_tests"
-    tmp_base.mkdir(exist_ok=True)
-    base = tmp_base / "prod1_1_canonical_music_roots"
+    base = Path(tempfile.mkdtemp(prefix="bm-prod1-1-canonical-music-roots-"))
     if base.exists():
         shutil.rmtree(base)
     base.mkdir(parents=True)

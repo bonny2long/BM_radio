@@ -90,7 +90,7 @@ async def search(q: str, db: Session = Depends(get_db)):
 
 
 @router.post('/scan/music')
-async def scan_music_route(db: Session = Depends(get_db)):
+def scan_music_route(db: Session = Depends(get_db)):
     return scan_music(db)
 
 

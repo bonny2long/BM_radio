@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import tempfile
 import inspect
 import shutil
 import sys
@@ -299,7 +300,7 @@ def case_boundaries(tmp: Path) -> None:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_4d3c_recording_feedback_and_smart_collections"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-4d3c-recording-feedback-and-smart-collections-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import tempfile
 import inspect
 import shutil
 import sys
@@ -275,7 +276,7 @@ def case_static_scope() -> None:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_4d3a_listener_queue_playlist"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod1-4d3a-listener-queue-playlist-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True)

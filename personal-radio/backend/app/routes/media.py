@@ -8,10 +8,11 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 from .. import models
 from ..availability import active_tracks, is_audiobook_available, is_chapter_available, is_track_available
 from ..config import settings
-from ..db import get_db
+from ..db import SessionLocal, get_db
 from ..music_playback_policy import validate_music_playback_context
 from ..perf import perf_segment
 from ..scanner.path_safety import is_approved_path
@@ -114,13 +115,7 @@ def validated_audiobook_file_metadata(path_value: str) -> AudiobookFileMetadata:
 
 
 def safe_audiobook_file(metadata: AudiobookFileMetadata, request: Request | None):
-    """Serve open-ended audiobook probes as bounded, reusable responses.
-
-    Chromium cancels a connection after reading the small portion it needs from
-    an open-ended M4B range. Docker Desktop makes hundreds of replacement TCP
-    connections expensive, so finish a bounded subset of the requested range
-    instead. Explicit and multipart ranges retain Nginx's native handling.
-    """
+    """Serve Chromium open-ended probes as bounded, connection-reusable responses."""
     range_header = request.headers.get('range', '') if request is not None else ''
     match = OPEN_ENDED_BYTE_RANGE.fullmatch(range_header.strip())
     if match is None:
@@ -149,6 +144,22 @@ def safe_audiobook_file(metadata: AudiobookFileMetadata, request: Request | None
         'Content-Disposition': metadata.content_disposition,
     }
     return Response(content, status_code=206, media_type=metadata.media_type, headers=headers)
+
+
+def resolve_audiobook_file_metadata(audiobook_id: int, chapter_id: int) -> AudiobookFileMetadata:
+    """Open PostgreSQL only for an authorization-cache miss."""
+    with SessionLocal() as db:
+        book = db.get(models.Audiobook, audiobook_id)
+        if not book:
+            raise HTTPException(404, 'Audiobook not found')
+        chapter = db.get(models.AudiobookChapter, chapter_id)
+        if not chapter or chapter.audiobook_id != audiobook_id:
+            raise HTTPException(404, 'Audiobook chapter not found')
+        if not is_audiobook_available(book):
+            raise HTTPException(409, AUDIOBOOK_UNAVAILABLE_MESSAGE)
+        if not is_chapter_available(chapter):
+            raise HTTPException(409, CHAPTER_UNAVAILABLE_MESSAGE)
+        return validated_audiobook_file_metadata(chapter.path)
 
 
 def find_cover(start: Path, roots: list[Path]) -> Path | None:
@@ -227,24 +238,12 @@ def album_cover(artist: str, album: str, db: Session = Depends(get_db, scope="fu
 
 
 @router.get('/audiobooks/{audiobook_id}/chapters/{chapter_id}/stream')
-def stream_audiobook_chapter(audiobook_id: int, chapter_id: int, request: Request = None, db: Session = Depends(get_db, scope="function")):
+async def stream_audiobook_chapter(audiobook_id: int, chapter_id: int, request: Request = None):
     cached_metadata = cached_audiobook_file_metadata(audiobook_id, chapter_id)
-    if cached_metadata is not None:
-        return safe_audiobook_file(cached_metadata, request)
-    book = db.get(models.Audiobook, audiobook_id)
-    if not book:
-        raise HTTPException(404, 'Audiobook not found')
-    chapter = db.get(models.AudiobookChapter, chapter_id)
-    if not chapter or chapter.audiobook_id != audiobook_id:
-        raise HTTPException(404, 'Audiobook chapter not found')
-    if not is_audiobook_available(book):
-        raise HTTPException(409, AUDIOBOOK_UNAVAILABLE_MESSAGE)
-    if not is_chapter_available(chapter):
-        raise HTTPException(409, CHAPTER_UNAVAILABLE_MESSAGE)
-    metadata = validated_audiobook_file_metadata(chapter.path)
-    response = safe_audiobook_file(metadata, request)
-    cache_audiobook_file_metadata(audiobook_id, chapter_id, metadata)
-    return response
+    if cached_metadata is None:
+        cached_metadata = await run_in_threadpool(resolve_audiobook_file_metadata, audiobook_id, chapter_id)
+        cache_audiobook_file_metadata(audiobook_id, chapter_id, cached_metadata)
+    return safe_audiobook_file(cached_metadata, request)
 
 
 @router.get('/audiobooks/{audiobook_id}/cover')

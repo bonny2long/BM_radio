@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+import tempfile
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -21,9 +22,7 @@ def approved(value):
 
 
 def main() -> None:
-    tmp_base = Path(__file__).resolve().parents[1] / "tmp_tests"
-    tmp_base.mkdir(exist_ok=True)
-    base = tmp_base / "music_manifest"
+    base = Path(tempfile.mkdtemp(prefix="bm-aa-music-manifest-"))
     if base.exists():
         shutil.rmtree(base)
     music_root = base / "Music"
@@ -147,6 +146,9 @@ def main() -> None:
     assert normalized_year(True) is None
     assert normalized_year(None) is None
     assert not media_file.exists() and not unknown_media_file.exists()
+    db.close()
+    engine.dispose()
+    shutil.rmtree(base, ignore_errors=True)
     print("ok: AA music manifest import")
 
 

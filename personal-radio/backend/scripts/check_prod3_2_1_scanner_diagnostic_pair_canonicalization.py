@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tempfile
 import shutil
 import sys
 
@@ -260,7 +261,7 @@ def case_i_select_behavior_bounded(tmp: Path) -> None:
 
 
 def main() -> int:
-    tmp = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod3_2_1_scanner_diagnostic_pair_canonicalization"
+    tmp = Path(tempfile.mkdtemp(prefix="bm-prod3-2-1-scanner-diagnostic-pair-canonicalization-"))
     if tmp.exists():
         shutil.rmtree(tmp)
     tmp.mkdir(parents=True, exist_ok=True)

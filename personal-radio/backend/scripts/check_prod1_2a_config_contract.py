@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
+import tempfile
 import os
 import sys
 from typing import Iterator
@@ -258,7 +259,7 @@ def case_j_env_file_isolation() -> None:
 
 
 def main() -> None:
-    base = Path(__file__).resolve().parents[1] / "tmp_tests" / "prod1_2a_config_contract"
+    base = Path(tempfile.mkdtemp(prefix="bm-prod1-2a-config-contract-"))
     if base.exists():
         import shutil
         shutil.rmtree(base)
