@@ -14,6 +14,8 @@ The four local NAS applications, the copied `nas-data` tree, persistent PostgreS
 
 Do not begin TrueNAS deployment, public exposure, or Cleaner destructive-mode work from this report.
 
+Durable whole-NAS companion: [`BM-PROD6F_Whole_NAS_Handoff_and_Source_of_Truth_Delta.md`](./BM-PROD6F_Whole_NAS_Handoff_and_Source_of_Truth_Delta.md). This Git-tracked copy is authoritative over the convenience copy stored directly under `C:\Dev\NAS`.
+
 ## Canonical local source of truth
 
 - Active development root: `C:\Dev\NAS`
