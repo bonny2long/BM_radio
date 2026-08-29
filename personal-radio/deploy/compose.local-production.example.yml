@@ -4,7 +4,7 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_DB: ${BM_RADIO_POSTGRES_DB:-bm_radio}
+      POSTGRES_DB: ${3BM_RADIO_POSTGRES_DB:-bm_radio}
       POSTGRES_USER: ${BM_RADIO_POSTGRES_USER:-bm_radio_app}
       POSTGRES_PASSWORD: ${BM_RADIO_POSTGRES_PASSWORD:?set an external local-production password}
     volumes:
