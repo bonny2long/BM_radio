@@ -1,3 +1,4 @@
+import re
 from .. import models
 
 
@@ -30,11 +31,25 @@ def track_item(track: models.Track) -> dict:
     }
 
 
+def chapter_section(relative_path: str | None) -> str | None:
+    """Sub-folder of a chapter inside its book, e.g. "Dune Disc 1".
+
+    Chapter paths are stored relative to the audiobook root as
+    <author>/<book>/[folders...]/<file>. Anything between the book folder and
+    the file is the section. Books with every file in one folder get None.
+    """
+    parts = [part for part in re.split(r"[\\/]+", relative_path or "") if part]
+    if len(parts) <= 3:
+        return None
+    return " / ".join(parts[2:-1])
+
+
 def chapter_item(chapter: models.AudiobookChapter) -> dict:
     return {
         'id': chapter.id,
         'title': chapter.title,
         'sort_order': chapter.sort_order,
+        'section': chapter_section(getattr(chapter, 'relative_path', None)),
         'duration_seconds': chapter.duration_seconds,
         'library_availability': getattr(chapter, 'library_availability', 'available'),
         'unavailable_since': _iso(getattr(chapter, 'unavailable_since', None)),
