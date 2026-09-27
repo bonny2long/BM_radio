@@ -51,6 +51,19 @@ function resolveAudiobookCollectionParts(detail: AudiobookDetail): CollectionPar
   }).sort((left, right) => left.index - right.index)
 }
 
+type ChapterSection = { name: string; parts: CollectionPart[] }
+
+function groupChapterSections(parts: CollectionPart[]): ChapterSection[] {
+  const sections: ChapterSection[] = []
+  for (const part of parts) {
+    const name = part.chapter?.section || 'Other'
+    const last = sections[sections.length - 1]
+    if (last && last.name === name) last.parts.push(part)
+    else sections.push({ name, parts: [part] })
+  }
+  return sections
+}
+
 function item(detail: AudiobookDetail, chapter: Chapter, startPositionSeconds?: number | null): NowPlaying {
   const part = resolveAudiobookCollectionParts(detail).find(candidate => candidate.chapter?.id === chapter.id)
   return {
@@ -72,6 +85,7 @@ const buttonStyle = { minHeight: 44, padding: '0 18px', borderRadius: 'var(--rad
 
 export default function BookshelfPage({ initialBookId }: { initialBookId?: number | null }) {
   const [, setSummary] = useState(empty)
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
   const [books, setBooks] = useState<Audiobook[]>([])
   const [detail, setDetail] = useState<AudiobookDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -113,6 +127,10 @@ export default function BookshelfPage({ initialBookId }: { initialBookId?: numbe
     }
     const toggle = async () => { await favoriteAudiobook(detail.id); setDetail(await getAudiobook(detail.id)); refresh() }
     const resetProgress = async () => { await resetAudiobookProgress(detail.id); setDetail(await getAudiobook(detail.id)); refresh() }
+    const chapterRow = (part: (typeof collectionRows)[number]) => <button onClick={() => playChapter(part.chapter)} className="card-premium" style={{ padding: 14, textAlign: 'left', width: '100%', marginBottom: 8, color: 'var(--text-primary)' }} key={part.chapter?.id ?? `${part.index}-${part.title}`}><strong>{detail.contained_books?.length ? part.displayTitle : `${part.index}. ${part.title}`}</strong><div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{detail.contained_books?.length ? 'Play book' : 'Play chapter'}</div></button>
+    const sectioned = !detail.contained_books?.length && collectionRows.some(part => part.chapter?.section)
+    const chapterSections = sectioned ? groupChapterSections(collectionRows) : []
+    const currentSectionName = currentPart?.chapter?.section ?? chapterSections[0]?.name
     const durationHours = detail.duration_seconds ? `${Math.round(detail.duration_seconds / 360) / 10} hours` : null
 
     return <div>
@@ -132,8 +150,18 @@ export default function BookshelfPage({ initialBookId }: { initialBookId?: numbe
         </div>
         {percent > 0 && <button onClick={() => void resetProgress()} style={{ minHeight: 36, padding: '0 12px', marginTop: 10, borderRadius: 'var(--radius-pill)', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontWeight: 700, fontSize: 12, width: '100%' }}>Reset progress</button>}
       </div>
-      <p className="section-label">{detail.contained_books?.length ? 'Books in this collection' : 'Chapters'}</p>
-      {collectionRows.map(part => <button onClick={() => playChapter(part.chapter)} className="card-premium" style={{ padding: 14, textAlign: 'left', width: '100%', marginBottom: 8, color: 'var(--text-primary)' }} key={part.chapter?.id ?? `${part.index}-${part.title}`}><strong>{detail.contained_books?.length ? part.displayTitle : `${part.index}. ${part.title}`}</strong><div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{detail.contained_books?.length ? 'Play book' : 'Play chapter'}</div></button>)}
+      <p className="section-label">{detail.contained_books?.length ? 'Books in this collection' : sectioned ? `Discs · ${detail.chapters.length} chapters` : 'Chapters'}</p>
+      {sectioned ? chapterSections.map(section => {
+        const open = openSections[section.name] ?? section.name === currentSectionName
+        const playing = section.parts.some(part => part.chapter?.id === latestChapterId)
+        return <div key={section.name} style={{ marginBottom: 8 }}>
+          <button onClick={() => setOpenSections(previous => ({ ...previous, [section.name]: !open }))} aria-expanded={open} className="card-premium" style={{ padding: 14, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, textAlign: 'left', color: 'var(--text-primary)', borderColor: playing ? 'var(--accent-primary)' : undefined }}>
+            <span><strong>{section.name}</strong><span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{section.parts.length} {section.parts.length === 1 ? 'chapter' : 'chapters'}{playing ? ' · where you left off' : ''}</span></span>
+            <span aria-hidden="true" style={{ color: 'var(--text-muted)', fontSize: 14 }}>{open ? '▾' : '▸'}</span>
+          </button>
+          {open && <div style={{ padding: '8px 0 0 12px' }}>{section.parts.map(chapterRow)}</div>}
+        </div>
+      }) : collectionRows.map(chapterRow)}
     </div>
   }
 

@@ -42,10 +42,20 @@ def test_revan_numeric_order() -> None:
     assert ordered[2].name == "10 Track 10.mp3", ordered
 
 
+def test_multi_disc_folders_keep_disc_then_track_order() -> None:
+    root = Path("C:/NAS/Audiobooks/Library/Frank Herbert/Unknown Year - Dune")
+    discs = [1, 2, 3, 9, 10, 11, 18]
+    files = [root / f"Dune Disc {disc}" / f"{track:02d} {track}.mp3" for disc in reversed(discs) for track in (2, 1, 10)]
+    ordered = sorted(files, key=audiobook_chapter_sort_key)
+    expected = [root / f"Dune Disc {disc}" / f"{track:02d} {track}.mp3" for disc in discs for track in (1, 2, 10)]
+    assert ordered == expected, [str(p.relative_to(root)) for p in ordered[:6]]
+
+
 def main() -> None:
     test_explicit_book_index()
     test_darth_bane_order()
     test_revan_numeric_order()
+    test_multi_disc_folders_keep_disc_then_track_order()
     print("Audiobook multi-book ordering checks passed.")
 
 

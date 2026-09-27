@@ -29,11 +29,22 @@ def explicit_book_index(path: Path) -> int | None:
     return None
 
 
+def path_key(path: Path):
+    """Natural sort over every folder and the file name.
+
+    Multi-disc books keep one folder per disc ("Dune Disc 1" ... "Dune Disc 18")
+    and restart track numbers in each. Sorting on the file name alone put every
+    disc's track 01 first; comparing each path part in order keeps disc order,
+    then track order. Single-folder books sort exactly as before.
+    """
+    return [[int(x) if x.isdigit() else x.lower() for x in re.split(r'(\d+)', part)] for part in path.parts]
+
+
 def audiobook_chapter_sort_key(path: Path):
     book_index = explicit_book_index(path)
     if book_index is not None:
-        return (0, book_index, key(path))
-    return (1, key(path))
+        return (0, book_index, path_key(path))
+    return (1, path_key(path))
 
 
 def _read_json(path: Path) -> dict:
