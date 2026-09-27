@@ -1,3 +1,5 @@
+> **Historical (June 2026).** This describes BM Radio's early scaffold. The stack, paths and database have changed (PostgreSQL 16, runbook v12 layout). For the current state see [README.md](../README.md), [local-recovery-storage.md](local-recovery-storage.md) and `docs/production-upgrade/`.
+
 # BM Radio Documents Index
 
 Owner: Bonny Makaniankhondo  

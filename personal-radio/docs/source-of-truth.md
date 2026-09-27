@@ -106,13 +106,13 @@ That is not a V1 requirement.
 Current local NAS data root:
 
 ```text
-C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\nas-data
+C:\NAS-Local\nas-data
 ```
 
 Current BM Radio project path:
 
 ```text
-C:\Users\BonnyMakaniankhondo\Documents\GitHub\NAS\BM_radio-main\personal-radio
+C:\Dev\NAS\BM_radio-main\personal-radio
 ```
 
 Current local ports:
