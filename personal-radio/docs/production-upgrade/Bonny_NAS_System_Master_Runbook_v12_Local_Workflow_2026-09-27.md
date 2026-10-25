@@ -26,6 +26,7 @@ Do not weaken a permanent architecture rule just because an older document diffe
 - Active code: `C:\Dev\NAS` (one Git repository per app).
 - Active data: `C:\NAS-Local\nas-data`.
 - Master copies of the test downloads: `C:\NAS-Local\Restock`. Copy from here into `_INGEST\incoming`; never move.
+- Restock holds 769 unique files (about 12.4GB) plus 3 intentional `- Copy` duplicates (Mac Miller Discography, Dune Chronicles (Dune 7), Golden Son). They are byte-identical to their originals (SHA-256, checked 2026-10-25) and are kept to exercise duplicate review. Folder total: 986 files (about 18.9GB). Local test data only; the NAS starts empty.
 - The old copies under `Documents\GitHub` are **frozen backups**. Do not run, edit, or test them. `timeledger` in that folder is unrelated to the NAS.
 - On 2026-09-26 the whole local system was wiped and restarted from empty databases, then fed the same media again through the full workflow. Backups from before the wipe are in `C:\NAS-Local\Backups\20260926T231453Z-pre-fresh-start`.
 - TrueNAS deployment is still deferred. Local acceptance is not permission to start destructive Cleaner work or hardware deployment.
@@ -192,6 +193,7 @@ Keep SQLite files on a local dataset, never on an SMB or NFS share. Take a ZFS s
 - Folder-name noise (uploader handles, bitrate numbers, emoji, remaster years, Windows " - Copy") no longer leaks into suggestions.
 - **Quarantine:** unknown or unsupported items can be quarantined, restored to review, discarded with a reason (nothing deleted), or have a discard undone. Each decision writes a disposition record to `_REPORTS/archive-assistant/dispositions`.
 - **Recovery** returns unknown items to quarantine review and refuses moved or quarantined batches.
+- **Unknown years:** a known year names the folder `<Year - Title>`. If the year is unknown, the reviewer either enters one or presses **Accept Unknown Year**, and the folder becomes `Unknown Year - <Title>` (for example `Audiobooks/Library/Frank Herbert/Unknown Year - Dune`). A missing year is a warning, not a block; the one exception is a movie inside a collection, which needs a year or an explicit accept. This is a locked Core V1 rule.
 - `scripts/repair_foreign_root_batches.py` hides rows left by test runs against another data root, with a verified backup first.
 - Dashboard: http://127.0.0.1:5173, API http://127.0.0.1:8001. Core V1 suite: 24 checks.
 
@@ -206,6 +208,8 @@ Timing model (agreed 2026-09-26):
 | Trash hold | Cleaned items wait 14 days before purge | **Planned** |
 
 Classifications: `safe_empty_folder`, `known_harmless_trash`, `uncertain_leftover`, `quarantine_hold`, `do_not_touch`, `blocked_too_new`, `blocked_by_missing_evidence`, `blocked_by_destination_missing`.
+
+CD-rip leftovers (`.log`, `.cue`, `.accurip`, `.m3u`, `DR<n>.txt`, `auCDtect.txt`) that remain after a verified move are labeled `known_harmless_trash`. Archive Assistant does not move them into the library, so Cleaner owns them; they stay report-only until the 14-day trash hold exists.
 
 The only enabled action is **reviewed empty-folder removal**. It needs `CLEANER_MODE=production`, `DRY_RUN=false`, `DESTRUCTIVE_ACTIONS_ENABLED=true`, and `ALLOW_EMPTY_FOLDER_REMOVAL=true`. At execution time the folder must also:
 
@@ -237,7 +241,7 @@ Dashboard: http://127.0.0.1:8092. Tests: 18. The local `.env` is report-only.
 
 ## 14. Fresh-Start Acceptance (2026-09-26 to 27)
 
-- Every library file was restored to its original download folder using Archive Assistant's move manifests, then moved to `C:\NAS-Local\Restock`. 769 files (about 12.4GB) were verified by SHA-256, with none missing.
+- Every library file was restored to its original download folder using Archive Assistant's move manifests, then moved to `C:\NAS-Local\Restock`. 769 files (about 12.4GB, unique content; see section 0 for the 3 duplicate fixtures) were verified by SHA-256, with none missing.
 - `nas-data`, the Archive Assistant database, the BM Radio database (dropped, then Alembic to head), all reports, and the caches were cleared. Pre-wipe backups were taken and verified.
 - Downloads were re-ingested through Intake Watcher, then Archive Assistant, then the final libraries, then BM Radio. Six albums and one 17-disc audiobook moved. Multi-disc releases landed as single releases, and Dune plays in the correct disc and track order.
 - Test data found missing in the source: Dune has no Disc 14.
@@ -252,6 +256,7 @@ Dashboard: http://127.0.0.1:8092. Tests: 18. The local `.env` is report-only.
 ## 16. Security
 
 - PostgreSQL loopback or internal only. Dashboards private. No public port forwarding.
+- **Origin check:** every app refuses a changing request (POST, PUT, PATCH, DELETE) whose `Origin` header is not allowed, so a web page on another site cannot drive an app through your browser. Loopback addresses are always allowed. To use an app from a LAN or Tailscale address, list that exact address in `ALLOWED_ORIGINS` (Intake Watcher, Archive Assistant, Cleaner) or `BM_RADIO_CORS_ORIGINS` (BM Radio). Requests with no `Origin` header (curl, scripts) and all reads are unaffected.
 - BM Radio media mounts read-only. Cleaner writes only its reports until a removal action is deliberately enabled.
 - Future TrueNAS identities: least privilege per service, as in section 9.
 
@@ -267,21 +272,34 @@ TrueNAS installation and hardware acceptance; production pools and mounts; Tails
 
 ## 19. Starting Commands
 
+Start in this order, one terminal per line, and keep each window open. Nothing starts on its own after a reboot.
+
 ```powershell
+# 0. Start Docker Desktop first, then BM Radio PostgreSQL. Wait for "healthy".
 docker start bm-radio-postgres-dev
-# BM Radio
-Set-Location C:\Dev\NAS\BM_radio\personal-radio\backend;  .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8094
+docker inspect bm-radio-postgres-dev --format '{{.State.Health.Status}}'
+# 1-2. BM Radio
+Set-Location C:\Dev\NAS\BM_radio\personal-radio\backend;  .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8094
 Set-Location C:\Dev\NAS\BM_radio\personal-radio\frontend; npm.cmd run dev -- --host 127.0.0.1 --port 5174
-# Archive Assistant
-Set-Location C:\Dev\NAS\archive_assistant\backend;  .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+# 3-4. Archive Assistant
+Set-Location C:\Dev\NAS\archive_assistant\backend;  .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 Set-Location C:\Dev\NAS\archive_assistant\frontend; npm.cmd run dev -- --host 127.0.0.1 --port 5173
-# Intake Watcher
+# 5. Intake Watcher
 Set-Location C:\Dev\NAS\intake-watcher; .\.venv\Scripts\python.exe -m intake_watcher.server --host 127.0.0.1 --port 8091
-# Cleaner (report-only)
+# 6. Cleaner (report-only, as needed)
 Set-Location C:\Dev\NAS\cleaner; .\.venv\Scripts\python.exe -m cleaner.server --host 127.0.0.1 --port 8092
 ```
 
-`Documents\GitHub\START_ALL_3_NAS_APPS.txt` has the same commands with notes.
+| App | Open | Health |
+|---|---|---|
+| BM Radio | http://127.0.0.1:5174 | http://127.0.0.1:8094/api/health |
+| Archive Assistant | http://127.0.0.1:5173 | http://127.0.0.1:8001/api/health |
+| Intake Watcher | http://127.0.0.1:8091 | http://127.0.0.1:8091/api/health |
+| Cleaner | http://127.0.0.1:8092 | http://127.0.0.1:8092/api/health |
+
+To stop, press Ctrl+C in each window, and never close one during an Archive Assistant move. `docker stop bm-radio-postgres-dev` is optional. The test baselines are in the Appendix.
+
+`Documents\GitHub\START_ALL_3_NAS_APPS.txt` has the same commands with notes, test commands, and first-time setup.
 
 ## 20. System Model
 
