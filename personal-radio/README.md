@@ -69,7 +69,7 @@ Set-Location C:\Dev\NAS\BM_radio\personal-radio\backend
 .\.venv\Scripts\python.exe ..\scripts\check_prod0_baseline.py
 ```
 
-The PROD0 gate currently gives 63 passed, 0 failed, 4 skipped. `scripts\check_audiobook_multibook_ordering.py` covers chapter order, including multi-disc books.
+The PROD0 gate currently gives 63 passed, 0 failed, 4 skipped. `scripts\check_audiobook_multibook_ordering.py` covers chapter order, including multi-disc books. `backend\scripts\check_reconcile_path_escaping.py` proves that books and tracks removed from the library are marked unavailable on rescan; it runs against a throwaway scratch database in the dev PostgreSQL container and skips itself when that is not reachable.
 
 ## Docs
 
