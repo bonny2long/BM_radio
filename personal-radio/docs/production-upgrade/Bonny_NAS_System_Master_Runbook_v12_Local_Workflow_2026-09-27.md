@@ -5,9 +5,9 @@
 | | |
 |---|---|
 | Owner | Bonny Makaniankhondo |
-| Updated | 2026-09-27 |
+| Updated | 2026-10-25 |
 | Project | Personal NAS: Intake Watcher, Archive Assistant, Cleaner, BM Radio |
-| Status | Full local workflow re-proven from a clean slate. Hardware and TrueNAS deployment still deferred. |
+| Status | Full local workflow re-proven from a clean slate; October safety and recovery hardening merged. Hardware and TrueNAS deployment still deferred. |
 | Supersedes | v11 Post-PROD6F Cleaner Focus Edition (2026-08-26), kept as history |
 
 ## Authority
@@ -42,39 +42,37 @@ Cleaner may eventually remove only proven-safe leftovers.
 No reader application owns the archive.
 ```
 
-## 2. Current Status (2026-09-27)
+## 2. Current Status (2026-10-25)
 
 | Area | State | Next |
 |---|---|---|
 | Hardware | Build plan locked, not purchased | Buy and assemble when ready |
 | Local data | Fresh start on 2026-09-26; 7 releases re-ingested | Keep using copies from Restock |
-| Intake Watcher | 14 tests pass | Decide whether non-media folders should be promoted for quarantine |
-| Archive Assistant | Core V1 suite 24 checks pass; quarantine lifecycle; multi-disc grouping | Scheduled scan; pending-batch API for Cleaner |
-| Cleaner | 18 tests pass; report-only; 30-day age gate; reviewed empty-folder removal behind four gates | Evidence linking, SQLite ledger, 14-day trash hold |
-| BM Radio | PROD0 63 passed, 0 failed, 4 skipped; PostgreSQL 16 | Multi-disc audiobook order and disc sections done |
+| Intake Watcher | 51 tests; origin guard; damaged-state recovery; one-pass fingerprints | Decide whether non-media folders should be promoted for quarantine |
+| Archive Assistant | Core V1 suite 24 checks plus targeted safe-default, origin, and duplicate-guard checks; quarantine lifecycle; multi-disc grouping | Scheduled scan; pending-batch API for Cleaner |
+| Cleaner | 126 tests; report-only by default; 30-day age gate; reviewed empty-folder removal; recoverable 14-day trash hold (off by default) | Pending-batch API integration, SQLite ledger |
+| BM Radio | PROD0 63 passed, 0 failed, 4 skipped; PostgreSQL 16; removed-path reconciliation | Keep final library mounts read-only |
 | Photos | Outside Archive Assistant and BM Radio | Future Immich |
 | Movies and TV reader | Archive Assistant prepares folders | Future Jellyfin |
 | Remote access | Local only | Future Tailscale |
 
 ## 3. Repository State
 
-All four repositories were merged to their default branch on 2026-09-27 through pull requests, then documentation pull requests. Verify with `git log -1` before starting services.
+On 2026-10-25 all four active repositories were clean and matched their remote default branch. These are the heads inspected for this revision; still run `git status --short --branch` and `git log -1` before starting work.
 
-| App | Repository | Default branch | Feature merge |
-|---|---|---|---|
-| Archive Assistant | bonny2long/archive_assistant | `master` | PR #2, merge `14a847f` |
-| Cleaner | bonny2long/cleaner | `main` | PR #1, merge `92c1640` |
-| BM Radio | bonny2long/BM_radio | `main` | PR #1, merge `926d2ee` |
-| Intake Watcher | bonny2long/intake-watcher | `main` | PR #1, merge `dc94de2` |
-
-Documentation-only pull requests titled "docs: bring documentation up to date" follow each feature merge.
+| App / repository | Branch and verified HEAD | October change |
+|---|---|---|
+| Archive Assistant — bonny2long/archive_assistant | `master` at `41aa8a1` (PR #6) | Content duplicate guard and serialized moves; origin guard; safe dev defaults |
+| Cleaner — bonny2long/cleaner | `main` at `779aed6` (PR #8) | Recoverable trash hold after leftover classification, evidence-scan, origin, and rip-sidecar work |
+| BM Radio — bonny2long/BM_radio | `main` at `7cd22a0` | Runbook/start documentation; includes PR #5 removed-path reconciliation and PR #3 origin guard |
+| Intake Watcher — bonny2long/intake-watcher | `main` at `7b24d65` (PR #4) | Damaged-state recovery and cheaper fingerprints; includes PR #3 origin guard |
 
 ## 4. Non-Negotiable Rules
 
 1. No automatic deletion by Intake Watcher, Archive Assistant, BM Radio, Jellyfin, Immich, or any reader.
-2. Only Cleaner may ever delete, and today it may only remove reviewed **empty folders**, only with all four production gates on.
-3. Cleaner never deletes a file. File, junk, and quarantine cleanup stay disabled until the evidence, ledger, and 14-day trash hold exist.
-4. No overwrite of existing final destinations.
+2. Only Cleaner may ever delete. It removes reviewed **empty folders** with all four production gates on, and it deletes files only by purging an expired item from its trash hold, which needs its own `ALLOW_TRASH_PURGE` switch and an explicit list from you.
+3. Cleaner never deletes a file directly. Duplicates, ticked strays, approved quarantine discards, and known junk are first **moved** into a recoverable `_TRASH` hold (off by default), and stay there for `TRASH_HOLD_DAYS` (14) before they can be purged.
+4. No overwrite of existing final destinations, and no duplicates: Archive Assistant never moves a media file whose exact content (SHA-256) is already in the library or in an earlier batch, whatever its name or metadata. Moves run one at a time.
 5. No final Archive Assistant move without human approval.
 6. No hidden Archive Assistant rescans from review actions. Scans happen when you click Scan ingest.
 7. Weak metadata is not trash. It goes to review.
@@ -120,6 +118,7 @@ nas-data\
   _INGEST\leftover-review\
   _STAGING\
   _QUARANTINE\unknown-type\ | unsupported-file\ | music\discography-excluded\
+  _TRASH\                       Cleaner recoverable hold, off by default
   _REPORTS\intake-watcher\ | archive-assistant\ | cleaner\ | move-logs\
   Music\Library\FLAC\ | MP3\    Metadata\  Playlists\  Discographies\
   Movies\Library\  TV\Library\  Books\EPUB\ | PDF\  Audiobooks\Library\
@@ -174,7 +173,7 @@ Keep SQLite files on a local dataset, never on an SMB or NFS share. Take a ZFS s
 |---|---|---|---|
 | Intake Watcher | Is the upload finished? | incoming, processing, ready, failed; its reports | Classify, write libraries, delete |
 | Archive Assistant | What is it, where does it go? | Its database; ready, quarantine, staging; approved final folders; manifests, disposition records | Delete, watch active downloads, handle photos |
-| Cleaner | Which leftovers are safe to clean? | Its reports; reviewed empty-folder removal only when gated on | Delete files, touch quarantine or libraries |
+| Cleaner | Which leftovers are safe to clean? | Its reports; reviewed empty-folder removal; gated moves into `_TRASH`; verified purge of explicitly selected expired holds | Write final libraries, touch active intake, or directly delete source files |
 | BM Radio | How do I listen? | Its PostgreSQL database and cache | Touch any media file |
 
 ## 10. Intake Watcher
@@ -182,7 +181,8 @@ Keep SQLite files on a local dataset, never on an SMB or NFS share. Take a ZFS s
 - Watches `_INGEST/incoming` every `POLL_SECONDS` (300) and promotes items unchanged for `STABILITY_SECONDS` (1200, 20 minutes). Use 60 and 30 for quick local tests.
 - Never overwrites: a name collision in `ready` is flagged and left in place.
 - A folder with no supported media file stays in `incoming` as **Blocked** (`blocked_no_media_files`). Open decision: promote such folders so Archive Assistant can quarantine them.
-- Dashboard: http://127.0.0.1:8091. Tests: 14.
+- A damaged state file is renamed with a `.corrupt-<UTC time>` suffix, logged, and rebuilt from empty state; waiting items safely restart their stability window. Folder fingerprints now use one walk, and the dashboard reuses the inspection result.
+- Dashboard: http://127.0.0.1:8091. Tests: 51.
 
 ## 11. Archive Assistant
 
@@ -194,8 +194,9 @@ Keep SQLite files on a local dataset, never on an SMB or NFS share. Take a ZFS s
 - **Quarantine:** unknown or unsupported items can be quarantined, restored to review, discarded with a reason (nothing deleted), or have a discard undone. Each decision writes a disposition record to `_REPORTS/archive-assistant/dispositions`.
 - **Recovery** returns unknown items to quarantine review and refuses moved or quarantined batches.
 - **Unknown years:** a known year names the folder `<Year - Title>`. If the year is unknown, the reviewer either enters one or presses **Accept Unknown Year**, and the folder becomes `Unknown Year - <Title>` (for example `Audiobooks/Library/Frank Herbert/Unknown Year - Dune`). A missing year is a warning, not a block; the one exception is a movie inside a collection, which needs a year or an explicit accept. This is a locked Core V1 rule.
+- `DEBUG` and `DEV_TOOLS_ENABLED` default to `false`; local development must explicitly enable both before dev-reset tools exist.
 - `scripts/repair_foreign_root_batches.py` hides rows left by test runs against another data root, with a verified backup first.
-- Dashboard: http://127.0.0.1:5173, API http://127.0.0.1:8001. Core V1 suite: 24 checks.
+- Dashboard: http://127.0.0.1:5173, API http://127.0.0.1:8001. Core V1 suite: 24 checks; run the targeted safe-default, origin, and content-duplicate checks when changing those areas.
 
 ## 12. Cleaner
 
@@ -205,13 +206,19 @@ Timing model (agreed 2026-09-26):
 |---|---|---|
 | Automatic plan | Weekly (`CHECK_INTERVAL_SECONDS=604800`, when `AUTO_RUN=true`) | Built |
 | Age gate | 30 days untouched (`MIN_AGE_DAYS=30`) | Built |
-| Trash hold | Cleaned items wait 14 days before purge | **Planned** |
+| Trash hold | Cleaned items wait 14 days before purge (`TRASH_HOLD_DAYS`) | Built, off by default |
 
 Classifications: `safe_empty_folder`, `known_harmless_trash`, `uncertain_leftover`, `quarantine_hold`, `do_not_touch`, `blocked_too_new`, `blocked_by_missing_evidence`, `blocked_by_destination_missing`.
 
-CD-rip leftovers (`.log`, `.cue`, `.accurip`, `.m3u`, `DR<n>.txt`, `auCDtect.txt`) that remain after a verified move are labeled `known_harmless_trash`. Archive Assistant does not move them into the library, so Cleaner owns them; they stay report-only until the 14-day trash hold exists.
+CD-rip leftovers (`.log`, `.cue`, `.accurip`, `.m3u`, `DR<n>.txt`, `auCDtect.txt`) that remain after a verified move are labeled `known_harmless_trash`. Archive Assistant does not move them into the library, so Cleaner owns them; they move to the trash hold only when `ALLOW_TRASH_HOLD` and `ALLOW_KNOWN_TRASH_DELETE` are on; otherwise they stay report-only.
 
-The only enabled action is **reviewed empty-folder removal**. It needs `CLEANER_MODE=production`, `DRY_RUN=false`, `DESTRUCTIVE_ACTIONS_ENABLED=true`, and `ALLOW_EMPTY_FOLDER_REMOVAL=true`. At execution time the folder must also:
+Cleaner also recognises three more kinds of leftover. They are report-only unless the trash hold is on, and even then they are only moved aside, never deleted:
+
+- **Verified duplicates:** a folder Archive Assistant has no record of (for example a `- Copy` folder) whose media files are all byte-for-byte copies (SHA-256) of files already in a final library.
+- **Quarantine discards:** quarantined items whose newest Archive Assistant decision is `discard_approved` and whose files still match what was recorded. Undecided quarantine items are never picked up. Moving a discard also needs `ALLOW_QUARANTINE_DISCARD`.
+- **Unrecorded leftovers:** anything else with no record. Listed for a decision, never picked up automatically, because it may be a download not yet scanned; it moves to the trash hold only when you tick it on the dashboard.
+
+**Reviewed empty-folder removal** needs `CLEANER_MODE=production`, `DRY_RUN=false`, `DESTRUCTIVE_ACTIONS_ENABLED=true`, and `ALLOW_EMPTY_FOLDER_REMOVAL=true`. At execution time the folder must also:
 
 - appear in a plan reviewed less than 24 hours ago;
 - still be classified safe in a fresh plan;
@@ -221,21 +228,22 @@ The only enabled action is **reviewed empty-folder removal**. It needs `CLEANER_
 
 Removal is bottom-up `rmdir` only, and every run writes an execution report.
 
+**The trash hold** (`ALLOW_TRASH_HOLD`, plus the production gates) renames an item into `_TRASH/<run>/<original path>` on the same disk, with a manifest recording the reason, evidence, file inventory, and `purge_after`. Items are re-verified at move time (same category in a plan under 24 hours old, duplicates re-proved by content, folder unchanged, correct lane, no links). **Restore** is always available and never overwrites. **Purge** (`ALLOW_TRASH_PURGE`) deletes only items you explicitly list whose hold has expired and whose files still match the recorded inventory. Cleanup actions are serialized. The dashboard has a Trash Hold panel; the CLI has `trash-move`, `trash-list`, `restore`, and `purge`.
+
 Next priorities, in order:
 
 1. Read every move manifest per source folder, plus Archive Assistant disposition records.
 2. Ask Archive Assistant whether any batch from a folder is still pending.
 3. Add a Cleaner SQLite ledger for first-seen dates, plan identity, and actions.
-4. Build the 14-day trash hold, then known-junk cleanup and approved quarantine discards.
-
-Dashboard: http://127.0.0.1:8092. Tests: 18. The local `.env` is report-only.
+Dashboard: http://127.0.0.1:8092. Tests: 126. The local `.env` is report-only; the trash hold is off.
 
 ## 13. BM Radio
 
 - PostgreSQL 16 in Docker (`bm-radio-postgres-dev`, loopback `127.0.0.1:55432`), Alembic revision `0001_current_schema_baseline`.
 - Reads Music and Audiobooks read-only. **Rescan** on the home page picks up new moves.
 - **Audiobooks:** chapters play in path order compared number-aware per folder, so Disc 2 comes before Disc 10. Books with sub-folders show collapsible disc sections that open on the disc you are listening to.
-- Current library (2026-09-27): 119 tracks, 119 recordings, 1 audiobook with 396 chapters.
+- **Reconciliation:** a successful rescan marks tracks, books, and chapters that disappeared from the configured library roots as unavailable while preserving database history and user state; restored paths become available again. Missing roots and failed scans fail closed instead of hiding the library.
+- Accepted library snapshot (2026-09-27): 119 tracks, 119 recordings, 1 audiobook with 396 chapters.
 - App http://127.0.0.1:5174, API http://127.0.0.1:8094. PROD0: 63 passed, 0 failed, 4 skipped.
 - Phones on home Wi-Fi: `scripts\start_local_lan_demo.ps1`.
 
@@ -249,7 +257,7 @@ Dashboard: http://127.0.0.1:8092. Tests: 18. The local `.env` is report-only.
 ## 15. Backup and Recovery
 
 - **BM Radio:** logical `pg_dump -Fc` dumps only, never raw volume files. Record size, SHA-256, and Alembic revision.
-- **Archive Assistant:** use the SQLite backup API, check `pragma integrity_check`, and record the batch count and SHA-256.
+- **Archive Assistant:** use the SQLite backup API, check `pragma integrity_check`, and record the batch count and SHA-256. Its duplicate guard learns prior library content from batches and move records, so if the library survives but this database is lost, restore the database before accepting new intake.
 - **Code:** fresh clones from the four GitHub repositories; verify branch and commit.
 - **Media:** verify with file counts, bytes, and SHA-256. The master test set is `C:\NAS-Local\Restock`.
 
@@ -262,7 +270,7 @@ Dashboard: http://127.0.0.1:8092. Tests: 18. The local `.env` is report-only.
 
 ## 17. Deferred Work
 
-TrueNAS installation and hardware acceptance; production pools and mounts; Tailscale; Jellyfin and Immich; Cleaner file and quarantine cleanup; monitoring and UPS integration; off-site backup; Bay 4 expansion; optional 10GbE.
+TrueNAS installation and hardware acceptance; production pools and mounts; Tailscale; Jellyfin and Immich; Cleaner pending-batch integration and SQLite ledger; monitoring and UPS integration; off-site backup; Bay 4 expansion; optional 10GbE.
 
 ## 18. Documentation Policy
 
@@ -286,7 +294,7 @@ Set-Location C:\Dev\NAS\archive_assistant\backend;  .\.venv\Scripts\python.exe -
 Set-Location C:\Dev\NAS\archive_assistant\frontend; npm.cmd run dev -- --host 127.0.0.1 --port 5173
 # 5. Intake Watcher
 Set-Location C:\Dev\NAS\intake-watcher; .\.venv\Scripts\python.exe -m intake_watcher.server --host 127.0.0.1 --port 8091
-# 6. Cleaner (report-only, as needed)
+# 6. Cleaner (report-only unless you enable the trash hold, as needed)
 Set-Location C:\Dev\NAS\cleaner; .\.venv\Scripts\python.exe -m cleaner.server --host 127.0.0.1 --port 8092
 ```
 
@@ -308,7 +316,8 @@ Intake Watcher      watches uploads, waits for stability, promotes to ready
 Archive Assistant   scans ready on request, groups releases, you review and approve,
                     moves to final libraries, writes manifests and disposition records
 Cleaner             reads move evidence, reports leftovers after 30 days,
-                    removes reviewed empty folders only when gated on
+                    removes reviewed empty folders when gated on, can move reviewed items
+                    into a recoverable hold, and purges only expired verified selections
 BM Radio            reads Music and Audiobooks read-only, PostgreSQL, radio and bookshelf
 Jellyfin (future)   Movies and TV
 Immich (future)     Photos
@@ -318,7 +327,7 @@ Immich (future)     Photos
 
 | App | Baseline |
 |---|---|
-| Intake Watcher | 14 tests pass |
-| Archive Assistant | Core V1 suite 24 checks pass; SQLite integrity ok |
-| Cleaner | 18 tests pass; report-only |
+| Intake Watcher | 51 tests pass |
+| Archive Assistant | Core V1 suite 24 checks; targeted safe-default, origin, and duplicate-guard checks; SQLite integrity ok |
+| Cleaner | 126 tests pass; report-only and trash hold off by default |
 | BM Radio | PROD0 63 passed, 0 failed, 4 skipped |
