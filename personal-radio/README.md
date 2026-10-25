@@ -88,3 +88,4 @@ The PROD0 gate currently gives 63 passed, 0 failed, 4 skipped. `scripts\check_au
 - No file moves, deletes, renames, or tag writes.
 - Movies and TV belong to Jellyfin; photos belong to Immich.
 - Keep the database and dashboards private. No public port forwarding.
+- Changing requests (play events, favorites, playlists, scans, stations) are refused with 403 unless their `Origin` is listed in `BM_RADIO_CORS_ORIGINS`, so a web page on another site cannot drive the API through your browser. The phone launcher adds the Wi-Fi address automatically; for any other address (Tailscale, a NAS hostname) add it to that list. Plain scripts with no `Origin` header and all reads are unaffected. `backend\scripts\check_origin_guard.py` covers this.

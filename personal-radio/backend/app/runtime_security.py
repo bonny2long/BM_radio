@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import Settings
+from .origin_guard import OriginGuardMiddleware
 
 CORS_ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 CORS_ALLOWED_HEADERS = ["Accept", "Authorization", "Content-Type", "Range"]
@@ -27,6 +28,19 @@ def validate_runtime_safety(settings: Settings) -> None:
     for name, message in UNSAFE_RUNTIME_FLAGS.items():
         if bool(getattr(settings, name)):
             raise RuntimeError(message)
+
+
+def configure_origin_guard(app: FastAPI, settings: Settings) -> None:
+    """Refuse changing requests from pages that are not one of the configured origins.
+
+    With no configured origins the app's own pages could not make changes at all, so
+    loopback origins are accepted in that case.
+    """
+    app.add_middleware(
+        OriginGuardMiddleware,
+        get_allowed_origins=lambda: settings.BM_RADIO_CORS_ORIGINS,
+        allow_loopback=not settings.BM_RADIO_CORS_ORIGINS,
+    )
 
 
 def configure_cors(app: FastAPI, settings: Settings) -> None:
