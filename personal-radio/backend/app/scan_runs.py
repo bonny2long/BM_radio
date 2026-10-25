@@ -48,7 +48,11 @@ def _path_prefix_filters(column, roots: Iterable[Path]):
     for root in roots:
         root_text = str(root)
         if root_text:
-            filters.append(column.like(f"{root_text}%"))
+            # autoescape adds an explicit ESCAPE character and escapes %, _ and itself in the
+            # path. A bare LIKE treats backslash as the escape character on PostgreSQL, so a
+            # Windows path such as C:\NAS-Local\... would match nothing and files that
+            # disappeared from the library were never marked unavailable.
+            filters.append(column.startswith(root_text, autoescape=True))
     return filters
 
 
