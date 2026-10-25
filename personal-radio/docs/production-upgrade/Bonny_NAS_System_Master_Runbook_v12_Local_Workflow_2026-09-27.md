@@ -256,6 +256,7 @@ Dashboard: http://127.0.0.1:8092. Tests: 18. The local `.env` is report-only.
 ## 16. Security
 
 - PostgreSQL loopback or internal only. Dashboards private. No public port forwarding.
+- **Origin check:** every app refuses a changing request (POST, PUT, PATCH, DELETE) whose `Origin` header is not allowed, so a web page on another site cannot drive an app through your browser. Loopback addresses are always allowed. To use an app from a LAN or Tailscale address, list that exact address in `ALLOWED_ORIGINS` (Intake Watcher, Archive Assistant, Cleaner) or `BM_RADIO_CORS_ORIGINS` (BM Radio). Requests with no `Origin` header (curl, scripts) and all reads are unaffected.
 - BM Radio media mounts read-only. Cleaner writes only its reports until a removal action is deliberately enabled.
 - Future TrueNAS identities: least privilege per service, as in section 9.
 
