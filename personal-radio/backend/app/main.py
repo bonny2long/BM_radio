@@ -9,7 +9,7 @@ from .config import settings
 from .database_readiness import assert_database_ready
 from .radio_profiles import seed_default_radio_profiles
 from .perf import install_performance_tools
-from .runtime_security import configure_cors, fastapi_docs_config, validate_runtime_safety
+from .runtime_security import configure_cors, configure_origin_guard, fastapi_docs_config, validate_runtime_safety
 from .routes import health, library, stations, audiobooks, queue, playback, media, search, playlists, radio_profiles, library_integrity, music_recordings
 
 # Validate private runtime invariants before serving requests. This does not mutate the database.
@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.APP_NAME, lifespan=lifespan, **fastapi_docs_config(settings))
 install_performance_tools(app)
+configure_origin_guard(app, settings)
 configure_cors(app, settings)
 
 # Include routers
