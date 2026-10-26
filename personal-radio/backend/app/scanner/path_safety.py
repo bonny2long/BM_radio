@@ -23,6 +23,9 @@ def is_approved_path(path: Path, roots: list[Path]) -> bool:
 def safe_media_files(root: Path, extensions: set[str], approved_roots: list[Path]):
     if not root.is_dir() or not is_approved_path(root, approved_roots):
         return
-    for path in root.rglob("*"):
+    # Sorted so the same library is scanned in the same order on every filesystem. NTFS lists
+    # alphabetically; ext4 and ZFS do not, and when two folders hold the same book the first one
+    # scanned is the one kept.
+    for path in sorted(root.rglob("*"), key=lambda item: ([part.casefold() for part in item.parts], item.parts)):
         if path.is_file() and path.suffix.lower() in extensions and is_approved_path(path, approved_roots):
             yield path
