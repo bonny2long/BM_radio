@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
+import os
 import tempfile
 import inspect
 import shutil
@@ -417,7 +418,9 @@ def case_p_q_helpers(tmp: Path) -> None:
         db.commit()
         rec_ids = music_recording_ids_for_track_ids(db, track_ids=ids)
         assert len(rec_ids) == PREFERENCE_BATCH_CHUNK_SIZE + 5
-        assert find_unseen_track_ids(db, scan_run_id=999999, scanned_roots=["C:/bulk"]) == []  # Windows path boundary remains strict for temp sqlite strings on this host.
+        # "C:/bulk" is a drive path only on Windows, where this stays strict and matches nothing. On POSIX it is
+        # an ordinary relative path whose prefix the stored paths share, so every track counts as inside it.
+        assert find_unseen_track_ids(db, scan_run_id=999999, scanned_roots=["C:/bulk"]) == ([] if os.name == "nt" else ids)
     finally:
         db.close()
         engine.dispose()
