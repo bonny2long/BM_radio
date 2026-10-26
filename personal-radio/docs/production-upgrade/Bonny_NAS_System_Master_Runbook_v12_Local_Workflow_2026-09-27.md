@@ -48,10 +48,10 @@ No reader application owns the archive.
 |---|---|---|
 | Hardware | Build plan locked, not purchased | Buy and assemble when ready |
 | Local data | Fresh start on 2026-09-26; 7 releases re-ingested | Keep using copies from Restock |
-| Intake Watcher | 51 tests; origin guard; damaged-state recovery; one-pass fingerprints | Decide whether non-media folders should be promoted for quarantine |
-| Archive Assistant | Core V1 suite 24 checks plus targeted safe-default, origin, and duplicate-guard checks; quarantine lifecycle; multi-disc grouping | Scheduled scan; pending-batch API for Cleaner |
+| Intake Watcher | 56 tests; origin guard; damaged-state recovery; one-pass fingerprints; rename-only promotion | Decide whether non-media folders should be promoted for quarantine |
+| Archive Assistant | Core V1 suite 24 checks plus targeted safe-default, origin, and duplicate-guard checks; quarantine lifecycle; multi-disc grouping; rename-only moves with a NAS storage preflight | Scheduled scan; pending-batch API for Cleaner |
 | Cleaner | 126 tests; report-only by default; 30-day age gate; reviewed empty-folder removal; recoverable 14-day trash hold (off by default) | Pending-batch API integration, SQLite ledger |
-| BM Radio | PROD0 63 passed, 0 failed, 4 skipped; PostgreSQL 16; removed-path reconciliation | Keep final library mounts read-only |
+| BM Radio | PROD0 63 passed, 0 failed, 4 skipped; PostgreSQL 16; removed-path reconciliation; scans in a fixed order on every filesystem | Keep final library mounts read-only |
 | Photos | Outside Archive Assistant and BM Radio | Future Immich |
 | Movies and TV reader | Archive Assistant prepares folders | Future Jellyfin |
 | Remote access | Local only | Future Tailscale |
@@ -62,10 +62,10 @@ On 2026-10-25 all four active repositories were clean and matched their remote d
 
 | App / repository | Branch and verified HEAD | October change |
 |---|---|---|
-| Archive Assistant — bonny2long/archive_assistant | `master` at `41aa8a1` (PR #6) | Content duplicate guard and serialized moves; origin guard; safe dev defaults |
+| Archive Assistant — bonny2long/archive_assistant | `master` at `5fe0305` (PR #7) | Rename-only moves and cross-filesystem block; NAS storage preflight; content duplicate guard and serialized moves; origin guard; safe dev defaults |
 | Cleaner — bonny2long/cleaner | `main` at `779aed6` (PR #8) | Recoverable trash hold after leftover classification, evidence-scan, origin, and rip-sidecar work |
-| BM Radio — bonny2long/BM_radio | `main` at `7cd22a0` | Runbook/start documentation; includes PR #5 removed-path reconciliation and PR #3 origin guard |
-| Intake Watcher — bonny2long/intake-watcher | `main` at `7b24d65` (PR #4) | Damaged-state recovery and cheaper fingerprints; includes PR #3 origin guard |
+| BM Radio — bonny2long/BM_radio | `main` at `fc12532` (PR #7) | Fixed scan order for Linux; runbook/start documentation; includes PR #5 removed-path reconciliation and PR #3 origin guard. A later documentation-only PR updates the tracked runbook copy. |
+| Intake Watcher — bonny2long/intake-watcher | `main` at `ef3cfbd` (PR #5) | Rename-only promotion; damaged-state recovery and cheaper fingerprints; includes PR #3 origin guard |
 
 ## 4. Non-Negotiable Rules
 
@@ -73,6 +73,7 @@ On 2026-10-25 all four active repositories were clean and matched their remote d
 2. Only Cleaner may ever delete. It removes reviewed **empty folders** with all four production gates on, and it deletes files only by purging an expired item from its trash hold, which needs its own `ALLOW_TRASH_PURGE` switch and an explicit list from you.
 3. Cleaner never deletes a file directly. Duplicates, ticked strays, approved quarantine discards, and known junk are first **moved** into a recoverable `_TRASH` hold (off by default), and stay there for `TRASH_HOLD_DAYS` (14) before they can be purged.
 4. No overwrite of existing final destinations, and no duplicates: Archive Assistant never moves a media file whose exact content (SHA-256) is already in the library or in an earlier batch, whatever its name or metadata. Moves run one at a time.
+   Archive Assistant and Intake Watcher move by **rename only**, never copy-then-delete, so everything they move between must be on one filesystem; a move that would cross filesystems fails and leaves the item where it was.
 5. No final Archive Assistant move without human approval.
 6. No hidden Archive Assistant rescans from review actions. Scans happen when you click Scan ingest.
 7. Weak metadata is not trash. It goes to review.
@@ -165,6 +166,8 @@ Re-verify the current stable TrueNAS Community Edition release on installation d
 /mnt/rust-pool/   mounted into containers as /app/data
 ```
 
+**Keep everything the apps move between on ONE dataset.** `_INGEST`, `_STAGING`, `_QUARANTINE`, `_TRASH`, `_REPORTS` and the libraries (`Music`, `Movies`, `TV`, `Audiobooks`, `Books`) must be plain folders inside one dataset, not child datasets and not separate mounts. A child dataset is a different filesystem, so a move from `_INGEST` into a library could not be a rename; Archive Assistant, Intake Watcher and Cleaner refuse such a move rather than copy and delete. Before real data goes in, run `scripts/nas_storage_preflight.py --data-root /mnt/rust-pool` (Archive Assistant repo) on the NAS as the apps' user. It checks one filesystem, no child mounts, real renames between the folders, write access, case sensitivity and Unicode filename handling; exit code 1 means fix the layout first.
+
 Keep SQLite files on a local dataset, never on an SMB or NFS share. Take a ZFS snapshot before any first production cleanup run.
 
 ## 9. Ownership and Write Boundaries
@@ -182,7 +185,8 @@ Keep SQLite files on a local dataset, never on an SMB or NFS share. Take a ZFS s
 - Never overwrites: a name collision in `ready` is flagged and left in place.
 - A folder with no supported media file stays in `incoming` as **Blocked** (`blocked_no_media_files`). Open decision: promote such folders so Archive Assistant can quarantine them.
 - A damaged state file is renamed with a `.corrupt-<UTC time>` suffix, logged, and rebuilt from empty state; waiting items safely restart their stability window. Folder fingerprints now use one walk, and the dashboard reuses the inspection result.
-- Dashboard: http://127.0.0.1:8091. Tests: 51.
+- Promotion (`incoming` to `intake-processing` to `ready`/`failed`) is a rename only. If the folders were on different filesystems the item stays where it was and a `move_to_processing_failed` or `move_to_ready_failed` event is logged.
+- Dashboard: http://127.0.0.1:8091. Tests: 56.
 
 ## 11. Archive Assistant
 
@@ -194,6 +198,7 @@ Keep SQLite files on a local dataset, never on an SMB or NFS share. Take a ZFS s
 - **Quarantine:** unknown or unsupported items can be quarantined, restored to review, discarded with a reason (nothing deleted), or have a discard undone. Each decision writes a disposition record to `_REPORTS/archive-assistant/dispositions`.
 - **Recovery** returns unknown items to quarantine review and refuses moved or quarantined batches.
 - **Unknown years:** a known year names the folder `<Year - Title>`. If the year is unknown, the reviewer either enters one or presses **Accept Unknown Year**, and the folder becomes `Unknown Year - <Title>` (for example `Audiobooks/Library/Frank Herbert/Unknown Year - Dune`). A missing year is a warning, not a block; the one exception is a movie inside a collection, which needs a year or an explicit accept. This is a locked Core V1 rule.
+- **Rename-only moves:** every move uses `os.rename` (`services/safe_move.py`) and never replaces an existing path. The move pre-check blocks a batch whose source files are on a different filesystem from its destination, so a batch is all-or-nothing. Check with `scripts/check_rename_only_moves.py`; check a NAS layout with `scripts/nas_storage_preflight.py`.
 - `DEBUG` and `DEV_TOOLS_ENABLED` default to `false`; local development must explicitly enable both before dev-reset tools exist.
 - `scripts/repair_foreign_root_batches.py` hides rows left by test runs against another data root, with a verified backup first.
 - Dashboard: http://127.0.0.1:5173, API http://127.0.0.1:8001. Core V1 suite: 24 checks; run the targeted safe-default, origin, and content-duplicate checks when changing those areas.
@@ -243,6 +248,7 @@ Dashboard: http://127.0.0.1:8092. Tests: 126. The local `.env` is report-only; t
 - Reads Music and Audiobooks read-only. **Rescan** on the home page picks up new moves.
 - **Audiobooks:** chapters play in path order compared number-aware per folder, so Disc 2 comes before Disc 10. Books with sub-folders show collapsible disc sections that open on the disc you are listening to.
 - **Reconciliation:** a successful rescan marks tracks, books, and chapters that disappeared from the configured library roots as unavailable while preserving database history and user state; restored paths become available again. Missing roots and failed scans fail closed instead of hiding the library.
+- **Scan order:** files are scanned in a fixed, case-insensitive folder-by-folder order, so which of two duplicate books is kept no longer depends on the filesystem (found by running the baseline checks on Linux).
 - Accepted library snapshot (2026-09-27): 119 tracks, 119 recordings, 1 audiobook with 396 chapters.
 - App http://127.0.0.1:5174, API http://127.0.0.1:8094. PROD0: 63 passed, 0 failed, 4 skipped.
 - Phones on home Wi-Fi: `scripts\start_local_lan_demo.ps1`.
@@ -327,7 +333,7 @@ Immich (future)     Photos
 
 | App | Baseline |
 |---|---|
-| Intake Watcher | 51 tests pass |
+| Intake Watcher | 56 tests pass |
 | Archive Assistant | Core V1 suite 24 checks; targeted safe-default, origin, and duplicate-guard checks; SQLite integrity ok |
 | Cleaner | 126 tests pass; report-only and trash hold off by default |
 | BM Radio | PROD0 63 passed, 0 failed, 4 skipped |
